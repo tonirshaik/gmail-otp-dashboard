@@ -376,7 +376,6 @@
         const settingsPopup = document.getElementById('settingsPopup');
         const otpContainer = document.getElementById('otpContainer');
         const refreshBtn = document.getElementById('refreshBtn');
-        const refreshIcon = document.getElementById('refreshIcon');
         const addAccountForm = document.getElementById('addAccountForm');
         const statusMsg = document.getElementById('statusMsg');
 
@@ -450,9 +449,14 @@
             }
         });
 
-        // Fetch OTPs
+        // Fetch OTPs Logic with Checking... status
         async function fetchOTPs() {
-            refreshIcon.classList.add('fa-spin');
+            // ১. বাটনটি ডিজেবল করা ও 'Checking...' স্টেট সেট করা
+            refreshBtn.disabled = true;
+            refreshBtn.style.opacity = '0.75';
+            refreshBtn.style.cursor = 'not-allowed';
+            refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right fa-spin"></i> Checking...`;
+
             try {
                 const res = await fetch('/api/fetch-otps');
 
@@ -473,7 +477,11 @@
                         Error loading OTPs.
                     </div>`;
             } finally {
-                refreshIcon.classList.remove('fa-spin');
+                // ২. ডেটা আনা শেষ হলে বাটনকে আগের অবস্থায় ফিরিয়ে নেওয়া
+                refreshBtn.disabled = false;
+                refreshBtn.style.opacity = '1';
+                refreshBtn.style.cursor = 'pointer';
+                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
             }
         }
 
