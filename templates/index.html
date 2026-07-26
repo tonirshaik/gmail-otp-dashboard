@@ -121,6 +121,17 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
+        /* কাস্টম রোটেশন অ্যানিমেশন যা নিশ্চিতভাবে কাজ করবে */
+        @keyframes customSpin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .rotating {
+            display: inline-block;
+            animation: customSpin 0.8s linear infinite;
+        }
+
         .popup-title {
             font-size: 13px;
             font-weight: 600;
@@ -223,7 +234,6 @@
         .otp-email { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
         .otp-subject { font-size: 14px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; }
 
-        /* Copy On Click Style for OTP Box */
         .otp-code-box {
             display: inline-flex;
             align-items: center;
@@ -248,19 +258,11 @@
             transform: translateY(-1px);
         }
 
-        .otp-code-box:active {
-            transform: scale(0.96);
-        }
-
-        .copy-icon {
-            font-size: 14px;
-            opacity: 0.7;
-        }
+        .otp-code-box:active { transform: scale(0.96); }
 
         .otp-time { font-size: 11px; color: var(--text-muted); }
         .empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px 0; }
 
-        /* Toast Notification Popup */
         .toast {
             visibility: hidden;
             min-width: 160px;
@@ -349,7 +351,7 @@
 
             <div class="otp-container" id="otpContainer">
                 <div class="empty-state">
-                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                    <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
                     Loading OTPs...
                 </div>
             </div>
@@ -400,30 +402,22 @@
             }, 4000);
         }
 
-        // Copy OTP Logic
         function copyOTP(code) {
             if (!code || code === 'Code not found') return;
-            
             navigator.clipboard.writeText(code).then(() => {
                 showToast(`Copied: ${code}`);
-            }).catch(err => {
-                console.error("Failed to copy:", err);
             });
         }
 
-        // Show Toast Notification
         function showToast(message) {
             const toast = document.getElementById('toast');
             const toastMsg = document.getElementById('toastMsg');
             toastMsg.innerText = message;
             toast.classList.add('show');
-
-            setTimeout(() => {
-                toast.classList.remove('show');
-            }, 2000);
+            setTimeout(() => { toast.classList.remove('show'); }, 2000);
         }
 
-        // Handle Login Submission
+        // Login Submission
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const password = document.getElementById('masterPasswordInput').value;
@@ -449,13 +443,13 @@
             }
         });
 
-        // Fetch OTPs Logic with Checking... status
+        // Fetch OTPs Logic with Custom CSS Spinner
         async function fetchOTPs() {
-            // ১. বাটনটি ডিজেবল করা ও 'Checking...' স্টেট সেট করা
             refreshBtn.disabled = true;
             refreshBtn.style.opacity = '0.75';
             refreshBtn.style.cursor = 'not-allowed';
-            refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right fa-spin"></i> Checking...`;
+            // এখানে `.rotating` ক্লাস ব্যবহার করা হয়েছে যা নিশ্চিতভাবে আইকন ঘুরাবে
+            refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking...`;
 
             try {
                 const res = await fetch('/api/fetch-otps');
@@ -470,6 +464,7 @@
 
                 const data = await res.json();
                 renderOTPs(data);
+
             } catch (err) {
                 otpContainer.innerHTML = `
                     <div class="empty-state">
@@ -477,7 +472,6 @@
                         Error loading OTPs.
                     </div>`;
             } finally {
-                // ২. ডেটা আনা শেষ হলে বাটনকে আগের অবস্থায় ফিরিয়ে নেওয়া
                 refreshBtn.disabled = false;
                 refreshBtn.style.opacity = '1';
                 refreshBtn.style.cursor = 'pointer';
@@ -485,7 +479,6 @@
             }
         }
 
-        // Render Cards
         function renderOTPs(otps) {
             if (!otps || otps.length === 0) {
                 otpContainer.innerHTML = `
@@ -515,7 +508,6 @@
             `).join('');
         }
 
-        // Add Account Submission
         addAccountForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('accEmail').value;
@@ -552,7 +544,6 @@
             document.getElementById('masterPasswordInput').value = '';
         }
 
-        // Initial check
         fetchOTPs();
     </script>
 </body>
