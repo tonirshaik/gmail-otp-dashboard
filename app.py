@@ -3,6 +3,7 @@ import imaplib
 import email
 import re
 from datetime import datetime
+from email.utils import parsedate_to_datetime
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from pymongo import MongoClient
 
@@ -64,7 +65,8 @@ def check_gmail(account):
         status, messages = mail.search(None, 'ALL')
         email_ids = messages[0].split()
 
-        recent_ids = email_ids[-2:] if len(email_ids) >= 2 else email_ids
+        # শুধুমাত্র সর্বশেষ ৫টি ইমেইল চেক করা হবে যাতে দ্রুত সর্বশেষ ওটিপিটি খুঁজে পায়
+        recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
         
         for e_id in reversed(recent_ids):
             _, msg_data = mail.fetch(e_id, '(RFC822)')
@@ -74,6 +76,15 @@ def check_gmail(account):
                     
                     subject = msg.get("Subject", "No Subject")
                     sender = msg.get("From", "Unknown Sender")
+                    date_hdr = msg.get("Date")
+
+                    # ইমেইলের সঠিক তারিখ ও সময় এক্সট্র্যাক্ট করা
+                    msg_dt = datetime.now()
+                    if date_hdr:
+                        try:
+                            msg_dt = parsedate_to_datetime(date_hdr)
+                        except Exception:
+                            pass
                     
                     body = ""
                     if msg.is_multipart():
@@ -93,9 +104,13 @@ def check_gmail(account):
                             "sender": sender,
                             "subject": subject,
                             "code": otp,
-                            "time": datetime.now().strftime("%I:%M %p")
+                            "time": msg_dt.strftime("%I:%M %p"),
+                            "timestamp": msg_dt.timestamp()  # সর্টিং করার জন্য ইউনিক টাইমস্ট্যাম্প
                         })
-                        break
+                        break # প্রতিটি অ্যাকাউন্ট থেকে শুধুমাত্র সর্বশেষ ১টি ওটিপি ইমেইল নেবে
+            if mail_data:
+                break
+
         mail.logout()
     except Exception as e:
         print(f"Error reading {account['email']}: {e}")
@@ -122,22 +137,29 @@ def logout():
 
 @app.route('/api/fetch-otps')
 def fetch_otps():
-    # সেশন চেক (পাসওয়ার্ড কোনো হেডারে পাঠানো লাগবে না)
+    # সেশন চেক
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
     accounts = load_accounts()
     all_codes = []
     
+    # ১. সকল জিমেইল অ্যাকাউন্ট থেকে ওটিপি ডাটা সংগ্রহ
     for acc in accounts:
         codes = check_gmail(acc)
         all_codes.extend(codes)
         
-    return jsonify(all_codes)
+    # ২. সবচেয়ে নতুন/সাম্প্রতিক ইমেইল অনুযায়ী সাজানো (Sort Dynamic)
+    all_codes.sort(key=lambda x: x['timestamp'], reverse=True)
+
+    # ৩. সম্পূর্ণ ড্যাশবোর্ডে শুধুমাত্র লেটেস্ট ২টি ওটিপি ইমেইল ফিল্টার করা
+    latest_two = all_codes[:2]
+        
+    return jsonify(latest_two)
 
 @app.route('/api/add-account', methods=['POST'])
 def add_account():
-    # সেশন চেক (পাসওয়ার্ড কোনো হেডারে পাঠানো লাগবে না)
+    # সেশন চেক
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
