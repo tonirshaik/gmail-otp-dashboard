@@ -7,14 +7,15 @@
     <style>
         * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
         body { background-color: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
-        .card { background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 100%; max-width: 450px; border: 1px solid #334155; }
+        .card { background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 100%; max-width: 480px; border: 1px solid #334155; }
         h2 { text-align: center; color: #38bdf8; margin-bottom: 20px; }
-        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 16px; outline: none; }
+        input { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 15px; outline: none; }
         input:focus { border-color: #38bdf8; }
         button { width: 100%; padding: 12px; background: #0284c7; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
         button:hover { background: #0369a1; }
         .hidden { display: none; }
         .alert { color: #f87171; text-align: center; margin-top: 10px; font-size: 14px; }
+        .add-box { background: #0f172a; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #334155; }
         .otp-box { background: #0f172a; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid #38bdf8; }
         .otp-code { font-size: 22px; font-weight: bold; color: #4ade80; letter-spacing: 2px; }
         .logout-btn { background: #dc2626; margin-top: 15px; }
@@ -23,6 +24,7 @@
 </head>
 <body>
 
+    <!-- Login UI -->
     <div id="login-section" class="card">
         <h2>🔒 Admin Login</h2>
         <input type="password" id="password" placeholder="Enter Password">
@@ -30,10 +32,21 @@
         <div id="login-error" class="alert"></div>
     </div>
 
+    <!-- Dashboard UI -->
     <div id="dashboard-section" class="card hidden">
         <h2>📥 Gmail OTP Dashboard</h2>
+
+        <!-- Add Gmail Form -->
+        <div class="add-box">
+            <h3 style="margin: 0 0 10px 0; color:#38bdf8; font-size:15px;">➕ Add Gmail Account</h3>
+            <input type="email" id="new-email" placeholder="Gmail Address">
+            <input type="password" id="new-app-pass" placeholder="16-digit App Password">
+            <button onclick="addAccount()" style="background:#10b981;">Save Account</button>
+            <div id="add-msg" style="font-size:13px; margin-top:8px; text-align:center;"></div>
+        </div>
+
         <button onclick="fetchOTPs()">🔄 Refresh OTPs</button>
-        <div id="otp-list" style="margin-top: 20px;"></div>
+        <div id="otp-list" style="margin-top: 15px;"></div>
         <button class="logout-btn" onclick="handleLogout()">Logout</button>
     </div>
 
@@ -68,6 +81,44 @@
             document.getElementById('login-section').classList.add('hidden');
             document.getElementById('dashboard-section').classList.remove('hidden');
             fetchOTPs();
+        }
+
+        async function addAccount() {
+            const email = document.getElementById('new-email').value;
+            const password = document.getElementById('new-app-pass').value;
+            const msgDiv = document.getElementById('add-msg');
+
+            if (!email || !password) {
+                msgDiv.style.color = '#f87171';
+                msgDiv.innerText = 'Email এবং App Password দুটিই দিন!';
+                return;
+            }
+
+            try {
+                const res = await fetch('/api/add-account', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Password': savedPassword
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await res.json();
+                if (res.ok) {
+                    msgDiv.style.color = '#4ade80';
+                    msgDiv.innerText = data.message;
+                    document.getElementById('new-email').value = '';
+                    document.getElementById('new-app-pass').value = '';
+                    fetchOTPs();
+                } else {
+                    msgDiv.style.color = '#f87171';
+                    msgDiv.innerText = data.error || 'যোগ করা যায়নি!';
+                }
+            } catch (err) {
+                msgDiv.style.color = '#f87171';
+                msgDiv.innerText = 'সার্ভার সমস্যা!';
+            }
         }
 
         async function fetchOTPs() {
