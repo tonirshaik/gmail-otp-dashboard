@@ -3,11 +3,13 @@ import imaplib
 import email
 import re
 from datetime import datetime
-from flask import Flask, render_template, jsonify, request
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for
 from pymongo import MongoClient
 
 app = Flask(__name__)
 
+# Session Secure Key & Master Password
+app.secret_key = os.environ.get("SECRET_KEY", "your_secret_session_key_123")
 MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", "12345")
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
@@ -27,7 +29,6 @@ if MONGO_URI:
 def load_accounts():
     if accounts_collection is not None:
         try:
-            # MongoDB থেকে সব অ্যাকাউন্ট নিয়ে আসবে (_id বাদ দিয়ে)
             accounts = list(accounts_collection.find({}, {'_id': 0}))
             return accounts
         except Exception as e:
@@ -98,13 +99,19 @@ def login():
     data = request.json or {}
     password = data.get('password')
     if password == MASTER_PASSWORD:
+        session['logged_in'] = True  # সেশন সেভ হলো
         return jsonify({"success": True})
     return jsonify({"error": "Wrong password!"}), 401
 
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    session.pop('logged_in', None)
+    return jsonify({"success": True})
+
 @app.route('/api/fetch-otps')
 def fetch_otps():
-    user_pass = request.headers.get("X-Master-Password")
-    if user_pass != MASTER_PASSWORD:
+    # সেশন চেক (পাসওয়ার্ড কোনো হেডারে পাঠানো লাগবে না)
+    if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
     accounts = load_accounts()
@@ -118,8 +125,8 @@ def fetch_otps():
 
 @app.route('/api/add-account', methods=['POST'])
 def add_account():
-    user_pass = request.headers.get("X-Master-Password")
-    if user_pass != MASTER_PASSWORD:
+    # সেশন চেক (পাসওয়ার্ড কোনো হেডারে পাঠানো লাগবে না)
+    if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
     data = request.json or {}
@@ -132,12 +139,10 @@ def add_account():
     if accounts_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
 
-    # ইমেইল আগে থেকেই আছে কিনা চেক
     existing = accounts_collection.find_one({"email": email_input})
     if existing:
         return jsonify({"error": "Account already exists!"}), 400
 
-    # ডাটাবেজে সেভ করা
     accounts_collection.insert_one({
         "email": email_input,
         "password": password_input,
