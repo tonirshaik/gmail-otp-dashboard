@@ -15,7 +15,6 @@
             --text-main: #f3f4f6;
             --text-muted: #9ca3af;
             --accent-blue: #3b82f6;
-            --accent-purple: #8b5cf6;
             --accent-cyan: #06b6d4;
             --accent-green: #10b981;
             --accent-red: #ef4444;
@@ -58,7 +57,6 @@
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), var(--shadow-glow);
         }
 
-        /* Top Header Area */
         .top-bar {
             display: flex;
             justify-content: space-between;
@@ -72,14 +70,12 @@
             font-weight: 700;
             background: linear-gradient(135deg, #60a5fa, #a78bfa, #22d3ee);
             -webkit-background-clip: text;
-            -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             display: flex;
             align-items: center;
             gap: 8px;
         }
 
-        /* Settings Icon Button */
         .settings-btn {
             background: rgba(255, 255, 255, 0.05);
             border: 1px solid var(--card-border);
@@ -101,7 +97,6 @@
             transform: rotate(45deg);
         }
 
-        /* Settings Popup/Modal */
         .settings-popup {
             display: none;
             position: absolute;
@@ -204,11 +199,11 @@
             color: #fff;
         }
 
-        .msg-success {
+        .msg-status {
             font-size: 12px;
-            color: var(--accent-green);
             text-align: center;
-            margin-top: 8px;
+            margin-bottom: 12px;
+            display: none;
         }
 
         .otp-card {
@@ -273,28 +268,27 @@
 <body>
 
     <div class="container">
-        <!-- Top Bar with Settings Icon -->
+        <!-- Top Bar -->
         <div class="top-bar">
             <div class="header-title">
                 <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard
             </div>
             
-            <!-- Gear Icon Button -->
             <button class="settings-btn" id="settingsToggle" title="Add Account Settings">
                 <i class="fa-solid fa-gear"></i>
             </button>
 
-            <!-- Hidden Add Account Dropdown -->
+            <!-- Hidden Popup Form -->
             <div class="settings-popup" id="settingsPopup">
                 <div class="popup-title">
                     <i class="fa-solid fa-user-plus"></i> Add Gmail Account
                 </div>
-                <form action="/add_account" method="POST">
+                <form id="addAccountForm">
                     <div class="input-group">
-                        <input type="email" name="email" placeholder="Gmail Address" required autocomplete="off">
+                        <input type="email" id="accEmail" placeholder="Gmail Address" required autocomplete="off">
                     </div>
                     <div class="input-group">
-                        <input type="password" name="app_password" placeholder="16-digit App Password" required autocomplete="off">
+                        <input type="password" id="accPassword" placeholder="16-digit App Password" required autocomplete="off">
                     </div>
                     <button type="submit" class="btn btn-primary">
                         <i class="fa-solid fa-floppy-disk"></i> Save Account
@@ -303,62 +297,149 @@
             </div>
         </div>
 
-        {% if msg %}
-            <div class="msg-success" style="margin-bottom: 15px;">{{ msg }}</div>
-        {% endif %}
+        <div id="statusMsg" class="msg-status"></div>
 
-        <!-- Refresh OTPs Button -->
-        <a href="/" style="text-decoration: none;">
-            <button class="btn btn-refresh">
-                <i class="fa-solid fa-rotate-right"></i> Refresh OTPs
-            </button>
-        </a>
+        <!-- Refresh Button -->
+        <button type="button" class="btn btn-refresh" id="refreshBtn">
+            <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
+        </button>
 
-        <!-- OTP Cards Container -->
-        <div class="otp-container">
-            {% if otps %}
-                {% for item in otps %}
-                    <div class="otp-card">
-                        <div class="otp-email"><i class="fa-regular fa-envelope"></i> {{ item.email }}</div>
-                        <div class="otp-subject">{{ item.subject }}</div>
-                        {% if item.otp %}
-                            <div class="otp-code-box">OTP: {{ item.otp }}</div>
-                        {% endif %}
-                        <div class="otp-time"><i class="fa-regular fa-clock"></i> Time: {{ item.time }}</div>
-                    </div>
-                {% endfor %}
-            {% else %}
-                <div class="empty-state">
-                    <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                    No OTPs found.
-                </div>
-            {% endif %}
+        <!-- Container for Dynamic OTP Cards -->
+        <div class="otp-container" id="otpContainer">
+            <div class="empty-state">
+                <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                Loading OTPs...
+            </div>
         </div>
 
         <!-- Logout Button -->
-        <form action="/logout" method="GET">
-            <button type="submit" class="btn btn-logout">
-                <i class="fa-solid fa-right-from-bracket"></i> Logout
-            </button>
-        </form>
+        <button type="button" class="btn btn-logout" onclick="logout()">
+            <i class="fa-solid fa-right-from-bracket"></i> Logout
+        </button>
     </div>
 
-    <!-- JavaScript to Toggle Settings Dropdown -->
     <script>
+        // Master Password configured in app.py
+        const MASTER_PASSWORD = "12345";
+
         const settingsToggle = document.getElementById('settingsToggle');
         const settingsPopup = document.getElementById('settingsPopup');
+        const otpContainer = document.getElementById('otpContainer');
+        const refreshBtn = document.getElementById('refreshBtn');
+        const refreshIcon = document.getElementById('refreshIcon');
+        const addAccountForm = document.getElementById('addAccountForm');
+        const statusMsg = document.getElementById('statusMsg');
 
+        // Toggle Popup Modal
         settingsToggle.addEventListener('click', (e) => {
             e.stopPropagation();
             settingsPopup.classList.toggle('active');
         });
 
-        // Close popup if clicked outside
         document.addEventListener('click', (e) => {
             if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
                 settingsPopup.classList.remove('active');
             }
         });
+
+        // Show Temporary Message
+        function showMessage(msg, isError = false) {
+            statusMsg.style.display = 'block';
+            statusMsg.style.color = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+            statusMsg.innerText = msg;
+            setTimeout(() => {
+                statusMsg.style.display = 'none';
+            }, 4000);
+        }
+
+        // Fetch OTPs from Python API
+        async function fetchOTPs() {
+            refreshIcon.classList.add('fa-spin');
+            try {
+                const res = await fetch('/api/fetch-otps', {
+                    headers: {
+                        'X-Master-Password': MASTER_PASSWORD
+                    }
+                });
+
+                if (!res.ok) {
+                    throw new Error("Failed to fetch OTPs");
+                }
+
+                const data = await res.json();
+                renderOTPs(data);
+            } catch (err) {
+                console.error(err);
+                otpContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
+                        Error loading OTPs. Check connection or Master Password.
+                    </div>`;
+            } finally {
+                refreshIcon.classList.remove('fa-spin');
+            }
+        }
+
+        // Render Dynamic Cards
+        function renderOTPs(otps) {
+            if (!otps || otps.length === 0) {
+                otpContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                        No OTPs found.
+                    </div>`;
+                return;
+            }
+
+            otpContainer.innerHTML = otps.map(item => `
+                <div class="otp-card">
+                    <div class="otp-email"><i class="fa-regular fa-envelope"></i> ${item.email}</div>
+                    <div class="otp-subject">${item.subject}</div>
+                    ${item.code ? `<div class="otp-code-box">OTP: ${item.code}</div>` : ''}
+                    <div class="otp-time"><i class="fa-regular fa-clock"></i> Time: ${item.time} | Sender: ${item.sender}</div>
+                </div>
+            `).join('');
+        }
+
+        // Handle Add Account Form Submission
+        addAccountForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('accEmail').value;
+            const password = document.getElementById('accPassword').value;
+
+            try {
+                const res = await fetch('/api/add-account', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Master-Password': MASTER_PASSWORD
+                    },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const result = await res.json();
+
+                if (res.ok) {
+                    showMessage(result.message || "Account added successfully!");
+                    addAccountForm.reset();
+                    settingsPopup.classList.remove('active');
+                    fetchOTPs(); // Reload OTPs with new account
+                } else {
+                    showMessage(result.error || "Failed to add account", true);
+                }
+            } catch (err) {
+                showMessage("Connection error", true);
+            }
+        });
+
+        refreshBtn.addEventListener('click', fetchOTPs);
+
+        function logout() {
+            window.location.href = '/';
+        }
+
+        // Load OTPs on startup
+        fetchOTPs();
     </script>
 </body>
 </html>
