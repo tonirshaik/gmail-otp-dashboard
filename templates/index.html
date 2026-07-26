@@ -334,15 +334,14 @@
             {% endif %}
         </div>
 
-        <!-- Logout Button (Fixed Issue with URL ?) -->
-        <a href="/logout" style="text-decoration: none;">
+        <!-- Logout Button -->
+        <a href="/login" style="text-decoration: none;">
             <button type="button" class="btn btn-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> Logout
             </button>
         </a>
     </div>
 
-    <!-- JavaScript to Handle Dropdown & Browser Reload -->
     <script>
         const settingsToggle = document.getElementById('settingsToggle');
         const settingsPopup = document.getElementById('settingsPopup');
@@ -358,11 +357,6 @@
                     settingsPopup.classList.remove('active');
                 }
             });
-        }
-
-        // Auto Logout on Hard Page Reload (F5 or Browser Refresh Button)
-        if (performance.navigation.type === performance.navigation.TYPE_RELOAD) {
-            window.location.replace("/logout");
         }
     </script>
 </body>
