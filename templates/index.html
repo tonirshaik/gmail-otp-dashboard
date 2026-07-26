@@ -72,6 +72,7 @@
             font-weight: 700;
             background: linear-gradient(135deg, #60a5fa, #a78bfa, #22d3ee);
             -webkit-background-clip: text;
+            -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             display: flex;
             align-items: center;
@@ -308,7 +309,7 @@
 
         <!-- Refresh OTPs Button -->
         <a href="/" style="text-decoration: none;">
-            <button type="button" class="btn btn-refresh">
+            <button class="btn btn-refresh">
                 <i class="fa-solid fa-rotate-right"></i> Refresh OTPs
             </button>
         </a>
@@ -335,29 +336,29 @@
         </div>
 
         <!-- Logout Button -->
-        <a href="/login" style="text-decoration: none;">
-            <button type="button" class="btn btn-logout">
+        <form action="/logout" method="GET">
+            <button type="submit" class="btn btn-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> Logout
             </button>
-        </a>
+        </form>
     </div>
 
+    <!-- JavaScript to Toggle Settings Dropdown -->
     <script>
         const settingsToggle = document.getElementById('settingsToggle');
         const settingsPopup = document.getElementById('settingsPopup');
 
-        if (settingsToggle && settingsPopup) {
-            settingsToggle.addEventListener('click', (e) => {
-                e.stopPropagation();
-                settingsPopup.classList.toggle('active');
-            });
+        settingsToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settingsPopup.classList.toggle('active');
+        });
 
-            document.addEventListener('click', (e) => {
-                if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
-                    settingsPopup.classList.remove('active');
-                }
-            });
-        }
+        // Close popup if clicked outside
+        document.addEventListener('click', (e) => {
+            if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
+                settingsPopup.classList.remove('active');
+            }
+        });
     </script>
 </body>
 </html>
