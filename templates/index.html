@@ -72,7 +72,6 @@
             font-weight: 700;
             background: linear-gradient(135deg, #60a5fa, #a78bfa, #22d3ee);
             -webkit-background-clip: text;
-            -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             display: flex;
             align-items: center;
@@ -309,7 +308,7 @@
 
         <!-- Refresh OTPs Button -->
         <a href="/" style="text-decoration: none;">
-            <button class="btn btn-refresh">
+            <button type="button" class="btn btn-refresh">
                 <i class="fa-solid fa-rotate-right"></i> Refresh OTPs
             </button>
         </a>
@@ -335,30 +334,36 @@
             {% endif %}
         </div>
 
-        <!-- Logout Button -->
-        <form action="/logout" method="GET">
-            <button type="submit" class="btn btn-logout">
+        <!-- Logout Button (Fixed Issue with URL ?) -->
+        <a href="/logout" style="text-decoration: none;">
+            <button type="button" class="btn btn-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> Logout
             </button>
-        </form>
+        </a>
     </div>
 
-    <!-- JavaScript to Toggle Settings Dropdown -->
+    <!-- JavaScript to Handle Dropdown & Browser Reload -->
     <script>
         const settingsToggle = document.getElementById('settingsToggle');
         const settingsPopup = document.getElementById('settingsPopup');
 
-        settingsToggle.addEventListener('click', (e) => {
-            e.stopPropagation();
-            settingsPopup.classList.toggle('active');
-        });
+        if (settingsToggle && settingsPopup) {
+            settingsToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                settingsPopup.classList.toggle('active');
+            });
 
-        // Close popup if clicked outside
-        document.addEventListener('click', (e) => {
-            if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
-                settingsPopup.classList.remove('active');
-            }
-        });
+            document.addEventListener('click', (e) => {
+                if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
+                    settingsPopup.classList.remove('active');
+                }
+            });
+        }
+
+        // Auto Logout on Hard Page Reload (F5 or Browser Refresh Button)
+        if (performance.navigation.type === performance.navigation.TYPE_RELOAD) {
+            window.location.replace("/logout");
+        }
     </script>
 </body>
 </html>
