@@ -380,6 +380,9 @@
         const addAccountForm = document.getElementById('addAccountForm');
         const statusMsg = document.getElementById('statusMsg');
 
+        // ব্যাকগ্রাউন্ড অটো-রিফ্রেশ ধরে রাখার ভেরিয়েবল
+        let autoRefreshInterval = null;
+
         settingsToggle.addEventListener('click', (e) => {
             e.stopPropagation();
             settingsPopup.classList.toggle('active');
@@ -430,6 +433,7 @@
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
                     fetchOTPs();
+                    startAutoRefresh(); // লগইন হওয়ার পর অটো-রিফ্রেশ চালু হবে
                 } else {
                     loginError.style.display = 'block';
                     loginError.innerText = "Wrong Master Password!";
@@ -440,20 +444,23 @@
             }
         });
 
-        // ফিক্সড লজিক: এখানে মিনিমাম ২ সেকেন্ড অ্যানিমেশন চালু রাখবে যাতে চোখে পড়ে
-        async function fetchOTPs() {
-            refreshBtn.disabled = true;
-            refreshBtn.style.opacity = '0.75';
-            refreshBtn.style.cursor = 'not-allowed';
-            refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking...`;
+        // ফিক্সড লজিক: এখানে মিনিমাম ২ সেকেন্ড অ্যানিমেশন চালু রাখবে যাতে চোখে পড়ে
+        async function fetchOTPs(isBackground = false) {
+            // যদি ব্যাকগ্রাউন্ডে কল হয়, তবে ম্যানুয়াল বাটন ডিজেবল বা লোডিং টেক্সট দেখানোর দরকার নেই (ইউজারের বিরক্তি এড়াতে)
+            if (!isBackground) {
+                refreshBtn.disabled = true;
+                refreshBtn.style.opacity = '0.75';
+                refreshBtn.style.cursor = 'not-allowed';
+                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking...`;
+            }
 
-            // টাস্ক শুরু হওয়ার সময় মনে রাখা হলো
             const startTime = Date.now();
 
             try {
                 const res = await fetch('/api/fetch-otps');
 
                 if (res.status === 401) {
+                    stopAutoRefresh();
                     dashboardSection.classList.add('hidden');
                     loginSection.classList.remove('hidden');
                     return;
@@ -463,9 +470,8 @@
 
                 const data = await res.json();
                 
-                // হিসাব করা হচ্ছে কত সময় লাগলো
                 const elapsedTime = Date.now() - startTime;
-                const minDisplayTime = 2000; // অন্তত ২ সেকেন্ড অ্যানিমেশন ঘুরবেই
+                const minDisplayTime = isBackground ? 0 : 2000; // ব্যাকগ্রাউন্ডে হলে সাথে সাথে ডেটা রেন্ডার করবে
 
                 if (elapsedTime < minDisplayTime) {
                     await new Promise(resolve => setTimeout(resolve, minDisplayTime - elapsedTime));
@@ -474,16 +480,20 @@
                 renderOTPs(data);
 
             } catch (err) {
-                otpContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
-                        Error loading OTPs.
-                    </div>`;
+                if (!isBackground) {
+                    otpContainer.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
+                            Error loading OTPs.
+                        </div>`;
+                }
             } finally {
-                refreshBtn.disabled = false;
-                refreshBtn.style.opacity = '1';
-                refreshBtn.style.cursor = 'pointer';
-                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
+                if (!isBackground) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.style.opacity = '1';
+                    refreshBtn.style.cursor = 'pointer';
+                    refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
+                }
             }
         }
 
@@ -543,16 +553,32 @@
             }
         });
 
-        refreshBtn.addEventListener('click', fetchOTPs);
+        refreshBtn.addEventListener('click', () => fetchOTPs(false));
+
+        // প্রতি ৫ সেকেন্ড পরপর ব্যাকগ্রাউন্ডে অটো-রিফ্রেশ করার ফাংশন
+        function startAutoRefresh() {
+            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+            autoRefreshInterval = setInterval(() => {
+                // 'true' পাস করা হয়েছে যাতে ব্যাকগ্রাউন্ডে রিফ্রেশ হওয়ার সময় কোনো লোডিং স্পিনার বা বাটন ডিজেবল না হয়
+                fetchOTPs(true); 
+            }, 5000); // ৫০০০ মিলিসেকেন্ড = ৫ সেকেন্ড
+        }
+
+        // লগআউট বা সেশন এক্সপায়ার হলে অটো-রিফ্রেশ বন্ধ করার ফাংশন
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+            }
+        }
 
         async function logout() {
+            stopAutoRefresh();
             await fetch('/api/logout', { method: 'POST' });
             dashboardSection.classList.add('hidden');
             loginSection.classList.remove('hidden');
             document.getElementById('masterPasswordInput').value = '';
         }
-
-        fetchOTPs();
     </script>
 </body>
 </html>
