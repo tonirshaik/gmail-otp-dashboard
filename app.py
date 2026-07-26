@@ -2,35 +2,38 @@ import os
 import imaplib
 import email
 import re
-import json
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request
+from pymongo import MongoClient
 
 app = Flask(__name__)
 
 MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", "12345")
-ACCOUNTS_FILE = 'accounts.json'
+MONGO_URI = os.environ.get("MONGO_URI", "")
+
+# MongoDB Connection
+db = None
+accounts_collection = None
+
+if MONGO_URI:
+    try:
+        client = MongoClient(MONGO_URI)
+        db = client['gmail_otp_db']
+        accounts_collection = db['accounts']
+        print("MongoDB Connected Successfully!")
+    except Exception as e:
+        print(f"MongoDB Connection Error: {e}")
 
 def load_accounts():
-    if not os.path.exists(ACCOUNTS_FILE):
-        with open(ACCOUNTS_FILE, 'w') as f:
-            json.dump([], f)
-            
-    try:
-        with open(ACCOUNTS_FILE, 'r') as f:
-            return json.load(f)
-    except Exception as e:
-        print(f"Error loading accounts: {e}")
-        return []
-
-def save_accounts(accounts):
-    try:
-        with open(ACCOUNTS_FILE, 'w') as f:
-            json.dump(accounts, f, indent=4)
-        return True
-    except Exception as e:
-        print(f"Error saving accounts: {e}")
-        return False
+    if accounts_collection is not None:
+        try:
+            # MongoDB থেকে সব অ্যাকাউন্ট নিয়ে আসবে (_id বাদ দিয়ে)
+            accounts = list(accounts_collection.find({}, {'_id': 0}))
+            return accounts
+        except Exception as e:
+            print(f"Error loading accounts from Mongo: {e}")
+            return []
+    return []
 
 def extract_otp(text):
     match = re.search(r'\b\d{4,8}\b', text)
@@ -126,21 +129,22 @@ def add_account():
     if not email_input or not password_input:
         return jsonify({"error": "Email and App Password required"}), 400
 
-    accounts = load_accounts()
-    
-    for acc in accounts:
-        if acc['email'] == email_input:
-            return jsonify({"error": "Account already exists!"}), 400
+    if accounts_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
 
-    accounts.append({
+    # ইমেইল আগে থেকেই আছে কিনা চেক
+    existing = accounts_collection.find_one({"email": email_input})
+    if existing:
+        return jsonify({"error": "Account already exists!"}), 400
+
+    # ডাটাবেজে সেভ করা
+    accounts_collection.insert_one({
         "email": email_input,
-        "password": password_input
+        "password": password_input,
+        "created_at": datetime.now()
     })
 
-    if save_accounts(accounts):
-        return jsonify({"message": "Account added successfully!"})
-    else:
-        return jsonify({"error": "Failed to save account"}), 500
+    return jsonify({"message": "Account added permanently to Database!"})
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
