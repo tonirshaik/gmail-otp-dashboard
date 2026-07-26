@@ -121,7 +121,6 @@
             to { opacity: 1; transform: translateY(0); }
         }
 
-        /* কাস্টম রোটেশন অ্যানিমেশন যা নিশ্চিতভাবে কাজ করবে */
         @keyframes customSpin {
             0% { transform: rotate(0deg); }
             100% { transform: rotate(360deg); }
@@ -381,7 +380,6 @@
         const addAccountForm = document.getElementById('addAccountForm');
         const statusMsg = document.getElementById('statusMsg');
 
-        // Toggle Popup Modal
         settingsToggle.addEventListener('click', (e) => {
             e.stopPropagation();
             settingsPopup.classList.toggle('active');
@@ -417,7 +415,6 @@
             setTimeout(() => { toast.classList.remove('show'); }, 2000);
         }
 
-        // Login Submission
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const password = document.getElementById('masterPasswordInput').value;
@@ -443,12 +440,12 @@
             }
         });
 
-        // Fetch OTPs Logic with Custom CSS Spinner
+        // নিখুঁতভাবে কোড আসার আগ পর্যন্ত Checking স্টেট ধরে রাখার লজিক
         async function fetchOTPs() {
+            // ১. বাটন ডিজেবল এবং "Checking..." স্টেট চালু করা
             refreshBtn.disabled = true;
             refreshBtn.style.opacity = '0.75';
             refreshBtn.style.cursor = 'not-allowed';
-            // এখানে `.rotating` ক্লাস ব্যবহার করা হয়েছে যা নিশ্চিতভাবে আইকন ঘুরাবে
             refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking...`;
 
             try {
@@ -463,6 +460,8 @@
                 if (!res.ok) throw new Error("Failed");
 
                 const data = await res.json();
+                
+                // ২. ডেটা রেন্ডার করা
                 renderOTPs(data);
 
             } catch (err) {
@@ -472,10 +471,13 @@
                         Error loading OTPs.
                     </div>`;
             } finally {
-                refreshBtn.disabled = false;
-                refreshBtn.style.opacity = '1';
-                refreshBtn.style.cursor = 'pointer';
-                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
+                // ৩. এখানে নিশ্চিত করা হয়েছে যে ডেটা স্ক্রিনে পুরোপুরি বসে যাওয়ার পরেই বাটন স্বাভাবিক হবে
+                setTimeout(() => {
+                    refreshBtn.disabled = false;
+                    refreshBtn.style.opacity = '1';
+                    refreshBtn.style.cursor = 'pointer';
+                    refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
+                }, 300); // সামান্য ডিলে দিয়ে বাটন রিলিজ করা হয়েছে যাতে লোগো বা টেক্সট মিসিং না হয়
             }
         }
 
