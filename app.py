@@ -37,9 +37,21 @@ def load_accounts():
     return []
 
 def extract_otp(text):
-    match = re.search(r'\b\d{4,8}\b', text)
-    if match:
-        return match.group(0)
+    # ১. প্রথমে ড্যাশসহ জিমেইল কোড খুঁজবে (যেমন: G-123456)
+    gcode = re.search(r'G-\d{4,8}', text, re.IGNORECASE)
+    if gcode:
+        return gcode.group(0)
+
+    # ২. যেকোনো ৪ থেকে ১২ ডিজিটের টানা নম্বর খুঁজবে (যেমন: 9999999999)
+    digit_code = re.search(r'\b\d{4,12}\b', text)
+    if digit_code:
+        return digit_code.group(0)
+
+    # ৩. যদি অক্ষর ও সংখ্যা মেশানো কোড থাকে (যেমন: X7Y9Z2)
+    alphanumeric_code = re.search(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
+    if alphanumeric_code:
+        return alphanumeric_code.group(0)
+
     return "Code not found"
 
 def check_gmail(account):
@@ -110,7 +122,7 @@ def logout():
 
 @app.route('/api/fetch-otps')
 def fetch_otps():
-    # সেশন চেক (পাসওয়ার্ড কোনো হেডারে পাঠানো লাগবে না)
+    # সেশন চেক (পাসওয়ার্ড কোনো হেডারে পাঠানো লাগবে না)
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
@@ -125,7 +137,7 @@ def fetch_otps():
 
 @app.route('/api/add-account', methods=['POST'])
 def add_account():
-    # সেশন চেক (পাসওয়ার্ড কোনো হেডারে পাঠানো লাগবে না)
+    # সেশন চেক (পাসওয়ার্ড কোনো হেডারে পাঠানো লাগবে না)
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
