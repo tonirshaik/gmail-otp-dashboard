@@ -23,6 +23,15 @@ def load_accounts():
         print(f"Error loading accounts: {e}")
         return []
 
+def save_accounts(accounts):
+    try:
+        with open(ACCOUNTS_FILE, 'w') as f:
+            json.dump(accounts, f, indent=4)
+        return True
+    except Exception as e:
+        print(f"Error saving accounts: {e}")
+        return False
+
 def extract_otp(text):
     match = re.search(r'\b\d{4,8}\b', text)
     if match:
@@ -103,6 +112,35 @@ def fetch_otps():
         all_codes.extend(codes)
         
     return jsonify(all_codes)
+
+@app.route('/api/add-account', methods=['POST'])
+def add_account():
+    user_pass = request.headers.get("X-Master-Password")
+    if user_pass != MASTER_PASSWORD:
+        return jsonify({"error": "Unauthorized Access"}), 401
+
+    data = request.json or {}
+    email_input = data.get('email')
+    password_input = data.get('password')
+
+    if not email_input or not password_input:
+        return jsonify({"error": "Email and App Password required"}), 400
+
+    accounts = load_accounts()
+    
+    for acc in accounts:
+        if acc['email'] == email_input:
+            return jsonify({"error": "Account already exists!"}), 400
+
+    accounts.append({
+        "email": email_input,
+        "password": password_input
+    })
+
+    if save_accounts(accounts):
+        return jsonify({"message": "Account added successfully!"})
+    else:
+        return jsonify({"error": "Failed to save account"}), 500
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
