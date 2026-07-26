@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="bn">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -46,7 +46,6 @@
         }
 
         .container {
-            position: relative;
             width: 100%;
             max-width: 460px;
             background: var(--card-bg);
@@ -56,122 +55,70 @@
             border-radius: 24px;
             padding: 32px 28px;
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), var(--shadow-glow);
+            transition: all 0.3s ease;
         }
 
-        /* Hidden Utility Screen */
-        .hidden { display: none !important; }
-
-        /* Login Screen */
-        .login-box {
+        .header {
             text-align: center;
+            margin-bottom: 28px;
         }
 
-        .login-title {
-            font-size: 22px;
-            font-weight: 700;
-            margin-bottom: 8px;
-            color: #fff;
-        }
-
-        .login-subtitle {
-            font-size: 13px;
-            color: var(--text-muted);
-            margin-bottom: 20px;
-        }
-
-        /* Top Header Area */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 24px;
-            position: relative;
-        }
-
-        .header-title {
-            font-size: 20px;
+        .header h1 {
+            font-size: 24px;
             font-weight: 700;
             background: linear-gradient(135deg, #60a5fa, #a78bfa, #22d3ee);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             display: flex;
             align-items: center;
-            gap: 8px;
-        }
-
-        .settings-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--card-border);
-            color: var(--text-main);
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
             justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
+            gap: 10px;
         }
 
-        .settings-btn:hover {
-            background: rgba(59, 130, 246, 0.2);
-            border-color: var(--accent-blue);
-            color: var(--accent-cyan);
-            transform: rotate(45deg);
-        }
-
-        .settings-popup {
-            display: none;
-            position: absolute;
-            top: 50px;
-            right: 0;
-            width: 320px;
-            background: #111827;
+        .card-section {
+            background: rgba(255, 255, 255, 0.03);
             border: 1px solid var(--card-border);
-            border-radius: 18px;
+            border-radius: 16px;
             padding: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            z-index: 100;
-            animation: fadeIn 0.2s ease-in-out;
+            margin-bottom: 20px;
         }
 
-        .settings-popup.active { display: block; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        .popup-title {
-            font-size: 13px;
+        .section-title {
+            font-size: 14px;
             font-weight: 600;
             color: var(--accent-cyan);
-            margin-bottom: 12px;
+            margin-bottom: 14px;
             display: flex;
             align-items: center;
-            gap: 6px;
+            gap: 8px;
             text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
 
-        .input-group { margin-bottom: 12px; }
+        .input-group {
+            margin-bottom: 12px;
+        }
 
         .input-group input {
             width: 100%;
-            padding: 12px 14px;
-            background: rgba(0, 0, 0, 0.4);
+            padding: 12px 16px;
+            background: rgba(11, 15, 25, 0.6);
             border: 1px solid var(--card-border);
-            border-radius: 10px;
+            border-radius: 12px;
             color: #fff;
-            font-size: 13px;
+            font-size: 14px;
             outline: none;
             transition: all 0.3s ease;
         }
 
-        .input-group input:focus { border-color: var(--accent-blue); }
+        .input-group input:focus {
+            border-color: var(--accent-blue);
+            box-shadow: 0 0 12px rgba(59, 130, 246, 0.3);
+        }
 
         .btn {
             width: 100%;
-            padding: 12px;
+            padding: 13px;
             border: none;
             border-radius: 12px;
             font-weight: 600;
@@ -187,6 +134,12 @@
         .btn-primary {
             background: var(--gradient-btn);
             color: #fff;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
         }
 
         .btn-refresh {
@@ -206,7 +159,7 @@
             background: rgba(239, 68, 68, 0.1);
             color: var(--accent-red);
             border: 1px solid rgba(239, 68, 68, 0.2);
-            margin-top: 15px;
+            margin-top: 10px;
         }
 
         .btn-logout:hover {
@@ -214,13 +167,12 @@
             color: #fff;
         }
 
-        .status-msg {
+        .msg-success {
             font-size: 12px;
+            color: var(--accent-green);
             text-align: center;
-            margin-bottom: 10px;
+            margin-top: 8px;
         }
-        .status-msg.error { color: var(--accent-red); }
-        .status-msg.success { color: var(--accent-green); }
 
         .otp-card {
             background: rgba(15, 23, 42, 0.6);
@@ -277,209 +229,74 @@
             text-align: center;
             color: var(--text-muted);
             font-size: 13px;
-            padding: 20px 0;
+            padding: 15px 0;
         }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <!-- 🔒 LOGIN SECTION -->
-        <div id="loginSection" class="login-box">
-            <div class="login-title"><i class="fa-solid fa-shield-halved"></i> Master Access</div>
-            <div class="login-subtitle">ড্যাশবোর্ড অ্যাক্সেস করতে মাস্টার পাসওয়ার্ড দিন</div>
-            <div id="loginMsg" class="status-msg error"></div>
-            <div class="input-group">
-                <input type="password" id="masterPasswordInput" placeholder="Master Password" autocomplete="off">
-            </div>
-            <button class="btn btn-primary" onclick="login()">
-                <i class="fa-solid fa-key"></i> Unlock Dashboard
-            </button>
+        <!-- Header -->
+        <div class="header">
+            <h1><i class="fa-solid fa-envelope-open-text"></i> Gmail OTP Dashboard</h1>
         </div>
 
-        <!-- 🔓 DASHBOARD SECTION -->
-        <div id="dashboardSection" class="hidden">
-            <!-- Top Bar -->
-            <div class="top-bar">
-                <div class="header-title">
-                    <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard
-                </div>
-                
-                <button class="settings-btn" id="settingsToggle" title="Add Account Settings">
-                    <i class="fa-solid fa-gear"></i>
-                </button>
-
-                <!-- Hidden Add Account Dropdown -->
-                <div class="settings-popup" id="settingsPopup">
-                    <div class="popup-title">
-                        <i class="fa-solid fa-user-plus"></i> Add Gmail Account
-                    </div>
-                    <div id="addAccMsg" class="status-msg"></div>
-                    <div class="input-group">
-                        <input type="email" id="newEmail" placeholder="Gmail Address" autocomplete="off">
-                    </div>
-                    <div class="input-group">
-                        <input type="password" id="newAppPass" placeholder="16-digit App Password" autocomplete="off">
-                    </div>
-                    <button class="btn btn-primary" onclick="addAccount()">
-                        <i class="fa-solid fa-floppy-disk"></i> Save Account
-                    </button>
-                </div>
+        <!-- Add Gmail Form Section -->
+        <div class="card-section">
+            <div class="section-title">
+                <i class="fa-solid fa-user-plus"></i> Add Gmail Account
             </div>
+            <form action="/add_account" method="POST">
+                <div class="input-group">
+                    <input type="email" name="email" placeholder="Gmail Address" required autocomplete="off">
+                </div>
+                <div class="input-group">
+                    <input type="password" name="app_password" placeholder="16-digit App Password" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa-solid fa-floppy-disk"></i> Save Account
+                </button>
+            </form>
+            {% if msg %}
+                <div class="msg-success">{{ msg }}</div>
+            {% endif %}
+        </div>
 
-            <!-- Refresh Button -->
-            <button class="btn btn-refresh" onclick="fetchOTPs()">
+        <!-- Refresh OTPs Button -->
+        <a href="/" style="text-decoration: none;">
+            <button class="btn btn-refresh">
                 <i class="fa-solid fa-rotate-right"></i> Refresh OTPs
             </button>
+        </a>
 
-            <!-- OTP List Container -->
-            <div id="otpContainer"></div>
+        <!-- OTP Cards Container -->
+        <div class="otp-container">
+            {% if otps %}
+                {% for item in otps %}
+                    <div class="otp-card">
+                        <div class="otp-email"><i class="fa-regular fa-envelope"></i> {{ item.email }}</div>
+                        <div class="otp-subject">{{ item.subject }}</div>
+                        {% if item.otp %}
+                            <div class="otp-code-box">OTP: {{ item.otp }}</div>
+                        {% endif %}
+                        <div class="otp-time"><i class="fa-regular fa-clock"></i> Time: {{ item.time }}</div>
+                    </div>
+                {% endfor %}
+            {% else %}
+                <div class="empty-state">
+                    <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                    No OTPs found.
+                </div>
+            {% endif %}
+        </div>
 
-            <!-- Logout Button -->
-            <button class="btn btn-logout" onclick="logout()">
+        <!-- Logout Button -->
+        <form action="/logout" method="GET">
+            <button type="submit" class="btn btn-logout">
                 <i class="fa-solid fa-right-from-bracket"></i> Logout
             </button>
-        </div>
+        </form>
     </div>
 
-    <script>
-        let MASTER_PASS = "";
-
-        // ১. লগইন লজিক (API Request)
-        async function login() {
-            const pass = document.getElementById('masterPasswordInput').value;
-            const msgBox = document.getElementById('loginMsg');
-            msgBox.innerText = "";
-
-            if (!pass) {
-                msgBox.innerText = "পাসওয়ার্ড প্রদান করুন!";
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password: pass })
-                });
-
-                const data = await res.json();
-                if (res.ok && data.success) {
-                    MASTER_PASS = pass;
-                    document.getElementById('loginSection').classList.add('hidden');
-                    document.getElementById('dashboardSection').classList.remove('hidden');
-                    fetchOTPs();
-                } else {
-                    msgBox.innerText = data.error || "ভুল পাসওয়ার্ড!";
-                }
-            } catch (err) {
-                msgBox.innerText = "সার্ভারে কানেক্ট করা যাচ্ছে না!";
-            }
-        }
-
-        // ২. OTP গুলো ফেচ করার লজিক (API Request)
-        async function fetchOTPs() {
-            const container = document.getElementById('otpContainer');
-            container.innerHTML = '<div class="empty-state"><i class="fa-solid fa-spinner fa-spin"></i> ইমেইল চেক করা হচ্ছে...</div>';
-
-            try {
-                const res = await fetch('/api/fetch-otps', {
-                    headers: { 'X-Master-Password': MASTER_PASS }
-                });
-
-                if (!res.ok) throw new Error("Unauthorized");
-
-                const otps = await res.json();
-                container.innerHTML = "";
-
-                if (otps.length === 0) {
-                    container.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                            কোনো OTP পাওয়া যায়নি।
-                        </div>`;
-                    return;
-                }
-
-                otps.forEach(item => {
-                    container.innerHTML += `
-                        <div class="otp-card">
-                            <div class="otp-email"><i class="fa-regular fa-envelope"></i> ${item.email}</div>
-                            <div class="otp-subject">${item.subject}</div>
-                            ${item.code ? `<div class="otp-code-box">OTP: ${item.code}</div>` : ''}
-                            <div class="otp-time"><i class="fa-regular fa-clock"></i> Time: ${item.time}</div>
-                        </div>`;
-                });
-            } catch (err) {
-                container.innerHTML = '<div class="empty-state" style="color:var(--accent-red);">ডাটা আনতে সমস্যা হয়েছে! আবার চেষ্টা করুন।</div>';
-            }
-        }
-
-        // ৩. অ্যাকাউন্ট যুক্ত করার লজিক (API Request)
-        async function addAccount() {
-            const email = document.getElementById('newEmail').value;
-            const password = document.getElementById('newAppPass').value;
-            const msgBox = document.getElementById('addAccMsg');
-
-            if (!email || !password) {
-                msgBox.className = "status-msg error";
-                msgBox.innerText = "সবগুলো ঘর পূরণ করুন!";
-                return;
-            }
-
-            try {
-                const res = await fetch('/api/add-account', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Master-Password': MASTER_PASS
-                    },
-                    body: JSON.stringify({ email, password })
-                });
-
-                const data = await res.json();
-                if (res.ok) {
-                    msgBox.className = "status-msg success";
-                    msgBox.innerText = data.message;
-                    document.getElementById('newEmail').value = "";
-                    document.getElementById('newAppPass').value = "";
-                    setTimeout(() => {
-                        document.getElementById('settingsPopup').classList.remove('active');
-                        fetchOTPs();
-                    }, 1200);
-                } else {
-                    msgBox.className = "status-msg error";
-                    msgBox.innerText = data.error;
-                }
-            } catch (err) {
-                msgBox.className = "status-msg error";
-                msgBox.innerText = "অ্যাবাউট যোগ করা যায়নি!";
-            }
-        }
-
-        // ৪. লগআউট লজিক (সরাসরি সেশন রিসেট)
-        function logout() {
-            MASTER_PASS = "";
-            document.getElementById('masterPasswordInput').value = "";
-            document.getElementById('dashboardSection').classList.add('hidden');
-            document.getElementById('loginSection').classList.remove('hidden');
-            document.getElementById('loginMsg').innerText = "";
-        }
-
-        // Dropdown Popup Toggle
-        const settingsToggle = document.getElementById('settingsToggle');
-        const settingsPopup = document.getElementById('settingsPopup');
-
-        settingsToggle.addEventListener('click', (e) => {
-            e.stopPropagation();
-            settingsPopup.classList.toggle('active');
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
-                settingsPopup.classList.remove('active');
-            }
-        });
-    </script>
 </body>
 </html>
