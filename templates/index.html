@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gmail OTP Dashboard</title>
+    <style>
+        * { box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: #0f172a; color: #f8fafc; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; padding: 20px; }
+        .card { background: #1e293b; padding: 30px; border-radius: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); width: 100%; max-width: 450px; border: 1px solid #334155; }
+        h2 { text-align: center; color: #38bdf8; margin-bottom: 20px; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border-radius: 8px; border: 1px solid #475569; background: #0f172a; color: #fff; font-size: 16px; outline: none; }
+        input:focus { border-color: #38bdf8; }
+        button { width: 100%; padding: 12px; background: #0284c7; color: white; border: none; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: 0.3s; margin-top: 10px; }
+        button:hover { background: #0369a1; }
+        .hidden { display: none; }
+        .alert { color: #f87171; text-align: center; margin-top: 10px; font-size: 14px; }
+        .otp-box { background: #0f172a; padding: 15px; border-radius: 8px; margin-top: 10px; border-left: 4px solid #38bdf8; }
+        .otp-code { font-size: 22px; font-weight: bold; color: #4ade80; letter-spacing: 2px; }
+        .logout-btn { background: #dc2626; margin-top: 15px; }
+        .logout-btn:hover { background: #b91c1c; }
+    </style>
+</head>
+<body>
+
+    <div id="login-section" class="card">
+        <h2>🔒 Admin Login</h2>
+        <input type="password" id="password" placeholder="Enter Password">
+        <button onclick="handleLogin()">Login</button>
+        <div id="login-error" class="alert"></div>
+    </div>
+
+    <div id="dashboard-section" class="card hidden">
+        <h2>📥 Gmail OTP Dashboard</h2>
+        <button onclick="fetchOTPs()">🔄 Refresh OTPs</button>
+        <div id="otp-list" style="margin-top: 20px;"></div>
+        <button class="logout-btn" onclick="handleLogout()">Logout</button>
+    </div>
+
+    <script>
+        let savedPassword = localStorage.getItem("master_pass") || "";
+
+        async function handleLogin() {
+            const passInput = document.getElementById('password').value;
+            const errorDiv = document.getElementById('login-error');
+            errorDiv.innerText = '';
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: passInput })
+                });
+
+                if (res.ok) {
+                    localStorage.setItem("master_pass", passInput);
+                    savedPassword = passInput;
+                    showDashboard();
+                } else {
+                    errorDiv.innerText = 'ভুল পাসওয়ার্ড!';
+                }
+            } catch (err) {
+                errorDiv.innerText = 'কানেকশন সমস্যা!';
+            }
+        }
+
+        function showDashboard() {
+            document.getElementById('login-section').classList.add('hidden');
+            document.getElementById('dashboard-section').classList.remove('hidden');
+            fetchOTPs();
+        }
+
+        async function fetchOTPs() {
+            const listDiv = document.getElementById('otp-list');
+            listDiv.innerHTML = '<p style="text-align:center; color:#94a3b8;">Checking Gmail...</p>';
+            
+            try {
+                const res = await fetch('/api/fetch-otps', {
+                    headers: { 'X-Master-Password': savedPassword }
+                });
+
+                if (res.status === 401) {
+                    handleLogout();
+                    return;
+                }
+
+                const data = await res.json();
+                if (Array.isArray(data) && data.length > 0) {
+                    listDiv.innerHTML = data.map(item => `
+                        <div class="otp-box">
+                            <div style="font-size:12px; color:#94a3b8;">${item.email}</div>
+                            <div style="font-weight:bold; margin: 4px 0;">${item.subject}</div>
+                            <div>OTP: <span class="otp-code">${item.code}</span></div>
+                            <div style="font-size:11px; color:#64748b; margin-top:4px;">Time: ${item.time}</div>
+                        </div>
+                    `).join('');
+                } else {
+                    listDiv.innerHTML = '<p style="text-align:center; color:#94a3b8;">No OTPs found.</p>';
+                }
+            } catch (err) {
+                listDiv.innerHTML = '<p style="color:#f87171; text-align:center;">Failed to load OTPs</p>';
+            }
+        }
+
+        function handleLogout() {
+            localStorage.removeItem("master_pass");
+            location.reload();
+        }
+
+        if (savedPassword) {
+            showDashboard();
+        }
+    </script>
+</body>
+</html>
