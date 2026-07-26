@@ -440,13 +440,15 @@
             }
         });
 
-        // নিখুঁতভাবে কোড আসার আগ পর্যন্ত Checking স্টেট ধরে রাখার লজিক
+        // ফিক্সড লজিক: এখানে মিনিমাম ২ সেকেন্ড অ্যানিমেশন চালু রাখবে যাতে চোখে পড়ে
         async function fetchOTPs() {
-            // ১. বাটন ডিজেবল এবং "Checking..." স্টেট চালু করা
             refreshBtn.disabled = true;
             refreshBtn.style.opacity = '0.75';
             refreshBtn.style.cursor = 'not-allowed';
             refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking...`;
+
+            // টাস্ক শুরু হওয়ার সময় মনে রাখা হলো
+            const startTime = Date.now();
 
             try {
                 const res = await fetch('/api/fetch-otps');
@@ -461,7 +463,14 @@
 
                 const data = await res.json();
                 
-                // ২. ডেটা রেন্ডার করা
+                // হিসাব করা হচ্ছে কত সময় লাগলো
+                const elapsedTime = Date.now() - startTime;
+                const minDisplayTime = 2000; // অন্তত ২ সেকেন্ড অ্যানিমেশন ঘুরবেই
+
+                if (elapsedTime < minDisplayTime) {
+                    await new Promise(resolve => setTimeout(resolve, minDisplayTime - elapsedTime));
+                }
+
                 renderOTPs(data);
 
             } catch (err) {
@@ -471,13 +480,10 @@
                         Error loading OTPs.
                     </div>`;
             } finally {
-                // ৩. এখানে নিশ্চিত করা হয়েছে যে ডেটা স্ক্রিনে পুরোপুরি বসে যাওয়ার পরেই বাটন স্বাভাবিক হবে
-                setTimeout(() => {
-                    refreshBtn.disabled = false;
-                    refreshBtn.style.opacity = '1';
-                    refreshBtn.style.cursor = 'pointer';
-                    refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
-                }, 300); // সামান্য ডিলে দিয়ে বাটন রিলিজ করা হয়েছে যাতে লোগো বা টেক্সট মিসিং না হয়
+                refreshBtn.disabled = false;
+                refreshBtn.style.opacity = '1';
+                refreshBtn.style.cursor = 'pointer';
+                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
             }
         }
 
