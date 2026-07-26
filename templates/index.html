@@ -57,6 +57,8 @@
             box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), var(--shadow-glow);
         }
 
+        .hidden { display: none !important; }
+
         .top-bar {
             display: flex;
             justify-content: space-between;
@@ -112,9 +114,7 @@
             animation: fadeIn 0.2s ease-in-out;
         }
 
-        .settings-popup.active {
-            display: block;
-        }
+        .settings-popup.active { display: block; }
 
         @keyframes fadeIn {
             from { opacity: 0; transform: translateY(-10px); }
@@ -132,25 +132,21 @@
             text-transform: uppercase;
         }
 
-        .input-group {
-            margin-bottom: 10px;
-        }
+        .input-group { margin-bottom: 12px; }
 
         .input-group input {
             width: 100%;
-            padding: 10px 14px;
+            padding: 12px 14px;
             background: rgba(0, 0, 0, 0.4);
             border: 1px solid var(--card-border);
-            border-radius: 10px;
+            border-radius: 12px;
             color: #fff;
             font-size: 13px;
             outline: none;
             transition: all 0.3s ease;
         }
 
-        .input-group input:focus {
-            border-color: var(--accent-blue);
-        }
+        .input-group input:focus { border-color: var(--accent-blue); }
 
         .btn {
             width: 100%;
@@ -170,8 +166,6 @@
         .btn-primary {
             background: var(--gradient-btn);
             color: #fff;
-            padding: 10px;
-            font-size: 13px;
         }
 
         .btn-refresh {
@@ -226,18 +220,8 @@
             background: var(--gradient-primary);
         }
 
-        .otp-email {
-            font-size: 12px;
-            color: var(--text-muted);
-            margin-bottom: 4px;
-        }
-
-        .otp-subject {
-            font-size: 14px;
-            font-weight: 600;
-            color: var(--text-main);
-            margin-bottom: 8px;
-        }
+        .otp-email { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+        .otp-subject { font-size: 14px; font-weight: 600; color: var(--text-main); margin-bottom: 8px; }
 
         .otp-code-box {
             display: inline-block;
@@ -252,75 +236,84 @@
             margin-bottom: 6px;
         }
 
-        .otp-time {
-            font-size: 11px;
-            color: var(--text-muted);
-        }
-
-        .empty-state {
-            text-align: center;
-            color: var(--text-muted);
-            font-size: 13px;
-            padding: 20px 0;
-        }
+        .otp-time { font-size: 11px; color: var(--text-muted); }
+        .empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px 0; }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <!-- Top Bar -->
-        <div class="top-bar">
-            <div class="header-title">
-                <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard
+        
+        <!-- SECTION 1: LOGIN CARD -->
+        <div id="loginSection">
+            <div class="header-title" style="justify-content: center; margin-bottom: 20px;">
+                <i class="fa-solid fa-lock"></i> Secure Login
             </div>
-            
-            <button class="settings-btn" id="settingsToggle" title="Add Account Settings">
-                <i class="fa-solid fa-gear"></i>
+            <div id="loginError" class="msg-status" style="color: var(--accent-red);"></div>
+            <form id="loginForm">
+                <div class="input-group">
+                    <input type="password" id="masterPasswordInput" placeholder="Enter Master Password" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    <i class="fa-solid fa-right-to-bracket"></i> Login
+                </button>
+            </form>
+        </div>
+
+        <!-- SECTION 2: DASHBOARD CARD -->
+        <div id="dashboardSection" class="hidden">
+            <div class="top-bar">
+                <div class="header-title">
+                    <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard
+                </div>
+                
+                <button class="settings-btn" id="settingsToggle" title="Add Account Settings">
+                    <i class="fa-solid fa-gear"></i>
+                </button>
+
+                <div class="settings-popup" id="settingsPopup">
+                    <div class="popup-title">
+                        <i class="fa-solid fa-user-plus"></i> Add Gmail Account
+                    </div>
+                    <form id="addAccountForm">
+                        <div class="input-group">
+                            <input type="email" id="accEmail" placeholder="Gmail Address" required autocomplete="off">
+                        </div>
+                        <div class="input-group">
+                            <input type="password" id="accPassword" placeholder="16-digit App Password" required autocomplete="off">
+                        </div>
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fa-solid fa-floppy-disk"></i> Save Account
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <div id="statusMsg" class="msg-status"></div>
+
+            <button type="button" class="btn btn-refresh" id="refreshBtn">
+                <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
             </button>
 
-            <!-- Hidden Popup Form -->
-            <div class="settings-popup" id="settingsPopup">
-                <div class="popup-title">
-                    <i class="fa-solid fa-user-plus"></i> Add Gmail Account
+            <div class="otp-container" id="otpContainer">
+                <div class="empty-state">
+                    <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                    Loading OTPs...
                 </div>
-                <form id="addAccountForm">
-                    <div class="input-group">
-                        <input type="email" id="accEmail" placeholder="Gmail Address" required autocomplete="off">
-                    </div>
-                    <div class="input-group">
-                        <input type="password" id="accPassword" placeholder="16-digit App Password" required autocomplete="off">
-                    </div>
-                    <button type="submit" class="btn btn-primary">
-                        <i class="fa-solid fa-floppy-disk"></i> Save Account
-                    </button>
-                </form>
             </div>
+
+            <button type="button" class="btn btn-logout" onclick="logout()">
+                <i class="fa-solid fa-right-from-bracket"></i> Logout
+            </button>
         </div>
 
-        <div id="statusMsg" class="msg-status"></div>
-
-        <!-- Refresh Button -->
-        <button type="button" class="btn btn-refresh" id="refreshBtn">
-            <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
-        </button>
-
-        <!-- Container for Dynamic OTP Cards -->
-        <div class="otp-container" id="otpContainer">
-            <div class="empty-state">
-                <i class="fa-solid fa-spinner fa-spin" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                Loading OTPs...
-            </div>
-        </div>
-
-        <!-- Logout Button -->
-        <button type="button" class="btn btn-logout" onclick="logout()">
-            <i class="fa-solid fa-right-from-bracket"></i> Logout
-        </button>
     </div>
 
     <script>
-        // Master Password configured in app.py
-        const MASTER_PASSWORD = "T@$Fim2002T@niR";
+        const loginSection = document.getElementById('loginSection');
+        const dashboardSection = document.getElementById('dashboardSection');
+        const loginForm = document.getElementById('loginForm');
+        const loginError = document.getElementById('loginError');
 
         const settingsToggle = document.getElementById('settingsToggle');
         const settingsPopup = document.getElementById('settingsPopup');
@@ -342,7 +335,6 @@
             }
         });
 
-        // Show Temporary Message
         function showMessage(msg, isError = false) {
             statusMsg.style.display = 'block';
             statusMsg.style.color = isError ? 'var(--accent-red)' : 'var(--accent-green)';
@@ -352,35 +344,60 @@
             }, 4000);
         }
 
-        // Fetch OTPs from Python API
+        // Handle Login Submission
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('masterPasswordInput').value;
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                if (res.ok) {
+                    loginSection.classList.add('hidden');
+                    dashboardSection.classList.remove('hidden');
+                    fetchOTPs();
+                } else {
+                    loginError.style.display = 'block';
+                    loginError.innerText = "Wrong Master Password!";
+                }
+            } catch (err) {
+                loginError.style.display = 'block';
+                loginError.innerText = "Server Error!";
+            }
+        });
+
+        // Fetch OTPs
         async function fetchOTPs() {
             refreshIcon.classList.add('fa-spin');
             try {
-                const res = await fetch('/api/fetch-otps', {
-                    headers: {
-                        'X-Master-Password': MASTER_PASSWORD
-                    }
-                });
+                const res = await fetch('/api/fetch-otps');
 
-                if (!res.ok) {
-                    throw new Error("Failed to fetch OTPs");
+                if (res.status === 401) {
+                    dashboardSection.classList.add('hidden');
+                    loginSection.classList.remove('hidden');
+                    return;
                 }
+
+                if (!res.ok) throw new Error("Failed");
 
                 const data = await res.json();
                 renderOTPs(data);
             } catch (err) {
-                console.error(err);
                 otpContainer.innerHTML = `
                     <div class="empty-state">
                         <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
-                        Error loading OTPs. Check connection or Master Password.
+                        Error loading OTPs.
                     </div>`;
             } finally {
                 refreshIcon.classList.remove('fa-spin');
             }
         }
 
-        // Render Dynamic Cards
+        // Render Cards
         function renderOTPs(otps) {
             if (!otps || otps.length === 0) {
                 otpContainer.innerHTML = `
@@ -401,7 +418,7 @@
             `).join('');
         }
 
-        // Handle Add Account Form Submission
+        // Add Account Submission
         addAccountForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('accEmail').value;
@@ -410,22 +427,19 @@
             try {
                 const res = await fetch('/api/add-account', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'X-Master-Password': MASTER_PASSWORD
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ email, password })
                 });
 
                 const result = await res.json();
 
                 if (res.ok) {
-                    showMessage(result.message || "Account added successfully!");
+                    showMessage(result.message || "Account added!");
                     addAccountForm.reset();
                     settingsPopup.classList.remove('active');
-                    fetchOTPs(); // Reload OTPs with new account
+                    fetchOTPs();
                 } else {
-                    showMessage(result.error || "Failed to add account", true);
+                    showMessage(result.error || "Failed", true);
                 }
             } catch (err) {
                 showMessage("Connection error", true);
@@ -434,11 +448,14 @@
 
         refreshBtn.addEventListener('click', fetchOTPs);
 
-        function logout() {
-            window.location.href = '/';
+        async function logout() {
+            await fetch('/api/logout', { method: 'POST' });
+            dashboardSection.classList.add('hidden');
+            loginSection.classList.remove('hidden');
+            document.getElementById('masterPasswordInput').value = '';
         }
 
-        // Load OTPs on startup
+        // Initial check
         fetchOTPs();
     </script>
 </body>
