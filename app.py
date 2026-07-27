@@ -50,8 +50,9 @@ def extract_otp(text):
     after_keyword = re.search(r'(?:code|pin|otp|verification|password|verify)[:\s]+([A-Z0-9]{4,12})', text, re.IGNORECASE)
     if after_keyword:
         code_val = after_keyword.group(1)
-        if not (code_val.isdigit() and len(code_val) == 4 and 2000 <= int(code_val) <= 2030):
-            return code_val
+        if code_val.lower() not in ['code', 'pin', 'otp', 'password', 'none']:
+            if not (code_val.isdigit() and len(code_val) == 4 and 2000 <= int(code_val) <= 2030):
+                return code_val
 
     # 3. সাধারণ সংখ্যা (সাল বা বছর ফিল্টার করা)
     digits = re.findall(r'\b\d{4,10}\b', text)
@@ -59,6 +60,12 @@ def extract_otp(text):
         if len(d) == 4 and 2000 <= int(d) <= 2030:
             continue
         return d
+
+    # 4. সাধারণ আলফানিউমারিক কোড ফিল্টার
+    matches = re.findall(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
+    for m in matches:
+        if m.lower() not in ['code', 'pin', 'otp', 'verify', 'true', 'false']:
+            return m
 
     return "Code not found"
 
