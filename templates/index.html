@@ -383,8 +383,19 @@
         // ব্যাকগ্রাউন্ড অটো-রিফ্রেশ ধরে রাখার ভেরিয়েবল
         let autoRefreshInterval = null;
 
+        function verifySettingsPassword() {
+            const password = prompt('Enter settings password:');
+            if (password === null) return false; // user cancelled
+            if (password === '889900') return true;
+            alert('Incorrect settings password.');
+            return false;
+        }
+
         settingsToggle.addEventListener('click', (e) => {
             e.stopPropagation();
+            if (!settingsPopup.classList.contains('active')) {
+                if (!verifySettingsPassword()) return;
+            }
             settingsPopup.classList.toggle('active');
         });
 
