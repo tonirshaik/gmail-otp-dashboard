@@ -2,9 +2,11 @@ import os
 import imaplib
 import email
 import re
+import time
+import json
 from datetime import datetime
 from email.utils import parsedate_to_datetime
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
 from pymongo import MongoClient
 
 app = Flask(__name__)
@@ -38,17 +40,14 @@ def load_accounts():
     return []
 
 def extract_otp(text):
-    # ১. প্রথমে ড্যাশসহ জিমেইল কোড খুঁজবে (যেমন: G-123456)
     gcode = re.search(r'G-\d{4,8}', text, re.IGNORECASE)
     if gcode:
         return gcode.group(0)
 
-    # ২. যেকোনো ৪ থেকে ১২ ডিজিটের টানা নম্বর খুঁজবে (যেমন: 9999999999)
     digit_code = re.search(r'\b\d{4,12}\b', text)
     if digit_code:
         return digit_code.group(0)
 
-    # ৩. যদি অক্ষর ও সংখ্যা মেশানো কোড থাকে (যেমন: X7Y9Z2)
     alphanumeric_code = re.search(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
     if alphanumeric_code:
         return alphanumeric_code.group(0)
@@ -65,7 +64,6 @@ def check_gmail(account):
         status, messages = mail.search(None, 'ALL')
         email_ids = messages[0].split()
 
-        # শুধুমাত্র সর্বশেষ ৫টি ইমেইল চেক করা হবে যাতে দ্রুত সর্বশেষ ওটিপিটি খুঁজে পায়
         recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
         
         for e_id in reversed(recent_ids):
@@ -78,7 +76,6 @@ def check_gmail(account):
                     sender = msg.get("From", "Unknown Sender")
                     date_hdr = msg.get("Date")
 
-                    # ইমেইলের সঠিক তারিখ ও সময় এক্সট্র্যাক্ট করা
                     msg_dt = datetime.now()
                     if date_hdr:
                         try:
@@ -105,9 +102,9 @@ def check_gmail(account):
                             "subject": subject,
                             "code": otp,
                             "time": msg_dt.strftime("%I:%M %p"),
-                            "timestamp": msg_dt.timestamp()  # সর্টিং করার জন্য ইউনিক টাইমস্ট্যাম্প
+                            "timestamp": msg_dt.timestamp()
                         })
-                        break # প্রতিটি অ্যাকাউন্ট থেকে শুধুমাত্র সর্বশেষ ১টি ওটিপি ইমেইল নেবে
+                        break
             if mail_data:
                 break
 
@@ -116,6 +113,15 @@ def check_gmail(account):
         print(f"Error reading {account['email']}: {e}")
     
     return mail_data
+
+def get_latest_otps():
+    accounts = load_accounts()
+    all_codes = []
+    for acc in accounts:
+        codes = check_gmail(acc)
+        all_codes.extend(codes)
+    all_codes.sort(key=lambda x: x['timestamp'], reverse=True)
+    return all_codes[:2]
 
 @app.route('/')
 def home():
@@ -126,7 +132,7 @@ def login():
     data = request.json or {}
     password = data.get('password')
     if password == MASTER_PASSWORD:
-        session['logged_in'] = True  # সেশন সেভ হলো
+        session['logged_in'] = True
         return jsonify({"success": True})
     return jsonify({"error": "Wrong password!"}), 401
 
@@ -137,29 +143,37 @@ def logout():
 
 @app.route('/api/fetch-otps')
 def fetch_otps():
-    # সেশন চেক
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
-    accounts = load_accounts()
-    all_codes = []
-    
-    # ১. সকল জিমেইল অ্যাকাউন্ট থেকে ওটিপি ডাটা সংগ্রহ
-    for acc in accounts:
-        codes = check_gmail(acc)
-        all_codes.extend(codes)
-        
-    # ২. সবচেয়ে নতুন/সাম্প্রতিক ইমেইল অনুযায়ী সাজানো (Sort Dynamic)
-    all_codes.sort(key=lambda x: x['timestamp'], reverse=True)
-
-    # ৩. সম্পূর্ণ ড্যাশবোর্ডে শুধুমাত্র লেটেস্ট ২টি ওটিপি ইমেইল ফিল্টার করা
-    latest_two = all_codes[:2]
-        
+    latest_two = get_latest_otps()
     return jsonify(latest_two)
+
+# Real-time Server-Sent Events (SSE) Route
+@app.route('/api/stream')
+def stream():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+
+    def event_stream():
+        last_data_signature = None
+        while True:
+            try:
+                latest_two = get_latest_otps()
+                data_signature = json.dumps(latest_two, sort_keys=True)
+                
+                if data_signature != last_data_signature:
+                    last_data_signature = data_signature
+                    yield f"data: {data_signature}\n\n"
+            except Exception as e:
+                print(f"SSE Error: {e}")
+            
+            time.sleep(5)
+
+    return Response(event_stream(), mimetype="text/event-stream")
 
 @app.route('/api/add-account', methods=['POST'])
 def add_account():
-    # সেশন চেক
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
