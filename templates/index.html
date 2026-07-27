@@ -495,7 +495,7 @@
                 if (res.ok) {
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
-                    fetchOTPs(); // লগইন করার পর একবার ক্লিক ছাড়াই লোড করতে চাইলে রাখতে পারেন, অথবা বাদ দিতে পারেন
+                    fetchOTPs();
                 } else {
                     loginError.style.display = 'block';
                     loginError.innerText = "Wrong Master Password!";
@@ -608,7 +608,6 @@
             }
         });
 
-        // শুধুমাত্র বাটনে ক্লিক করলেই কাজ করবে, কোনো অটো পোলিং নেই
         refreshBtn.addEventListener('click', fetchOTPs);
 
         async function logout() {
