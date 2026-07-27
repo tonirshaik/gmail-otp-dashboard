@@ -60,17 +60,23 @@ def check_gmail(account):
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(account['email'], account['password'])
         
-        # সরাসরি All Mail ফোল্ডার সিলেক্ট করব, কারণ এখানে ইনবক্স ও স্প্যাম সব মেইল একসাথে থাকে
-        status, _ = mail.select('"[Gmail]/All Mail"')
-        if status != 'OK':
-            status, _ = mail.select("inbox") # যদি All Mail না পায় তবে ইনবক্স ট্রাই করবে
-            
-        if status == 'OK':
-            status, messages = mail.search(None, 'ALL')
-            if status == 'OK' and messages[0]:
-                email_ids = messages[0].split()
-                recent_ids = email_ids[-3:] if len(email_ids) >= 3 else email_ids
+        # স্প্যাম ফোল্ডার এবং অল মেইল উভয় ফোল্ডারকেই সিকোয়েন্স অনুযায়ী চেক করবে
+        folders_to_try = ["[Gmail]/Spam", "Spam", "[Gmail]/All Mail", "inbox"]
+        
+        for folder in folders_to_try:
+            try:
+                status, _ = mail.select(folder)
+                if status != 'OK':
+                    continue
                 
+                status, messages = mail.search(None, 'ALL')
+                if status != 'OK' or not messages[0]:
+                    continue
+                    
+                email_ids = messages[0].split()
+                recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
+                
+                found_in_folder = False
                 for e_id in reversed(recent_ids):
                     _, msg_data = mail.fetch(e_id, '(RFC822)')
                     for response_part in msg_data:
@@ -109,9 +115,14 @@ def check_gmail(account):
                                     "time": msg_dt.strftime("%I:%M %p"),
                                     "timestamp": msg_dt.timestamp()
                                 })
-                                break # একটি মেইল পেয়ে গেলে লুপ শেষ
-                    if mail_data:
+                                found_in_folder = True
+                                break
+                    if found_in_folder:
                         break
+                if mail_data:
+                    break
+            except Exception as f_err:
+                continue
 
         mail.logout()
     except Exception as e:
@@ -170,10 +181,13 @@ def stream():
                 if data_signature != last_data_signature:
                     last_data_signature = data_signature
                     yield f"data: {data_signature}\n\n"
+                else:
+                    # কানেকশন একটিভ রাখার জন্য একটি হার্টবিট বা পিং পাঠানো যেতে পারে
+                    yield ": ping\n\n"
             except Exception as e:
                 print(f"SSE Error: {e}")
             
-            time.sleep(2)
+            time.sleep(3) # চেক করার ইন্টারভ্যাল একটু বাড়িয়ে ৩ সেকেন্ড করা হলো যাতে সার্ভার স্মুথ থাকে
 
     return Response(event_stream(), mimetype="text/event-stream")
 
