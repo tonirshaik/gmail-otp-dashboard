@@ -59,54 +59,70 @@ def check_gmail(account):
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(account['email'], account['password'])
-        mail.select("inbox")
-
-        status, messages = mail.search(None, 'ALL')
-        email_ids = messages[0].split()
-
-        recent_ids = email_ids[-2:] if len(email_ids) >= 2 else email_ids
         
-        for e_id in reversed(recent_ids):
-            _, msg_data = mail.fetch(e_id, '(RFC822)')
-            for response_part in msg_data:
-                if isinstance(response_part, tuple):
-                    msg = email.message_from_bytes(response_part[1])
+        # ইনবক্স এবং স্প্যাম দুটো ফোল্ডারই চেক করার লজিক
+        folders = ["inbox", "[Gmail]/Spam"]
+        
+        for folder in folders:
+            try:
+                status, _ = mail.select(folder)
+                if status != 'OK':
+                    continue
+                
+                status, messages = mail.search(None, 'ALL')
+                if status != 'OK' or not messages[0]:
+                    continue
                     
-                    subject = msg.get("Subject", "No Subject")
-                    sender = msg.get("From", "Unknown Sender")
-                    date_hdr = msg.get("Date")
+                email_ids = messages[0].split()
+                recent_ids = email_ids[-2:] if len(email_ids) >= 2 else email_ids
+                
+                found_in_folder = False
+                for e_id in reversed(recent_ids):
+                    _, msg_data = mail.fetch(e_id, '(RFC822)')
+                    for response_part in msg_data:
+                        if isinstance(response_part, tuple):
+                            msg = email.message_from_bytes(response_part[1])
+                            
+                            subject = msg.get("Subject", "No Subject")
+                            sender = msg.get("From", "Unknown Sender")
+                            date_hdr = msg.get("Date")
 
-                    msg_dt = datetime.now()
-                    if date_hdr:
-                        try:
-                            msg_dt = parsedate_to_datetime(date_hdr)
-                        except Exception:
-                            pass
-                    
-                    body = ""
-                    if msg.is_multipart():
-                        for part in msg.walk():
-                            if part.get_content_type() == "text/plain":
-                                body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                            msg_dt = datetime.now()
+                            if date_hdr:
+                                try:
+                                    msg_dt = parsedate_to_datetime(date_hdr)
+                                except Exception:
+                                    pass
+                            
+                            body = ""
+                            if msg.is_multipart():
+                                for part in msg.walk():
+                                    if part.get_content_type() == "text/plain":
+                                        body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                                        break
+                            else:
+                                body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+
+                            keywords = ["code", "otp", "verification", "pin", "verify", "password", "login"]
+                            if any(kw in subject.lower() or kw in body.lower() for kw in keywords):
+                                otp = extract_otp(subject + " " + body)
+                                
+                                mail_data.append({
+                                    "email": account['email'],
+                                    "sender": sender,
+                                    "subject": subject,
+                                    "code": otp,
+                                    "time": msg_dt.strftime("%I:%M %p"),
+                                    "timestamp": msg_dt.timestamp()
+                                })
+                                found_in_folder = True
                                 break
-                    else:
-                        body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-
-                    keywords = ["code", "otp", "verification", "pin", "verify", "password", "login"]
-                    if any(kw in subject.lower() or kw in body.lower() for kw in keywords):
-                        otp = extract_otp(subject + " " + body)
-                        
-                        mail_data.append({
-                            "email": account['email'],
-                            "sender": sender,
-                            "subject": subject,
-                            "code": otp,
-                            "time": msg_dt.strftime("%I:%M %p"),
-                            "timestamp": msg_dt.timestamp()
-                        })
+                    if found_in_folder:
                         break
-            if mail_data:
-                break
+                if mail_data:
+                    break
+            except Exception as f_err:
+                continue
 
         mail.logout()
     except Exception as e:
