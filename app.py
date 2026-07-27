@@ -60,10 +60,12 @@ def check_gmail(account, mail_data):
         mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
         mail.login(account['email'], account['password'])
         
-        # স্প্যাম ফোল্ডার এবং অল মেইল উভয় ফোল্ডারকেই সিকোয়েন্স অনুযায়ী চেক করবে
         folders_to_try = ["[Gmail]/Spam", "Spam", "[Gmail]/All Mail", "inbox"]
         
+        found_otp = False
         for folder in folders_to_try:
+            if found_otp:
+                break
             try:
                 status, _ = mail.select(folder)
                 if status != 'OK':
@@ -76,7 +78,6 @@ def check_gmail(account, mail_data):
                 email_ids = messages[0].split()
                 recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
                 
-                found_in_folder = False
                 for e_id in reversed(recent_ids):
                     _, msg_data = mail.fetch(e_id, '(RFC822)')
                     for response_part in msg_data:
@@ -115,18 +116,35 @@ def check_gmail(account, mail_data):
                                     "time": msg_dt.strftime("%I:%M %p"),
                                     "timestamp": msg_dt.timestamp()
                                 })
-                                found_in_folder = True
+                                found_otp = True
                                 break
-                    if found_in_folder:
+                    if found_otp:
                         break
-                if mail_data:
-                    break
-            except Exception as f_err:
+            except Exception:
                 continue
+
+        # যদি কোনো ইমেইলে কিওয়ার্ড না মিলে, তবুও জিমেইল অ্যাকাউন্টটি ড্যাশবোর্ডে দেখানোর জন্য ডিফল্ট অবজেক্ট পাঠানো হবে
+        if not found_otp:
+            mail_data.append({
+                "email": account['email'],
+                "sender": "N/A",
+                "subject": "No recent OTP emails found",
+                "code": "No emails found",
+                "time": "N/A",
+                "timestamp": 0
+            })
 
         mail.logout()
     except Exception as e:
         print(f"Error reading {account['email']}: {e}")
+        mail_data.append({
+            "email": account['email'],
+            "sender": "Connection Error",
+            "subject": "Failed to login/fetch",
+            "code": "Error",
+            "time": "N/A",
+            "timestamp": 0
+        })
 
 def get_latest_otps():
     accounts = load_accounts()
@@ -150,7 +168,8 @@ def get_latest_otps():
         t.join()
 
     all_codes.sort(key=lambda x: x['timestamp'], reverse=True)
-    return all_codes[:2]
+    # পূর্বে এখানে [:2] দেওয়া ছিল যা কেটে দেওয়া হয়েছে, যাতে সব জিমেইলের বক্স দেখায়
+    return all_codes
 
 @app.route('/')
 def home():
@@ -175,8 +194,8 @@ def fetch_otps():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
-    latest_two = get_latest_otps()
-    return jsonify(latest_two)
+    all_otps = get_latest_otps()
+    return jsonify(all_otps)
 
 # Real-time Server-Sent Events (SSE) Route
 @app.route('/api/stream')
@@ -188,8 +207,8 @@ def stream():
         last_data_signature = None
         while True:
             try:
-                latest_two = get_latest_otps()
-                data_signature = json.dumps(latest_two, sort_keys=True)
+                all_otps = get_latest_otps()
+                data_signature = json.dumps(all_otps, sort_keys=True)
                 
                 if data_signature != last_data_signature:
                     last_data_signature = data_signature
