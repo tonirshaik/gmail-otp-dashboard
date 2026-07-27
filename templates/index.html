@@ -397,7 +397,7 @@
         const addAccountForm = document.getElementById('addAccountForm');
         const statusMsg = document.getElementById('statusMsg');
 
-        let autoRefreshInterval = null;
+        let eventSource = null;
         const settingsAuth = document.getElementById('settingsAuth');
         const settingsContent = document.getElementById('settingsContent');
         const settingsAuthForm = document.getElementById('settingsAuthForm');
@@ -479,7 +479,7 @@
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
                     fetchOTPs();
-                    startAutoRefresh();
+                    startRealTimeStream();
                 } else {
                     loginError.style.display = 'block';
                     loginError.innerText = "Wrong Master Password!";
@@ -502,7 +502,7 @@
                 const res = await fetch('/api/fetch-otps');
 
                 if (res.status === 401) {
-                    stopAutoRefresh();
+                    stopRealTimeStream();
                     dashboardSection.classList.add('hidden');
                     loginSection.classList.remove('hidden');
                     return;
@@ -589,22 +589,36 @@
 
         refreshBtn.addEventListener('click', () => fetchOTPs(false));
 
-        function startAutoRefresh() {
-            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
-            autoRefreshInterval = setInterval(() => {
-                fetchOTPs(true); 
-            }, 5000);
+        function startRealTimeStream() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource('/api/stream');
+
+            eventSource.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    renderOTPs(data);
+                } catch (err) {
+                    console.error("Error parsing SSE data:", err);
+                }
+            };
+
+            eventSource.onerror = function(err) {
+                console.error("SSE Connection Error:", err);
+            };
         }
 
-        function stopAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-                autoRefreshInterval = null;
+        function stopRealTimeStream() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
             }
         }
 
         async function logout() {
-            stopAutoRefresh();
+            stopRealTimeStream();
             await fetch('/api/logout', { method: 'POST' });
             dashboardSection.classList.add('hidden');
             loginSection.classList.remove('hidden');
