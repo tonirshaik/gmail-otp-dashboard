@@ -384,9 +384,9 @@
             </button>
 
             <div class="otp-container" id="otpContainer">
-                <div class="empty-state" id="loadingState">
-                    <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                    Loading OTPs...
+                <div class="empty-state">
+                    <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                    Click "Refresh OTPs" to load emails.
                 </div>
             </div>
 
@@ -414,9 +414,6 @@
         const refreshBtn = document.getElementById('refreshBtn');
         const addAccountForm = document.getElementById('addAccountForm');
         const statusMsg = document.getElementById('statusMsg');
-
-        let pollingInterval = null;
-        let isFirstLoad = true; // প্রথমবার লোডিং দেখানোর জন্য
 
         const settingsAuth = document.getElementById('settingsAuth');
         const settingsContent = document.getElementById('settingsContent');
@@ -498,9 +495,7 @@
                 if (res.ok) {
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
-                    isFirstLoad = true;
-                    fetchOTPs(false);
-                    startPolling();
+                    fetchOTPs(); // লগইন করার পর একবার ক্লিক ছাড়াই লোড করতে চাইলে রাখতে পারেন, অথবা বাদ দিতে পারেন
                 } else {
                     loginError.style.display = 'block';
                     loginError.innerText = "Wrong Master Password!";
@@ -511,21 +506,22 @@
             }
         });
 
-        async function fetchOTPs(isBackground = false) {
-            // যদি ব্যাকগ্রাউন্ড অটো রিফ্রেশ হয়, তবে স্ক্রিনে কোনো লোডিং বা স্পিনার দেখাবে না যাতে ইউজার স্ক্রিন ব্যবহার করতে পারে
-            if (!isBackground && isFirstLoad) {
-                otpContainer.innerHTML = `
-                    <div class="empty-state" id="loadingState">
-                        <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        Loading OTPs...
-                    </div>`;
-            }
+        async function fetchOTPs() {
+            refreshBtn.disabled = true;
+            refreshBtn.style.opacity = '0.75';
+            refreshBtn.style.cursor = 'not-allowed';
+            refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking Gmail...`;
+
+            otpContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                    Fetching OTPs from servers...
+                </div>`;
 
             try {
                 const res = await fetch('/api/fetch-otps');
 
                 if (res.status === 401) {
-                    stopPolling();
                     dashboardSection.classList.add('hidden');
                     loginSection.classList.remove('hidden');
                     return;
@@ -535,16 +531,18 @@
 
                 const data = await res.json();
                 renderOTPs(data);
-                isFirstLoad = false;
 
             } catch (err) {
-                if (!isBackground && isFirstLoad) {
-                    otpContainer.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
-                            Error loading OTPs.
-                        </div>`;
-                }
+                otpContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
+                        Error loading OTPs. Try again.
+                    </div>`;
+            } finally {
+                refreshBtn.disabled = false;
+                refreshBtn.style.opacity = '1';
+                refreshBtn.style.cursor = 'pointer';
+                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
             }
         }
 
@@ -601,8 +599,7 @@
                     showMessage(result.message || "Account added!");
                     addAccountForm.reset();
                     settingsPopup.classList.remove('active');
-                    isFirstLoad = true;
-                    fetchOTPs(false);
+                    fetchOTPs();
                 } else {
                     showMessage(result.error || "Failed", true);
                 }
@@ -611,29 +608,10 @@
             }
         });
 
-        // ম্যানুয়াল রিফ্রেশ বাটন
-        refreshBtn.addEventListener('click', () => {
-            isFirstLoad = true;
-            fetchOTPs(false);
-        });
-
-        // প্রতি ৫ সেকেন্ড পর পর ব্যাকগ্রাউন্ডে অটো রিফ্রেশ হবে (কোনো লোডিং স্পিনার দেখাবে না)
-        function startPolling() {
-            stopPolling();
-            pollingInterval = setInterval(() => {
-                fetchOTPs(true); // true মানে ব্যাকগ্রাউন্ড কল
-            }, 5000);
-        }
-
-        function stopPolling() {
-            if (pollingInterval) {
-                clearInterval(pollingInterval);
-                pollingInterval = null;
-            }
-        }
+        // শুধুমাত্র বাটনে ক্লিক করলেই কাজ করবে, কোনো অটো পোলিং নেই
+        refreshBtn.addEventListener('click', fetchOTPs);
 
         async function logout() {
-            stopPolling();
             await fetch('/api/logout', { method: 'POST' });
             dashboardSection.classList.add('hidden');
             loginSection.classList.remove('hidden');
