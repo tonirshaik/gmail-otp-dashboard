@@ -41,17 +41,24 @@ def load_accounts():
     return []
 
 def extract_otp(text):
+    # 1. G- দিয়ে শুরু কোড (যেমন G-123456)
     gcode = re.search(r'G-\d{4,8}', text, re.IGNORECASE)
     if gcode:
         return gcode.group(0)
 
-    digit_code = re.search(r'\b\d{4,12}\b', text)
-    if digit_code:
-        return digit_code.group(0)
+    # 2. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড (যেমন: code is 10101010)
+    after_keyword = re.search(r'(?:code|pin|otp|verification|password|verify)[:\s]+([A-Z0-9]{4,12})', text, re.IGNORECASE)
+    if after_keyword:
+        code_val = after_keyword.group(1)
+        if not (code_val.isdigit() and len(code_val) == 4 and 2000 <= int(code_val) <= 2030):
+            return code_val
 
-    alphanumeric_code = re.search(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
-    if alphanumeric_code:
-        return alphanumeric_code.group(0)
+    # 3. সাধারণ সংখ্যা (সাল বা বছর ফিল্টার করা)
+    digits = re.findall(r'\b\d{4,10}\b', text)
+    for d in digits:
+        if len(d) == 4 and 2000 <= int(d) <= 2030:
+            continue
+        return d
 
     return "Code not found"
 
@@ -60,7 +67,7 @@ def check_gmail(account, mail_data):
         mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
         mail.login(account['email'], account['password'])
         
-        folders_to_try = ["[Gmail]/Spam", "Spam", "[Gmail]/All Mail", "inbox"]
+        folders_to_try = ["inbox", "[Gmail]/All Mail", "[Gmail]/Spam"]
         
         found_otp = False
         for folder in folders_to_try:
@@ -91,7 +98,11 @@ def check_gmail(account, mail_data):
                             msg_dt = datetime.now()
                             if date_hdr:
                                 try:
-                                    msg_dt = parsedate_to_datetime(date_hdr)
+                                    parsed_dt = parsedate_to_datetime(date_hdr)
+                                    if parsed_dt.tzinfo:
+                                        msg_dt = parsed_dt.astimezone().replace(tzinfo=None)
+                                    else:
+                                        msg_dt = parsed_dt
                                 except Exception:
                                     pass
                             
@@ -104,26 +115,27 @@ def check_gmail(account, mail_data):
                             else:
                                 body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
 
-                            keywords = ["code", "otp", "verification", "pin", "verify", "password", "login"]
-                            if any(kw in subject.lower() or kw in body.lower() for kw in keywords):
-                                otp = extract_otp(subject + " " + body)
-                                
-                                mail_data.append({
-                                    "email": account['email'],
-                                    "sender": sender,
-                                    "subject": subject,
-                                    "code": otp,
-                                    "time": msg_dt.strftime("%I:%M %p"),
-                                    "timestamp": msg_dt.timestamp()
-                                })
-                                found_otp = True
-                                break
+                            full_text = subject + " " + body
+                            keywords = ["code", "otp", "verification", "pin", "verify", "password"]
+                            
+                            if any(kw in full_text.lower() for kw in keywords):
+                                otp = extract_otp(full_text)
+                                if otp != "Code not found":
+                                    mail_data.append({
+                                        "email": account['email'],
+                                        "sender": sender,
+                                        "subject": subject,
+                                        "code": otp,
+                                        "time": msg_dt.strftime("%I:%M %p"),
+                                        "timestamp": msg_dt.timestamp()
+                                    })
+                                    found_otp = True
+                                    break
                     if found_otp:
                         break
             except Exception:
                 continue
 
-        # যদি কোনো ইমেইলে কিওয়ার্ড না মিলে, তবুও জিমেইল অ্যাকাউন্টটি ড্যাশবোর্ডে দেখানোর জন্য ডিফল্ট অবজেক্ট পাঠানো হবে
         if not found_otp:
             mail_data.append({
                 "email": account['email'],
@@ -168,7 +180,6 @@ def get_latest_otps():
         t.join()
 
     all_codes.sort(key=lambda x: x['timestamp'], reverse=True)
-    # পূর্বে এখানে [:2] দেওয়া ছিল যা কেটে দেওয়া হয়েছে, যাতে সব জিমেইলের বক্স দেখায়
     return all_codes
 
 @app.route('/')
@@ -196,31 +207,6 @@ def fetch_otps():
 
     all_otps = get_latest_otps()
     return jsonify(all_otps)
-
-# Real-time Server-Sent Events (SSE) Route
-@app.route('/api/stream')
-def stream():
-    if not session.get('logged_in'):
-        return jsonify({"error": "Unauthorized Access"}), 401
-
-    def event_stream():
-        last_data_signature = None
-        while True:
-            try:
-                all_otps = get_latest_otps()
-                data_signature = json.dumps(all_otps, sort_keys=True)
-                
-                if data_signature != last_data_signature:
-                    last_data_signature = data_signature
-                    yield f"data: {data_signature}\n\n"
-                else:
-                    yield ": ping\n\n"
-            except Exception as e:
-                print(f"SSE Error: {e}")
-            
-            time.sleep(3)
-
-    return Response(event_stream(), mimetype="text/event-stream")
 
 @app.route('/api/add-account', methods=['POST'])
 def add_account():
@@ -251,4 +237,4 @@ def add_account():
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
-    app.run(host='0.0.0.0', port=port, debug=True) 
+    app.run(host='0.0.0.0', port=port, debug=True)
