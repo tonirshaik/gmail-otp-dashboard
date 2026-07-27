@@ -325,20 +325,37 @@
                 </button>
 
                 <div class="settings-popup" id="settingsPopup">
-                    <div class="popup-title">
-                        <i class="fa-solid fa-user-plus"></i> Add Gmail Account
+                    <div class="settings-auth" id="settingsAuth">
+                        <div class="popup-title">
+                            <i class="fa-solid fa-lock"></i> Enter Settings Password
+                        </div>
+                        <form id="settingsAuthForm">
+                            <div class="input-group">
+                                <input type="password" id="settingsPasswordInput" placeholder="Enter password" required autocomplete="off">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-key"></i> Unlock
+                            </button>
+                        </form>
+                        <div id="settingsAuthError" class="msg-status" style="color: var(--accent-red); display: none; margin-top: 8px; font-size: 13px;"></div>
                     </div>
-                    <form id="addAccountForm">
-                        <div class="input-group">
-                            <input type="email" id="accEmail" placeholder="Gmail Address" required autocomplete="off">
+
+                    <div class="settings-content hidden" id="settingsContent">
+                        <div class="popup-title">
+                            <i class="fa-solid fa-user-plus"></i> Add Gmail Account
                         </div>
-                        <div class="input-group">
-                            <input type="password" id="accPassword" placeholder="16-digit App Password" required autocomplete="off">
-                        </div>
-                        <button type="submit" class="btn btn-primary">
-                            <i class="fa-solid fa-floppy-disk"></i> Save Account
-                        </button>
-                    </form>
+                        <form id="addAccountForm">
+                            <div class="input-group">
+                                <input type="email" id="accEmail" placeholder="Gmail Address" required autocomplete="off">
+                            </div>
+                            <div class="input-group">
+                                <input type="password" id="accPassword" placeholder="16-digit App Password" required autocomplete="off">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-floppy-disk"></i> Save Account
+                            </button>
+                        </form>
+                    </div>
                 </div>
             </div>
 
@@ -382,26 +399,45 @@
 
         // ব্যাকগ্রাউন্ড অটো-রিফ্রেশ ধরে রাখার ভেরিয়েবল
         let autoRefreshInterval = null;
+        const settingsAuth = document.getElementById('settingsAuth');
+        const settingsContent = document.getElementById('settingsContent');
+        const settingsAuthForm = document.getElementById('settingsAuthForm');
+        const settingsPasswordInput = document.getElementById('settingsPasswordInput');
+        const settingsAuthError = document.getElementById('settingsAuthError');
 
-        function verifySettingsPassword() {
-            const password = prompt('Enter settings password:');
-            if (password === null) return false; // user cancelled
-            if (password === '889900') return true;
-            alert('Incorrect settings password.');
-            return false;
+        function resetSettingsPopup() {
+            settingsAuth.classList.remove('hidden');
+            settingsContent.classList.add('hidden');
+            settingsPasswordInput.value = '';
+            settingsAuthError.style.display = 'none';
+            settingsAuthError.innerText = '';
         }
 
         settingsToggle.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!settingsPopup.classList.contains('active')) {
-                if (!verifySettingsPassword()) return;
-            }
             settingsPopup.classList.toggle('active');
+            if (!settingsPopup.classList.contains('active')) {
+                resetSettingsPopup();
+            }
+        });
+
+        settingsAuthForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const password = settingsPasswordInput.value.trim();
+            if (password === '889900') {
+                settingsAuth.classList.add('hidden');
+                settingsContent.classList.remove('hidden');
+                settingsAuthError.style.display = 'none';
+            } else {
+                settingsAuthError.innerText = 'Incorrect password. Please try again.';
+                settingsAuthError.style.display = 'block';
+            }
         });
 
         document.addEventListener('click', (e) => {
             if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
                 settingsPopup.classList.remove('active');
+                resetSettingsPopup();
             }
         });
 
