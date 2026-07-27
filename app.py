@@ -27,15 +27,6 @@ if MONGO_URI:
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
-# iframe এ লোড হওয়ার জন্য সিকিউরিটি হেডার রিমুভ করা বা এলাউ করা
-@app.after_request
-def add_security_headers(response):
-    response.headers.pop('X-Frame-Options', None)
-    response.headers['Access-Control-Allow-Origin'] = '*'
-    response.headers['Access-Control-Allow-Headers'] = 'Content-Type,Authorization'
-    response.headers['Access-Control-Allow-Methods'] = 'GET,PUT,POST,DELETE,OPTIONS'
-    return response
-
 def load_accounts():
     if accounts_collection is not None:
         try:
@@ -74,7 +65,7 @@ def check_gmail(account):
         status, messages = mail.search(None, 'ALL')
         email_ids = messages[0].split()
 
-        # শুধুমাত্র সর্বশেষ ৫টি ইমেইল চেক করা হবে যাতে দ্রুত সর্বশেষ ওটিপিটি খুঁজে পায়
+        # শুধুমাত্র সর্বশেষ ৫টি ইমেইল চেক করা হবে যাতে দ্রুত সর্বশেষ ওটিপিটি খুঁজে পায়
         recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
         
         for e_id in reversed(recent_ids):
@@ -87,7 +78,7 @@ def check_gmail(account):
                     sender = msg.get("From", "Unknown Sender")
                     date_hdr = msg.get("Date")
 
-                    # ইমেইলের সঠিক তারিখ ও সময় এক্সট্র্যাক্ট করা
+                    # ইমেইলের সঠিক তারিখ ও সময় এক্সট্র্যাক্ট করা
                     msg_dt = datetime.now()
                     if date_hdr:
                         try:
@@ -158,7 +149,7 @@ def fetch_otps():
         codes = check_gmail(acc)
         all_codes.extend(codes)
         
-    # ২. সবচেয়ে নতুন/সাম্প্রতিক ইমেইল অনুযায়ী সাজানো (Sort Dynamic)
+    # ২. সবচেয়ে নতুন/সাম্প্রতিক ইমেইল অনুযায়ী সাজানো (Sort Dynamic)
     all_codes.sort(key=lambda x: x['timestamp'], reverse=True)
 
     # ৩. সম্পূর্ণ ড্যাশবোর্ডে শুধুমাত্র লেটেস্ট ২টি ওটিপি ইমেইল ফিল্টার করা
