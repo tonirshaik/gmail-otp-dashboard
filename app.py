@@ -60,23 +60,17 @@ def check_gmail(account):
         mail = imaplib.IMAP4_SSL("imap.gmail.com")
         mail.login(account['email'], account['password'])
         
-        # ইনবক্স এবং স্প্যাম দুটো ফোল্ডারই চেক করার লজিক
-        folders = ["inbox", "[Gmail]/Spam", "Spam"]
-        
-        for folder in folders:
-            try:
-                status, _ = mail.select(folder)
-                if status != 'OK':
-                    continue
-                
-                status, messages = mail.search(None, 'ALL')
-                if status != 'OK' or not messages[0]:
-                    continue
-                    
+        # সরাসরি All Mail ফোল্ডার সিলেক্ট করব, কারণ এখানে ইনবক্স ও স্প্যাম সব মেইল একসাথে থাকে
+        status, _ = mail.select('"[Gmail]/All Mail"')
+        if status != 'OK':
+            status, _ = mail.select("inbox") # যদি All Mail না পায় তবে ইনবক্স ট্রাই করবে
+            
+        if status == 'OK':
+            status, messages = mail.search(None, 'ALL')
+            if status == 'OK' and messages[0]:
                 email_ids = messages[0].split()
-                recent_ids = email_ids[-2:] if len(email_ids) >= 2 else email_ids
+                recent_ids = email_ids[-3:] if len(email_ids) >= 3 else email_ids
                 
-                found_in_folder = False
                 for e_id in reversed(recent_ids):
                     _, msg_data = mail.fetch(e_id, '(RFC822)')
                     for response_part in msg_data:
@@ -115,14 +109,9 @@ def check_gmail(account):
                                     "time": msg_dt.strftime("%I:%M %p"),
                                     "timestamp": msg_dt.timestamp()
                                 })
-                                found_in_folder = True
-                                break
-                    if found_in_folder:
+                                break # একটি মেইল পেয়ে গেলে লুপ শেষ
+                    if mail_data:
                         break
-                if mail_data:
-                    break
-            except Exception as f_err:
-                continue
 
         mail.logout()
     except Exception as e:
