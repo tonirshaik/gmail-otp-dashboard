@@ -216,14 +216,8 @@
             padding-right: 4px;
         }
 
-        /* Scrollbar design */
-        .otp-container::-webkit-scrollbar {
-            width: 5px;
-        }
-        .otp-container::-webkit-scrollbar-thumb {
-            background: rgba(255, 255, 255, 0.15);
-            border-radius: 10px;
-        }
+        .otp-container::-webkit-scrollbar { width: 5px; }
+        .otp-container::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
 
         .otp-card {
             background: rgba(15, 23, 42, 0.6);
@@ -321,7 +315,7 @@
 
     <div class="container">
         
-        <!-- SECTION 1: LOGIN CARD -->
+        <!-- LOGIN SECTION -->
         <div id="loginSection">
             <div class="header-title" style="justify-content: center; margin-bottom: 20px;">
                 <i class="fa-solid fa-lock"></i> Secure Login
@@ -337,7 +331,7 @@
             </form>
         </div>
 
-        <!-- SECTION 2: DASHBOARD CARD -->
+        <!-- DASHBOARD SECTION -->
         <div id="dashboardSection" class="hidden">
             <div class="top-bar">
                 <div class="header-title">
@@ -389,9 +383,8 @@
                 <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
             </button>
 
-            <!-- প্রতিটি জিমেইলের জন্য আলাদা আলাদা বক্স দেখানোর কন্টেইনার -->
             <div class="otp-container" id="otpContainer">
-                <div class="empty-state">
+                <div class="empty-state" id="loadingState">
                     <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
                     Loading OTPs...
                 </div>
@@ -404,7 +397,7 @@
 
     </div>
 
-    <!-- Toast Notification Element -->
+    <!-- Toast Notification -->
     <div id="toast" class="toast">
         <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copied!</span>
     </div>
@@ -423,6 +416,8 @@
         const statusMsg = document.getElementById('statusMsg');
 
         let pollingInterval = null;
+        let isFirstLoad = true; // প্রথমবার লোডিং দেখানোর জন্য
+
         const settingsAuth = document.getElementById('settingsAuth');
         const settingsContent = document.getElementById('settingsContent');
         const settingsAuthForm = document.getElementById('settingsAuthForm');
@@ -503,7 +498,8 @@
                 if (res.ok) {
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
-                    fetchOTPs();
+                    isFirstLoad = true;
+                    fetchOTPs(false);
                     startPolling();
                 } else {
                     loginError.style.display = 'block';
@@ -516,11 +512,13 @@
         });
 
         async function fetchOTPs(isBackground = false) {
-            if (!isBackground) {
-                refreshBtn.disabled = true;
-                refreshBtn.style.opacity = '0.75';
-                refreshBtn.style.cursor = 'not-allowed';
-                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking...`;
+            // যদি ব্যাকগ্রাউন্ড অটো রিফ্রেশ হয়, তবে স্ক্রিনে কোনো লোডিং বা স্পিনার দেখাবে না যাতে ইউজার স্ক্রিন ব্যবহার করতে পারে
+            if (!isBackground && isFirstLoad) {
+                otpContainer.innerHTML = `
+                    <div class="empty-state" id="loadingState">
+                        <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                        Loading OTPs...
+                    </div>`;
             }
 
             try {
@@ -537,26 +535,19 @@
 
                 const data = await res.json();
                 renderOTPs(data);
+                isFirstLoad = false;
 
             } catch (err) {
-                if (!isBackground) {
+                if (!isBackground && isFirstLoad) {
                     otpContainer.innerHTML = `
                         <div class="empty-state">
                             <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
                             Error loading OTPs.
                         </div>`;
                 }
-            } finally {
-                if (!isBackground) {
-                    refreshBtn.disabled = false;
-                    refreshBtn.style.opacity = '1';
-                    refreshBtn.style.cursor = 'pointer';
-                    refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
-                }
             }
         }
 
-        // প্রতিটি জিমেইলের জন্য আলাদা আলাদা বক্স রেন্ডার করার ফাংশন
         function renderOTPs(otps) {
             if (!otps || otps.length === 0) {
                 otpContainer.innerHTML = `
@@ -575,7 +566,7 @@
                     <div class="otp-subject">
                         <i class="fa-regular fa-envelope-open"></i> ${item.subject || 'No recent emails'}
                     </div>
-                    ${item.code && item.code !== 'Code not found' && item.code !== 'No emails found' ? `
+                    ${item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error' ? `
                         <div class="otp-code-box" onclick="copyOTP('${item.code}')" title="Click to copy">
                             <span>OTP: ${item.code}</span>
                             <i class="fa-regular fa-copy"></i>
@@ -610,7 +601,8 @@
                     showMessage(result.message || "Account added!");
                     addAccountForm.reset();
                     settingsPopup.classList.remove('active');
-                    fetchOTPs();
+                    isFirstLoad = true;
+                    fetchOTPs(false);
                 } else {
                     showMessage(result.error || "Failed", true);
                 }
@@ -619,14 +611,18 @@
             }
         });
 
-        refreshBtn.addEventListener('click', () => fetchOTPs(false));
+        // ম্যানুয়াল রিফ্রেশ বাটন
+        refreshBtn.addEventListener('click', () => {
+            isFirstLoad = true;
+            fetchOTPs(false);
+        });
 
-        // প্রতি ২ সেকেন্ড পর পর অটোমেটিক ব্যাকগ্রাউন্ডে পোলিং করবে
+        // প্রতি ৫ সেকেন্ড পর পর ব্যাকগ্রাউন্ডে অটো রিফ্রেশ হবে (কোনো লোডিং স্পিনার দেখাবে না)
         function startPolling() {
             stopPolling();
             pollingInterval = setInterval(() => {
-                fetchOTPs(true);
-            }, 2000);
+                fetchOTPs(true); // true মানে ব্যাকগ্রাউন্ড কল
+            }, 5000);
         }
 
         function stopPolling() {
