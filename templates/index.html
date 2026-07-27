@@ -252,15 +252,16 @@
         .otp-subject { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
 
         .otp-code-box {
-            display: inline-flex;
+            display: flex;
             align-items: center;
+            justify-content: center;
             gap: 10px;
-            font-size: 20px;
+            font-size: 24px;
             font-weight: 700;
             color: #38bdf8;
-            letter-spacing: 2px;
+            letter-spacing: 3px;
             background: rgba(56, 189, 248, 0.1);
-            padding: 8px 14px;
+            padding: 12px 14px;
             border-radius: 8px;
             border: 1px solid rgba(56, 189, 248, 0.3);
             margin-bottom: 8px;
@@ -559,14 +560,14 @@
             otpContainer.innerHTML = otps.map(item => `
                 <div class="otp-card">
                     <div class="otp-email">
-                        <i class="fa-solid fa-at"></i> ${item.email}
+                        ${item.email}
                     </div>
                     <div class="otp-subject">
                         <i class="fa-regular fa-envelope-open"></i> ${item.subject || 'No recent emails'}
                     </div>
                     ${item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error' ? `
                         <div class="otp-code-box" onclick="copyOTP('${item.code}')" title="Click to copy">
-                            <span>OTP: ${item.code}</span>
+                            <span>${item.code}</span>
                             <i class="fa-regular fa-copy"></i>
                         </div>
                     ` : `
