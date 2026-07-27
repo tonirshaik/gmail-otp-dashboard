@@ -61,7 +61,7 @@ def check_gmail(account):
         mail.login(account['email'], account['password'])
         
         # ইনবক্স এবং স্প্যাম দুটো ফোল্ডারই চেক করার লজিক
-        folders = ["inbox", "[Gmail]/Spam"]
+        folders = ["inbox", "[Gmail]/Spam", "Spam"]
         
         for folder in folders:
             try:
