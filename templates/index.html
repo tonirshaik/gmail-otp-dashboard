@@ -397,7 +397,6 @@
         const addAccountForm = document.getElementById('addAccountForm');
         const statusMsg = document.getElementById('statusMsg');
 
-        // ব্যাকগ্রাউন্ড অটো-রিফ্রেশ ধরে রাখার ভেরিয়েবল
         let autoRefreshInterval = null;
         const settingsAuth = document.getElementById('settingsAuth');
         const settingsContent = document.getElementById('settingsContent');
@@ -480,7 +479,7 @@
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
                     fetchOTPs();
-                    startAutoRefresh(); // লগইন হওয়ার পর অটো-রিফ্রেশ চালু হবে
+                    startAutoRefresh();
                 } else {
                     loginError.style.display = 'block';
                     loginError.innerText = "Wrong Master Password!";
@@ -491,17 +490,13 @@
             }
         });
 
-        // ফিক্সড লজিক: এখানে মিনিমাম ২ সেকেন্ড অ্যানিমেশন চালু রাখবে যাতে চোখে পড়ে
         async function fetchOTPs(isBackground = false) {
-            // যদি ব্যাকগ্রাউন্ডে কল হয়, তবে ম্যানুয়াল বাটন ডিজেবল বা লোডিং টেক্সট দেখানোর দরকার নেই (ইউজারের বিরক্তি এড়াতে)
             if (!isBackground) {
                 refreshBtn.disabled = true;
                 refreshBtn.style.opacity = '0.75';
                 refreshBtn.style.cursor = 'not-allowed';
                 refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking...`;
             }
-
-            const startTime = Date.now();
 
             try {
                 const res = await fetch('/api/fetch-otps');
@@ -516,14 +511,6 @@
                 if (!res.ok) throw new Error("Failed");
 
                 const data = await res.json();
-                
-                const elapsedTime = Date.now() - startTime;
-                const minDisplayTime = isBackground ? 0 : 2000; // ব্যাকগ্রাউন্ডে হলে সাথে সাথে ডেটা রেন্ডার করবে
-
-                if (elapsedTime < minDisplayTime) {
-                    await new Promise(resolve => setTimeout(resolve, minDisplayTime - elapsedTime));
-                }
-
                 renderOTPs(data);
 
             } catch (err) {
@@ -602,16 +589,13 @@
 
         refreshBtn.addEventListener('click', () => fetchOTPs(false));
 
-        // প্রতি ৫ সেকেন্ড পরপর ব্যাকগ্রাউন্ডে অটো-রিফ্রেশ করার ফাংশন
         function startAutoRefresh() {
             if (autoRefreshInterval) clearInterval(autoRefreshInterval);
             autoRefreshInterval = setInterval(() => {
-                // 'true' পাস করা হয়েছে যাতে ব্যাকগ্রাউন্ডে রিফ্রেশ হওয়ার সময় কোনো লোডিং স্পিনার বা বাটন ডিজেবল না হয়
                 fetchOTPs(true); 
-            }, 5000); // ৫০০০ মিলিসেকেন্ড = ৫ সেকেন্ড
+            }, 5000);
         }
 
-        // লগআউট বা সেশন এক্সপায়ার হলে অটো-রিফ্রেশ বন্ধ করার ফাংশন
         function stopAutoRefresh() {
             if (autoRefreshInterval) {
                 clearInterval(autoRefreshInterval);
