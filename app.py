@@ -13,7 +13,7 @@ app = Flask(__name__)
 
 # Session Secure Key & Master Password
 app.secret_key = os.environ.get("SECRET_KEY", "your_secret_session_key_123")
-MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", "12345")
+MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", "12342")
 MONGO_URI = os.environ.get("MONGO_URI", "")
 
 # MongoDB Connection
@@ -64,7 +64,7 @@ def check_gmail(account):
         status, messages = mail.search(None, 'ALL')
         email_ids = messages[0].split()
 
-        recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
+        recent_ids = email_ids[-2:] if len(email_ids) >= 2 else email_ids
         
         for e_id in reversed(recent_ids):
             _, msg_data = mail.fetch(e_id, '(RFC822)')
@@ -168,7 +168,7 @@ def stream():
             except Exception as e:
                 print(f"SSE Error: {e}")
             
-            time.sleep(5)
+            time.sleep(2)
 
     return Response(event_stream(), mimetype="text/event-stream")
 
@@ -185,7 +185,7 @@ def add_account():
         return jsonify({"error": "Email and App Password required"}), 400
 
     if accounts_collection is None:
-        return jsonify({"error": "Database Not Connected!"}), 500
+        return jsonify({"error": "Database Not Connected!"}), 200
 
     existing = accounts_collection.find_one({"email": email_input})
     if existing:
