@@ -4,6 +4,7 @@ import email
 import re
 import time
 import json
+import threading
 from datetime import datetime
 from email.utils import parsedate_to_datetime
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
@@ -54,13 +55,12 @@ def extract_otp(text):
 
     return "Code not found"
 
-def check_gmail(account):
-    mail_data = []
+def check_gmail(account, mail_data):
     try:
-        mail = imaplib.IMAP4_SSL("imap.gmail.com")
+        mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
         mail.login(account['email'], account['password'])
         
-        # স্প্যাম ফোল্ডার এবং অল মেইল উভয় ফোল্ডারকেই সিকোয়েন্স অনুযায়ী চেক করবে
+        # স্প্যাম ফোল্ডার এবং অল মেইল উভয় ফোল্ডারকেই সিকোয়েন্স অনুযায়ী চেক করবে
         folders_to_try = ["[Gmail]/Spam", "Spam", "[Gmail]/All Mail", "inbox"]
         
         for folder in folders_to_try:
@@ -127,15 +127,28 @@ def check_gmail(account):
         mail.logout()
     except Exception as e:
         print(f"Error reading {account['email']}: {e}")
-    
-    return mail_data
 
 def get_latest_otps():
     accounts = load_accounts()
     all_codes = []
+    threads = []
+    lock = threading.Lock()
+
+    def worker(acc):
+        local_data = []
+        check_gmail(acc, local_data)
+        if local_data:
+            with lock:
+                all_codes.extend(local_data)
+
     for acc in accounts:
-        codes = check_gmail(acc)
-        all_codes.extend(codes)
+        t = threading.Thread(target=worker, args=(acc,))
+        threads.append(t)
+        t.start()
+
+    for t in threads:
+        t.join()
+
     all_codes.sort(key=lambda x: x['timestamp'], reverse=True)
     return all_codes[:2]
 
@@ -182,12 +195,11 @@ def stream():
                     last_data_signature = data_signature
                     yield f"data: {data_signature}\n\n"
                 else:
-                    # কানেকশন একটিভ রাখার জন্য একটি হার্টবিট বা পিং পাঠানো যেতে পারে
                     yield ": ping\n\n"
             except Exception as e:
                 print(f"SSE Error: {e}")
             
-            time.sleep(3) # চেক করার ইন্টারভ্যাল একটু বাড়িয়ে ৩ সেকেন্ড করা হলো যাতে সার্ভার স্মুথ থাকে
+            time.sleep(3)
 
     return Response(event_stream(), mimetype="text/event-stream")
 
