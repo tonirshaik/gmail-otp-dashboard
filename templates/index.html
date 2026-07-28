@@ -131,6 +131,35 @@
             animation: customSpin 0.8s linear infinite;
         }
 
+        /* সবুজ পালসিং ডট */
+        .new-dot {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #10b981;
+            z-index: 5;
+        }
+
+        .new-dot::before {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            background: rgba(16, 185, 129, 0.4);
+            animation: dotPulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes dotPulse {
+            0%, 100% { transform: scale(0.8); opacity: 0.6; }
+            50% { transform: scale(1.6); opacity: 0; }
+        }
+
         .popup-title {
             font-size: 13px;
             font-weight: 600;
@@ -237,6 +266,12 @@
             width: 4px;
             height: 100%;
             background: var(--gradient-primary);
+        }
+
+        /* নতুন কার্ডে সবুজ বর্ডার গ্লো */
+        .otp-card.is-new {
+            border-color: rgba(16, 185, 129, 0.4);
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
         }
 
         .otp-email { 
@@ -419,6 +454,9 @@
         const settingsPasswordInput = document.getElementById('settingsPasswordInput');
         const settingsAuthError = document.getElementById('settingsAuthError');
 
+        // আগের কোডগুলো মনে রাখার জন্য
+        let previousCodes = [];
+
         function resetSettingsPopup() {
             settingsAuth.classList.remove('hidden');
             settingsContent.classList.add('hidden');
@@ -554,15 +592,39 @@
                 return;
             }
 
-            otpContainer.innerHTML = otps.map(item => `
-                <div class="otp-card">
+            // কোন কোন কার্ড নতুন তা চেক করা
+            let newCardEmails = [];
+            if (previousCodes.length > 0) {
+                otps.forEach(item => {
+                    if (item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error') {
+                        const prev = previousCodes.find(p => p.email === item.email);
+                        // আগে ছিল না বা কোড পরিবর্তন হয়েছে = নতুন
+                        if (!prev || prev.code !== item.code) {
+                            newCardEmails.push(item.email);
+                        }
+                    }
+                });
+            } else {
+                // প্রথমবার লোড হলে প্রথমটা নতুন হিসেবে দেখাবে
+                if (otps[0] && otps[0].code && otps[0].code !== 'Code not found' && otps[0].code !== 'No emails found' && otps[0].code !== 'Error') {
+                    newCardEmails.push(otps[0].email);
+                }
+            }
+
+            // কারেন্ট কোডগুলো সেভ করে রাখা
+            previousCodes = otps.map(item => ({ email: item.email, code: item.code }));
+
+            otpContainer.innerHTML = otps.map(item => {
+                const isNew = newCardEmails.includes(item.email);
+                const validCode = item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error';
+
+                return `
+                <div class="otp-card ${isNew ? 'is-new' : ''}">
+                    ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
                         ${item.email}
                     </div>
-                    <div class="otp-subject">
-                        <i class="fa-regular fa-envelope-open"></i> ${item.subject || 'No recent emails'}
-                    </div>
-                    ${item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error' ? `
+                    ${validCode ? `
                         <div class="otp-code-box" onclick="copyOTP('${item.code}')" title="Click to copy">
                             ${item.code}
                         </div>
@@ -574,8 +636,8 @@
                     <div class="otp-time">
                         <i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${item.sender || 'N/A'}
                     </div>
-                </div>
-            `).join('');
+                </div>`;
+            }).join('');
         }
 
         addAccountForm.addEventListener('submit', async (e) => {
@@ -612,6 +674,7 @@
             dashboardSection.classList.add('hidden');
             loginSection.classList.remove('hidden');
             document.getElementById('masterPasswordInput').value = '';
+            previousCodes = [];
         }
     </script>
 </body>
