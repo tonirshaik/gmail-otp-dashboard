@@ -5,8 +5,9 @@ import re
 import time
 import json
 import threading
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
+from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
 from pymongo import MongoClient
 
@@ -41,7 +42,7 @@ def load_accounts():
     return []
 
 def extract_otp(text):
-    # 1. G- দিয়ে শুরু কোড (যেমন G-123456)
+    # 1. G- দিয়ে শুরু কোড (যেমন G-123456)
     gcode = re.search(r'G-\d{4,8}', text, re.IGNORECASE)
     if gcode:
         return gcode.group(0)
@@ -107,7 +108,7 @@ def check_gmail(account, mail_data):
                                 try:
                                     parsed_dt = parsedate_to_datetime(date_hdr)
                                     if parsed_dt.tzinfo:
-                                        msg_dt = parsed_dt.astimezone().replace(tzinfo=None)
+                                        msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
                                     else:
                                         msg_dt = parsed_dt
                                 except Exception:
