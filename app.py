@@ -42,31 +42,45 @@ def load_accounts():
     return []
 
 def extract_otp(text):
-    # 1. G- দিয়ে শুরু কোড (যেমন G-123456)
-    gcode = re.search(r'G-\d{4,8}', text, re.IGNORECASE)
+    # ১. স্পেস বা ফাঁকা ফাঁকা থাকা কোড ধরার লজিক (যেমন: H K R 5 K 7 অথবা 1 2 3 4 5)
+    spaced_code = re.search(r'\b([A-Z0-9]\s+[A-Z0-9](?:\s+[A-Z0-9]){3,10})\b', text, re.IGNORECASE)
+    if spaced_code:
+        clean_spaced = re.sub(r'\s+', ' ', spaced_code.group(0))
+        return clean_spaced
+
+    # ২. G- দিয়ে শুরু কোড (যেমন G-123456)
+    gcode = re.search(r'\bG-\d{4,8}\b', text, re.IGNORECASE)
     if gcode:
         return gcode.group(0)
 
-    # 2. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড (যেমন: code is 10101010)
-    after_keyword = re.search(r'(?:code|pin|otp|verification|password|verify)[:\s]+([A-Z0-9]{4,12})', text, re.IGNORECASE)
+    # ৩. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড (যেমন: code is E9HKFT34 বা pin: 123456)
+    after_keyword = re.search(r'(?:code|pin|otp|verification|password|verify|auth|token)[:\s#]+([A-Z0-9\-]{4,12})', text, re.IGNORECASE)
     if after_keyword:
-        code_val = after_keyword.group(1)
-        if code_val.lower() not in ['code', 'pin', 'otp', 'password', 'none']:
+        code_val = after_keyword.group(1).strip()
+        ignore_list = ['code', 'pin', 'otp', 'password', 'none', 'your', 'is', 'the', 'and', 'for', 'with']
+        if code_val.lower() not in ignore_list:
             if not (code_val.isdigit() and len(code_val) == 4 and 2000 <= int(code_val) <= 2030):
                 return code_val
 
-    # 3. সাধারণ সংখ্যা (সাল বা বছর ফিল্টার করা)
-    digits = re.findall(r'\b\d{4,10}\b', text)
+    # ৪. সাবজেক্ট বা বডিতে থাকা সাধারণ আলফানিউমারিক বা ডিজিট কোড প্যাটার্ন (৪ থেকে ১০ ক্যারেক্টার)
+    words = re.findall(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
+    ignore_words = {'code', 'pin', 'otp', 'verify', 'true', 'false', 'your', 'this', 'that', 'with', 'from', 'http', 'https', 'gmail', 'google', 'html', '3Dhttp'}
+    
+    for w in words:
+        w_lower = w.lower()
+        if w_lower in ignore_words:
+            continue
+        if w.isdigit() and len(w) == 4 and 2000 <= int(w) <= 2030:
+            continue
+        if any(c.isdigit() for c in w) or (any(c.isupper() for c in w) and len(w) >= 6):
+            return w
+
+    # ৫. সাধারণ সংখ্যা বা ডিজিট কোড (৪ থেকে ৮ ডিজিট)
+    digits = re.findall(r'\b\d{4,8}\b', text)
     for d in digits:
         if len(d) == 4 and 2000 <= int(d) <= 2030:
             continue
         return d
-
-    # 4. সাধারণ আলফানিউমারিক কোড ফিল্টার
-    matches = re.findall(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
-    for m in matches:
-        if m.lower() not in ['code', 'pin', 'otp', 'verify', 'true', 'false']:
-            return m
 
     return "Code not found"
 
@@ -79,16 +93,25 @@ def get_email_body(msg):
         for part in msg.walk():
             ctype = part.get_content_type()
             if ctype == "text/plain" and not body:
-                body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                try:
+                    body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                except: pass
             elif ctype == "text/html" and not html_body:
-                html_body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                try:
+                    html_body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+                except: pass
     else:
-        if msg.get_content_type() == "text/html":
-            html_body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
-        else:
-            body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+        try:
+            payload = msg.get_payload(decode=True)
+            if payload:
+                decoded = payload.decode('utf-8', errors='ignore')
+                if msg.get_content_type() == "text/html":
+                    html_body = decoded
+                else:
+                    body = decoded
+        except: pass
 
-    # যদি text/plain খালি থাকে, তাহলে html_body থেকে ট্যাগ বাদ দিয়ে টেক্সট নেওয়া হবে
+    # যদি text/plain খালি থাকে, তবে html_body থেকে ট্যাগ বাদ দিয়ে টেক্সট নেওয়া হবে
     if not body.strip() and html_body:
         body = re.sub(r'<[^>]+>', ' ', html_body)
         body = re.sub(r'\s+', ' ', body).strip()
@@ -102,7 +125,7 @@ def check_gmail(account, mail_data):
         
         found_otp = False
         
-        # ১. প্রথমে Inbox চেক করা হবে (কিওয়ার্ড সহ)
+        # ১. প্রথমে Inbox চেক করা হবে
         if not found_otp:
             try:
                 status, _ = mail.select("inbox")
@@ -110,7 +133,7 @@ def check_gmail(account, mail_data):
                     status, messages = mail.search(None, 'ALL')
                     if status == 'OK' and messages[0]:
                         email_ids = messages[0].split()
-                        recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
+                        recent_ids = email_ids[-7:] if len(email_ids) >= 7 else email_ids
                         
                         for e_id in reversed(recent_ids):
                             _, msg_data = mail.fetch(e_id, '(RFC822)')
@@ -133,35 +156,31 @@ def check_gmail(account, mail_data):
                                     
                                     body = get_email_body(msg)
                                     full_text = subject + " " + body
-                                    keywords = ["code", "otp", "verification", "pin", "verify", "password"]
                                     
-                                    if any(kw in full_text.lower() for kw in keywords):
-                                        otp = extract_otp(full_text)
-                                        if otp != "Code not found":
-                                            print(f"[INBOX] Found OTP: {otp} from {account['email']}")
-                                            mail_data.append({
-                                                "email": account['email'],
-                                                "sender": sender,
-                                                "subject": subject,
-                                                "code": otp,
-                                                "time": msg_dt.strftime("%I:%M %p"),
-                                                "timestamp": msg_dt.timestamp()
-                                            })
-                                            found_otp = True
-                                            break
+                                    otp = extract_otp(full_text)
+                                    if otp != "Code not found":
+                                        print(f"[INBOX] Found OTP: {otp} from {account['email']}")
+                                        mail_data.append({
+                                            "email": account['email'],
+                                            "sender": sender,
+                                            "subject": subject,
+                                            "code": otp,
+                                            "time": msg_dt.strftime("%I:%M %p"),
+                                            "timestamp": msg_dt.timestamp()
+                                        })
+                                        found_otp = True
+                                        break
                             if found_otp: break
             except Exception as e:
                 print(f"[INBOX ERROR] {account['email']}: {e}")
 
-        # ২. Inbox এ না পাওয়া গেলে Spam চেক করা হবে (কিওয়ার্ড ছাড়াই)
+        # ২. Inbox এ না পাওয়া গেলে Spam চেক করা হবে
         if not found_otp:
-            # জিমেইলের স্প্যাম ফোল্ডারের নাম ভিন্ন হতে পারে তাই দুটোই চেক করা হচ্ছে
             spam_folders = ["[Gmail]/Spam", "Spam"]
             for folder in spam_folders:
                 try:
                     status, _ = mail.select(folder)
                     if status == 'OK':
-                        print(f"[SPAM] Accessing folder: {folder} for {account['email']}")
                         status, messages = mail.search(None, 'ALL')
                         if status == 'OK' and messages[0]:
                             email_ids = messages[0].split()
@@ -189,9 +208,6 @@ def check_gmail(account, mail_data):
                                         body = get_email_body(msg)
                                         full_text = subject + " " + body
                                         
-                                        print(f"[SPAM] Checking email: {subject} | Body length: {len(body)}")
-                                        
-                                        # স্প্যামের জন্য সরাসরি OTP খোঁজা হবে, কিওয়ার্ড দরকার নেই
                                         otp = extract_otp(full_text)
                                         if otp != "Code not found":
                                             print(f"[SPAM] MATCHED OTP: {otp} from {account['email']}")
@@ -206,9 +222,9 @@ def check_gmail(account, mail_data):
                                             found_otp = True
                                             break
                                 if found_otp: break
-                            if found_otp: break
+                        if found_otp: break
                 except Exception as e:
-                    print(f"[SPAM ERROR] Folder {folder} for {account['email']}: {e}")
+                    pass
 
         if not found_otp:
             mail_data.append({
