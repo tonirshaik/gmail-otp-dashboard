@@ -10,8 +10,10 @@ from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
 from pymongo import MongoClient
+from flask_cors import CORS  # <-- এই লাইনটা যোগ করা হয়েছে
 
 app = Flask(__name__)
+CORS(app, supports_credentials=True)  # <-- এই লাইনটা যোগ করা হয়েছে
 
 # Session Secure Key & Master Password
 app.secret_key = os.environ.get("SECRET_KEY", "your_secret_session_key_123")
