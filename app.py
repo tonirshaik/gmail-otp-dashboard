@@ -70,7 +70,7 @@ def extract_otp(text):
 
     return "Code not found"
 
-# নতুন ফাংশন: HTML থেকে টেক্সট বের করার জন্য
+# HTML থেকে টেক্সট বের করার ফাংশন
 def get_email_body(msg):
     body = ""
     html_body = ""
@@ -100,68 +100,115 @@ def check_gmail(account, mail_data):
         mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
         mail.login(account['email'], account['password'])
         
-        folders_to_try = ["inbox", "[Gmail]/Spam", "[Gmail]/All Mail"]
-        
         found_otp = False
-        for folder in folders_to_try:
-            if found_otp:
-                break
+        
+        # ১. প্রথমে Inbox চেক করা হবে (কিওয়ার্ড সহ)
+        if not found_otp:
             try:
-                status, _ = mail.select(folder)
-                if status != 'OK':
-                    continue
-                
-                status, messages = mail.search(None, 'ALL')
-                if status != 'OK' or not messages[0]:
-                    continue
-                    
-                email_ids = messages[0].split()
-                recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
-                
-                for e_id in reversed(recent_ids):
-                    _, msg_data = mail.fetch(e_id, '(RFC822)')
-                    for response_part in msg_data:
-                        if isinstance(response_part, tuple):
-                            msg = email.message_from_bytes(response_part[1])
-                            
-                            subject = msg.get("Subject", "No Subject")
-                            sender = msg.get("From", "Unknown Sender")
-                            date_hdr = msg.get("Date")
+                status, _ = mail.select("inbox")
+                if status == 'OK':
+                    status, messages = mail.search(None, 'ALL')
+                    if status == 'OK' and messages[0]:
+                        email_ids = messages[0].split()
+                        recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
+                        
+                        for e_id in reversed(recent_ids):
+                            _, msg_data = mail.fetch(e_id, '(RFC822)')
+                            for response_part in msg_data:
+                                if isinstance(response_part, tuple):
+                                    msg = email.message_from_bytes(response_part[1])
+                                    subject = msg.get("Subject", "No Subject")
+                                    sender = msg.get("From", "Unknown Sender")
+                                    date_hdr = msg.get("Date")
 
-                            msg_dt = datetime.now()
-                            if date_hdr:
-                                try:
-                                    parsed_dt = parsedate_to_datetime(date_hdr)
-                                    if parsed_dt.tzinfo:
-                                        msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
-                                    else:
-                                        msg_dt = parsed_dt
-                                except Exception:
-                                    pass
-                            
-                            # নতুন ফাংশন কল করা হচ্ছে
-                            body = get_email_body(msg)
+                                    msg_dt = datetime.now()
+                                    if date_hdr:
+                                        try:
+                                            parsed_dt = parsedate_to_datetime(date_hdr)
+                                            if parsed_dt.tzinfo:
+                                                msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
+                                            else:
+                                                msg_dt = parsed_dt
+                                        except: pass
+                                    
+                                    body = get_email_body(msg)
+                                    full_text = subject + " " + body
+                                    keywords = ["code", "otp", "verification", "pin", "verify", "password"]
+                                    
+                                    if any(kw in full_text.lower() for kw in keywords):
+                                        otp = extract_otp(full_text)
+                                        if otp != "Code not found":
+                                            print(f"[INBOX] Found OTP: {otp} from {account['email']}")
+                                            mail_data.append({
+                                                "email": account['email'],
+                                                "sender": sender,
+                                                "subject": subject,
+                                                "code": otp,
+                                                "time": msg_dt.strftime("%I:%M %p"),
+                                                "timestamp": msg_dt.timestamp()
+                                            })
+                                            found_otp = True
+                                            break
+                            if found_otp: break
+            except Exception as e:
+                print(f"[INBOX ERROR] {account['email']}: {e}")
 
-                            full_text = subject + " " + body
-                            keywords = ["code", "otp", "verification", "pin", "verify", "password"]
+        # ২. Inbox এ না পাওয়া গেলে Spam চেক করা হবে (কিওয়ার্ড ছাড়াই)
+        if not found_otp:
+            # জিমেইলের স্প্যাম ফোল্ডারের নাম ভিন্ন হতে পারে তাই দুটোই চেক করা হচ্ছে
+            spam_folders = ["[Gmail]/Spam", "Spam"]
+            for folder in spam_folders:
+                try:
+                    status, _ = mail.select(folder)
+                    if status == 'OK':
+                        print(f"[SPAM] Accessing folder: {folder} for {account['email']}")
+                        status, messages = mail.search(None, 'ALL')
+                        if status == 'OK' and messages[0]:
+                            email_ids = messages[0].split()
+                            recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
                             
-                            if any(kw in full_text.lower() for kw in keywords):
-                                otp = extract_otp(full_text)
-                                if otp != "Code not found":
-                                    mail_data.append({
-                                        "email": account['email'],
-                                        "sender": sender,
-                                        "subject": subject,
-                                        "code": otp,
-                                        "time": msg_dt.strftime("%I:%M %p"),
-                                        "timestamp": msg_dt.timestamp()
-                                    })
-                                    found_otp = True
-                                    break
-                    if found_otp:
-                        break
-            except Exception:
-                continue
+                            for e_id in reversed(recent_ids):
+                                _, msg_data = mail.fetch(e_id, '(RFC822)')
+                                for response_part in msg_data:
+                                    if isinstance(response_part, tuple):
+                                        msg = email.message_from_bytes(response_part[1])
+                                        subject = msg.get("Subject", "No Subject")
+                                        sender = msg.get("From", "Unknown Sender")
+                                        date_hdr = msg.get("Date")
+
+                                        msg_dt = datetime.now()
+                                        if date_hdr:
+                                            try:
+                                                parsed_dt = parsedate_to_datetime(date_hdr)
+                                                if parsed_dt.tzinfo:
+                                                    msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
+                                                else:
+                                                    msg_dt = parsed_dt
+                                            except: pass
+                                        
+                                        body = get_email_body(msg)
+                                        full_text = subject + " " + body
+                                        
+                                        print(f"[SPAM] Checking email: {subject} | Body length: {len(body)}")
+                                        
+                                        # স্প্যামের জন্য সরাসরি OTP খোঁজা হবে, কিওয়ার্ড দরকার নেই
+                                        otp = extract_otp(full_text)
+                                        if otp != "Code not found":
+                                            print(f"[SPAM] MATCHED OTP: {otp} from {account['email']}")
+                                            mail_data.append({
+                                                "email": account['email'],
+                                                "sender": sender,
+                                                "subject": subject,
+                                                "code": otp,
+                                                "time": msg_dt.strftime("%I:%M %p"),
+                                                "timestamp": msg_dt.timestamp()
+                                            })
+                                            found_otp = True
+                                            break
+                                if found_otp: break
+                            if found_otp: break
+                except Exception as e:
+                    print(f"[SPAM ERROR] Folder {folder} for {account['email']}: {e}")
 
         if not found_otp:
             mail_data.append({
