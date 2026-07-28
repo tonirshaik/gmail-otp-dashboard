@@ -70,12 +70,37 @@ def extract_otp(text):
 
     return "Code not found"
 
+# নতুন ফাংশন: HTML থেকে টেক্সট বের করার জন্য
+def get_email_body(msg):
+    body = ""
+    html_body = ""
+    
+    if msg.is_multipart():
+        for part in msg.walk():
+            ctype = part.get_content_type()
+            if ctype == "text/plain" and not body:
+                body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+            elif ctype == "text/html" and not html_body:
+                html_body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
+    else:
+        if msg.get_content_type() == "text/html":
+            html_body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+        else:
+            body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+
+    # যদি text/plain খালি থাকে, তাহলে html_body থেকে ট্যাগ বাদ দিয়ে টেক্সট নেওয়া হবে
+    if not body.strip() and html_body:
+        body = re.sub(r'<[^>]+>', ' ', html_body)
+        body = re.sub(r'\s+', ' ', body).strip()
+        
+    return body
+
 def check_gmail(account, mail_data):
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
         mail.login(account['email'], account['password'])
         
-        folders_to_try = ["inbox", "[Gmail]/All Mail", "[Gmail]/Spam"]
+        folders_to_try = ["inbox", "[Gmail]/Spam", "[Gmail]/All Mail"]
         
         found_otp = False
         for folder in folders_to_try:
@@ -114,14 +139,8 @@ def check_gmail(account, mail_data):
                                 except Exception:
                                     pass
                             
-                            body = ""
-                            if msg.is_multipart():
-                                for part in msg.walk():
-                                    if part.get_content_type() == "text/plain":
-                                        body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                                        break
-                            else:
-                                body = msg.get_payload(decode=True).decode('utf-8', errors='ignore')
+                            # নতুন ফাংশন কল করা হচ্ছে
+                            body = get_email_body(msg)
 
                             full_text = subject + " " + body
                             keywords = ["code", "otp", "verification", "pin", "verify", "password"]
