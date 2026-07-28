@@ -13,13 +13,6 @@ from pymongo import MongoClient
 from flask_cors import CORS  # <-- এই লাইনটা যোগ করা হয়েছে
 
 app = Flask(__name__)
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-app.config['SESSION_COOKIE_SECURE'] = True
-@app.after_request
-def add_headers(response):
-    response.headers.pop('X-Frame-Options', None)
-    response.headers['Content-Security-Policy'] = "frame-ancestors *"
-    return response
 CORS(app, supports_credentials=True)  # <-- এই লাইনটা যোগ করা হয়েছে
 
 # Session Secure Key & Master Password
