@@ -252,10 +252,7 @@
         .otp-subject { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
 
         .otp-code-box {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 10px;
+            text-align: center;
             font-size: 24px;
             font-weight: 700;
             color: #38bdf8;
@@ -567,11 +564,11 @@
                     </div>
                     ${item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error' ? `
                         <div class="otp-code-box" onclick="copyOTP('${item.code}')" title="Click to copy">
-                            <span>${item.code}</span>
+                            ${item.code}
                         </div>
                     ` : `
                         <div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">
-                            <span>${item.code || 'Code not found'}</span>
+                            ${item.code || 'Code not found'}
                         </div>
                     `}
                     <div class="otp-time">
