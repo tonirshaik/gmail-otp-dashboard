@@ -4,470 +4,729 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gmail OTP Dashboard</title>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        
         body {
-            font-family: 'Segoe UI', Tahoma, sans-serif;
-            background: #0a0a0f;
-            color: #fff;
+            font-family: 'Inter', sans-serif;
+            background: #0b0d10;
+            color: #e0e0e0;
             min-height: 100vh;
         }
-        
-        /* Login Page */
-        .login-container {
+
+        /* ========== LOGIN PAGE ========== */
+        .login-page {
             display: flex;
             justify-content: center;
             align-items: center;
             min-height: 100vh;
-            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            background: radial-gradient(ellipse at 50% 0%, #1a1d25 0%, #0b0d10 70%);
         }
-        .login-box {
-            background: rgba(255,255,255,0.05);
+        .login-card {
+            background: #13161c;
+            border: 1px solid #1e222a;
+            border-radius: 16px;
             padding: 40px;
-            border-radius: 20px;
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255,255,255,0.1);
-            width: 350px;
+            width: 380px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5);
         }
-        .login-box h2 { text-align: center; margin-bottom: 30px; }
-        .login-box input {
+        .login-card .logo {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .login-card .logo span {
+            font-size: 40px;
+        }
+        .login-card .logo p {
+            color: #6b7280;
+            font-size: 13px;
+            margin-top: 8px;
+        }
+        .login-input {
             width: 100%;
-            padding: 12px;
-            border: 1px solid rgba(255,255,255,0.2);
+            padding: 14px 16px;
+            background: #0b0d10;
+            border: 1px solid #1e222a;
             border-radius: 10px;
-            background: rgba(255,255,255,0.1);
             color: #fff;
-            font-size: 16px;
-            margin-bottom: 20px;
+            font-size: 15px;
+            margin-bottom: 16px;
+            outline: none;
+            transition: border-color 0.3s;
         }
-        .login-box button {
+        .login-input:focus { border-color: #22c55e; }
+        .login-btn {
             width: 100%;
-            padding: 12px;
-            background: #00d4ff;
+            padding: 14px;
+            background: #22c55e;
             border: none;
             border-radius: 10px;
             color: #000;
-            font-size: 16px;
+            font-size: 15px;
             font-weight: 600;
             cursor: pointer;
+            transition: background 0.3s;
         }
-        .login-box button:hover { background: #00b8d9; }
-        
-        /* Dashboard */
-        .dashboard { display: none; padding: 20px; }
-        
-        /* Top Bar */
-        .top-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px 25px;
-            background: rgba(255,255,255,0.05);
-            border-radius: 15px;
-            margin-bottom: 20px;
-        }
-        .top-bar h1 { font-size: 22px; }
-        .logout-btn {
-            padding: 8px 20px;
-            background: #ff4757;
-            border: none;
-            border-radius: 8px;
-            color: #fff;
-            cursor: pointer;
-        }
-        
-        /* Stats Cards */
-        .stats-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-        .stat-card {
-            background: linear-gradient(135deg, rgba(0,212,255,0.1), rgba(0,212,255,0.05));
-            border: 1px solid rgba(0,212,255,0.2);
-            border-radius: 15px;
-            padding: 20px;
+        .login-btn:hover { background: #16a34a; }
+        .login-error {
+            color: #ef4444;
             text-align: center;
-        }
-        .stat-card .number {
-            font-size: 42px;
-            font-weight: 700;
-            color: #00d4ff;
-        }
-        .stat-card .label {
-            font-size: 14px;
-            color: #888;
-            margin-top: 5px;
-        }
-        .stat-card.green { border-color: rgba(0,255,136,0.3); }
-        .stat-card.green .number { color: #00ff88; }
-        .stat-card.purple { border-color: rgba(168,85,247,0.3); }
-        .stat-card.purple .number { color: #a855f7; }
-        
-        /* Account List */
-        .section-title {
-            font-size: 18px;
-            margin-bottom: 15px;
-            padding-left: 10px;
-            border-left: 3px solid #00d4ff;
-        }
-        .accounts-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-            gap: 12px;
-            margin-bottom: 25px;
-        }
-        .account-card {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 12px;
-            padding: 15px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .account-card .email {
-            font-size: 14px;
-            color: #ccc;
-        }
-        .account-card .date {
-            font-size: 12px;
-            color: #666;
-            margin-top: 4px;
-        }
-        .delete-btn {
-            padding: 6px 12px;
-            background: rgba(255,71,87,0.2);
-            border: 1px solid rgba(255,71,87,0.3);
-            border-radius: 6px;
-            color: #ff4757;
-            cursor: pointer;
-            font-size: 12px;
-        }
-        .delete-btn:hover { background: rgba(255,71,87,0.4); }
-        
-        /* Add Account Form */
-        .add-form {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 25px;
-        }
-        .add-form h3 { margin-bottom: 15px; }
-        .form-row {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        .form-row input {
-            flex: 1;
-            min-width: 200px;
-            padding: 10px 15px;
-            background: rgba(255,255,255,0.1);
-            border: 1px solid rgba(255,255,255,0.15);
-            border-radius: 8px;
-            color: #fff;
-            font-size: 14px;
-        }
-        .form-row button {
-            padding: 10px 25px;
-            background: #00d4ff;
-            border: none;
-            border-radius: 8px;
-            color: #000;
-            font-weight: 600;
-            cursor: pointer;
-        }
-        
-        /* OTP Results */
-        .otp-container {
-            background: rgba(255,255,255,0.03);
-            border: 1px solid rgba(255,255,255,0.08);
-            border-radius: 15px;
-            padding: 20px;
-        }
-        .otp-item {
-            background: rgba(0,212,255,0.05);
-            border: 1px solid rgba(0,212,255,0.1);
-            border-radius: 10px;
-            padding: 15px;
-            margin-bottom: 10px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .otp-code {
-            font-size: 24px;
-            font-weight: 700;
-            color: #00ff88;
-            font-family: monospace;
-        }
-        .otp-email { font-size: 13px; color: #888; }
-        .otp-time { font-size: 12px; color: #666; }
-        .no-otp { color: #666; font-style: italic; }
-        
-        /* Loading */
-        .loading {
-            text-align: center;
-            padding: 40px;
-            color: #888;
-        }
-        .spinner {
-            width: 40px;
-            height: 40px;
-            border: 3px solid rgba(255,255,255,0.1);
-            border-top-color: #00d4ff;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 15px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        
-        .msg {
-            padding: 10px 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            font-size: 14px;
+            font-size: 13px;
+            margin-top: 12px;
             display: none;
         }
-        .msg.success { background: rgba(0,255,136,0.1); color: #00ff88; border: 1px solid rgba(0,255,136,0.2); display: block; }
-        .msg.error { background: rgba(255,71,87,0.1); color: #ff4757; border: 1px solid rgba(255,71,87,0.2); display: block; }
+
+        /* ========== DASHBOARD ========== */
+        .dashboard { display: none; }
+
+        /* Header */
+        .header {
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            background: rgba(11,13,16,0.85);
+            backdrop-filter: blur(20px);
+            border-bottom: 1px solid #1a1d22;
+            padding: 0 24px;
+        }
+        .header-inner {
+            max-width: 900px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+        .header-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .header-title .dot {
+            width: 8px; height: 8px;
+            background: #22c55e;
+            border-radius: 50%;
+            animation: pulse-dot 2s infinite;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        .header-actions { display: flex; gap: 8px; }
+        .header-btn {
+            padding: 7px 16px;
+            border-radius: 8px;
+            border: 1px solid #1e222a;
+            background: transparent;
+            color: #9ca3af;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .header-btn:hover { border-color: #374151; color: #fff; }
+        .header-btn.danger { color: #ef4444; border-color: #3b1111; }
+        .header-btn.danger:hover { background: #1c0a0a; border-color: #ef4444; }
+
+        /* Main Content */
+        .main { max-width: 900px; margin: 0 auto; padding: 20px 24px 40px; }
+
+        /* Stats Bar */
+        .stats-bar {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 24px;
+        }
+        .stat-box {
+            background: #13161c;
+            border: 1px solid #1a1d22;
+            border-radius: 12px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-box .val {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 28px;
+            font-weight: 700;
+            color: #22c55e;
+            line-height: 1;
+        }
+        .stat-box .lbl {
+            font-size: 11px;
+            color: #4b5563;
+            margin-top: 6px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .stat-box.blue .val { color: #3b82f6; }
+        .stat-box.purple .val { color: #a855f7; }
+
+        /* Add Account Section */
+        .add-section {
+            background: #13161c;
+            border: 1px solid #1a1d22;
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 24px;
+        }
+        .add-section-title {
+            font-size: 12px;
+            color: #4b5563;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 12px;
+        }
+        .add-row {
+            display: flex;
+            gap: 8px;
+        }
+        .add-input {
+            flex: 1;
+            padding: 10px 14px;
+            background: #0b0d10;
+            border: 1px solid #1e222a;
+            border-radius: 8px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+        .add-input:focus { border-color: #22c55e; }
+        .add-btn {
+            padding: 10px 20px;
+            background: #22c55e;
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            transition: background 0.2s;
+        }
+        .add-btn:hover { background: #16a34a; }
+        .add-msg {
+            font-size: 12px;
+            margin-top: 10px;
+            display: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+        }
+        .add-msg.ok { display: block; background: #052e16; color: #22c55e; border: 1px solid #14532d; }
+        .add-msg.err { display: block; background: #2a0a0a; color: #ef4444; border: 1px solid #5c1010; }
+
+        /* Accounts List */
+        .accounts-section {
+            margin-bottom: 24px;
+        }
+        .section-head {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+        .section-label {
+            font-size: 12px;
+            color: #4b5563;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .section-count {
+            font-size: 11px;
+            color: #6b7280;
+            background: #1a1d22;
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+        .acc-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+        .acc-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: #13161c;
+            border: 1px solid #1a1d22;
+            border-radius: 10px;
+            padding: 12px 16px;
+            transition: border-color 0.2s;
+        }
+        .acc-item:hover { border-color: #2a2d35; }
+        .acc-left {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+        .acc-avatar {
+            width: 34px; height: 34px;
+            background: #1a1d22;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 600;
+            color: #22c55e;
+            font-family: 'JetBrains Mono', monospace;
+        }
+        .acc-info .acc-email {
+            font-size: 13px;
+            color: #d1d5db;
+        }
+        .acc-info .acc-date {
+            font-size: 11px;
+            color: #4b5563;
+            margin-top: 2px;
+        }
+        .acc-del {
+            padding: 6px 10px;
+            background: transparent;
+            border: 1px solid #2a1111;
+            border-radius: 6px;
+            color: #6b7280;
+            font-size: 11px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .acc-del:hover { background: #1c0a0a; color: #ef4444; border-color: #ef4444; }
+
+        /* Fetch Button */
+        .fetch-row {
+            margin-bottom: 24px;
+            display: flex;
+            gap: 10px;
+        }
+        .fetch-btn {
+            flex: 1;
+            padding: 14px;
+            background: #22c55e;
+            border: none;
+            border-radius: 10px;
+            color: #000;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .fetch-btn:hover { background: #16a34a; }
+        .fetch-btn.loading {
+            background: #1a2e1a;
+            color: #22c55e;
+            pointer-events: none;
+        }
+
+        /* OTP Results */
+        .otp-list {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+        .otp-row {
+            display: grid;
+            grid-template-columns: 36px 1fr 160px 80px;
+            align-items: center;
+            gap: 12px;
+            padding: 14px 16px;
+            background: #13161c;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+        .otp-row:hover { background: #171b22; border-color: #1e222a; }
+        .otp-row:first-child {
+            border-radius: 12px 12px 0 0;
+            border: 1px solid #1a1d22;
+            border-bottom: none;
+        }
+        .otp-row:last-child {
+            border-radius: 0 0 12px 12px;
+            border: 1px solid #1a1d22;
+            border-top: none;
+        }
+        .otp-row:only-child {
+            border-radius: 12px;
+            border: 1px solid #1a1d22;
+        }
+        .otp-serial {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #374151;
+            text-align: center;
+            font-weight: 600;
+        }
+        .otp-main {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        .otp-code-line {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .otp-code {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 18px;
+            font-weight: 700;
+            color: #22c55e;
+            letter-spacing: 1px;
+        }
+        .otp-code.error-code { color: #4b5563; font-size: 13px; }
+        .otp-sender {
+            font-size: 11px;
+            color: #4b5563;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 300px;
+        }
+        .otp-email-col {
+            font-size: 12px;
+            color: #6b7280;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+        .otp-time-col {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 12px;
+            color: #4b5563;
+            text-align: right;
+        }
+
+        /* Table Header */
+        .otp-header {
+            display: grid;
+            grid-template-columns: 36px 1fr 160px 80px;
+            gap: 12px;
+            padding: 10px 16px;
+            font-size: 10px;
+            color: #374151;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 2px;
+        }
+        .otp-header span:last-child { text-align: right; }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #374151;
+        }
+        .empty-state .icon { font-size: 40px; margin-bottom: 12px; }
+        .empty-state p { font-size: 13px; }
+
+        /* Loading State */
+        .loading-state {
+            text-align: center;
+            padding: 50px 20px;
+        }
+        .loader {
+            width: 32px; height: 32px;
+            border: 2px solid #1e222a;
+            border-top-color: #22c55e;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin: 0 auto 12px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading-state p { font-size: 13px; color: #4b5563; }
+
+        /* Responsive */
+        @media (max-width: 640px) {
+            .stats-bar { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+            .stat-box .val { font-size: 22px; }
+            .add-row { flex-direction: column; }
+            .otp-row {
+                grid-template-columns: 28px 1fr 70px;
+            }
+            .otp-email-col { display: none; }
+            .otp-header { grid-template-columns: 28px 1fr 70px; }
+            .otp-header span:nth-child(3) { display: none; }
+        }
     </style>
 </head>
 <body>
 
-<!-- Login Page -->
-<div class="login-container" id="loginPage">
-    <div class="login-box">
-        <h2>🔐 Login</h2>
-        <input type="password" id="loginPass" placeholder="Enter Master Password">
-        <button onclick="login()">Login</button>
-        <p id="loginError" style="color: #ff4757; text-align: center; margin-top: 15px; display: none;">Wrong Password!</p>
+<!-- ========== LOGIN ========== -->
+<div class="login-page" id="loginPage">
+    <div class="login-card">
+        <div class="logo">
+            <span>🔐</span>
+            <p>Gmail OTP Dashboard</p>
+        </div>
+        <input type="password" class="login-input" id="loginPass" placeholder="Master Password" autofocus>
+        <button class="login-btn" onclick="doLogin()">Enter Dashboard</button>
+        <p class="login-error" id="loginErr">Wrong password!</p>
     </div>
 </div>
 
-<!-- Dashboard -->
-<div class="dashboard" id="dashboard">
-    <div class="top-bar">
-        <h1>📬 Gmail OTP Dashboard</h1>
-        <button class="logout-btn" onclick="logout()">Logout</button>
-    </div>
-    
-    <!-- Stats Cards -->
-    <div class="stats-row">
-        <div class="stat-card">
-            <div class="number" id="totalAccounts">0</div>
-            <div class="label">Total Gmail Accounts</div>
-        </div>
-        <div class="stat-card green">
-            <div class="number" id="activeOTPs">0</div>
-            <div class="label">Active OTPs Found</div>
-        </div>
-        <div class="stat-card purple">
-            <div class="number" id="lastFetch">--:--</div>
-            <div class="label">Last Fetch Time</div>
+<!-- ========== DASHBOARD ========== -->
+<div class="dashboard" id="dashPage">
+
+    <!-- Header -->
+    <div class="header">
+        <div class="header-inner">
+            <div class="header-title">
+                <div class="dot"></div>
+                Gmail OTP Dashboard
+            </div>
+            <div class="header-actions">
+                <button class="header-btn" onclick="loadAccounts()">↻ Refresh</button>
+                <button class="header-btn danger" onclick="doLogout()">Logout</button>
+            </div>
         </div>
     </div>
-    
-    <!-- Add Account Form -->
-    <div class="add-form">
-        <h3>➕ Add New Gmail Account</h3>
-        <div id="addMsg" class="msg"></div>
-        <div class="form-row">
-            <input type="email" id="newEmail" placeholder="Gmail Address">
-            <input type="password" id="newPassword" placeholder="App Password">
-            <button onclick="addAccount()">Add Account</button>
+
+    <!-- Main -->
+    <div class="main">
+
+        <!-- Stats -->
+        <div class="stats-bar">
+            <div class="stat-box">
+                <div class="val" id="statTotal">0</div>
+                <div class="lbl">Accounts</div>
+            </div>
+            <div class="stat-box blue">
+                <div class="val" id="statOTP">0</div>
+                <div class="lbl">OTPs Found</div>
+            </div>
+            <div class="stat-box purple">
+                <div class="val" id="statTime">--:--</div>
+                <div class="lbl">Last Fetch</div>
+            </div>
         </div>
-    </div>
-    
-    <!-- Account List -->
-    <h3 class="section-title">📋 Added Accounts</h3>
-    <div class="accounts-grid" id="accountsList">
-        <div class="loading"><div class="spinner"></div>Loading accounts...</div>
-    </div>
-    
-    <!-- Fetch OTP Button -->
-    <div style="margin-bottom: 20px;">
-        <button onclick="fetchOTPs()" style="padding: 12px 30px; background: #00ff88; border: none; border-radius: 10px; color: #000; font-size: 16px; font-weight: 600; cursor: pointer;">
-            🔄 Fetch All OTPs
-        </button>
-    </div>
-    
-    <!-- OTP Results -->
-    <h3 class="section-title">🔑 OTP Results</h3>
-    <div class="otp-container" id="otpResults">
-        <div class="no-otp">Click "Fetch All OTPs" to get latest codes</div>
+
+        <!-- Add Account -->
+        <div class="add-section">
+            <div class="add-section-title">Add Account</div>
+            <div class="add-row">
+                <input type="email" class="add-input" id="inpEmail" placeholder="gmail@gmail.com">
+                <input type="password" class="add-input" id="inpPass" placeholder="App Password">
+                <button class="add-btn" onclick="addAccount()">+ Add</button>
+            </div>
+            <div class="add-msg" id="addMsg"></div>
+        </div>
+
+        <!-- Accounts List -->
+        <div class="accounts-section">
+            <div class="section-head">
+                <span class="section-label">Saved Accounts</span>
+                <span class="section-count" id="accCount">0 accounts</span>
+            </div>
+            <div class="acc-list" id="accList">
+                <div class="empty-state">
+                    <div class="icon">📭</div>
+                    <p>No accounts added yet</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Fetch OTP -->
+        <div class="fetch-row">
+            <button class="fetch-btn" id="fetchBtn" onclick="fetchOTPs()">
+                <span id="fetchIcon">↓</span>
+                <span id="fetchText">Fetch All OTPs</span>
+            </button>
+        </div>
+
+        <!-- OTP Results -->
+        <div id="otpArea">
+            <div class="empty-state">
+                <div class="icon">📭</div>
+                <p>Click "Fetch All OTPs" to check for new codes</p>
+            </div>
+        </div>
+
     </div>
 </div>
 
 <script>
-    // Login Function
-    async function login() {
+    /* ===== LOGIN ===== */
+    document.getElementById('loginPass').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
+
+    async function doLogin() {
         const pass = document.getElementById('loginPass').value;
-        const res = await fetch('/api/login', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ password: pass })
-        });
-        
-        if (res.ok) {
-            document.getElementById('loginPage').style.display = 'none';
-            document.getElementById('dashboard').style.display = 'block';
-            loadAccountStats();
-        } else {
-            document.getElementById('loginError').style.display = 'block';
-        }
+        try {
+            const res = await fetch('/api/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({password: pass})
+            });
+            if (res.ok) {
+                document.getElementById('loginPage').style.display = 'none';
+                document.getElementById('dashPage').style.display = 'block';
+                loadAccounts();
+            } else {
+                document.getElementById('loginErr').style.display = 'block';
+                setTimeout(() => document.getElementById('loginErr').style.display = 'none', 3000);
+            }
+        } catch(e) { console.error(e); }
     }
-    
-    // Logout Function
-    async function logout() {
-        await fetch('/api/logout', { method: 'POST' });
+
+    async function doLogout() {
+        await fetch('/api/logout', {method: 'POST'});
+        document.getElementById('dashPage').style.display = 'none';
         document.getElementById('loginPage').style.display = 'flex';
-        document.getElementById('dashboard').style.display = 'none';
         document.getElementById('loginPass').value = '';
-        document.getElementById('loginError').style.display = 'none';
     }
-    
-    // Load Account Stats & List
-    async function loadAccountStats() {
+
+    /* ===== LOAD ACCOUNTS ===== */
+    async function loadAccounts() {
         try {
             const res = await fetch('/api/accounts-list');
             const data = await res.json();
-            
-            // Update Stats
-            document.getElementById('totalAccounts').textContent = data.total;
-            
-            // Update Account List
-            const listDiv = document.getElementById('accountsList');
-            
+
+            document.getElementById('statTotal').textContent = data.total;
+            document.getElementById('accCount').textContent = data.total + ' account' + (data.total !== 1 ? 's' : '');
+
+            const list = document.getElementById('accList');
+
             if (data.total === 0) {
-                listDiv.innerHTML = '<div class="no-otp" style="grid-column: 1/-1; text-align: center; padding: 30px;">No accounts added yet</div>';
-            } else {
-                listDiv.innerHTML = data.accounts.map(acc => `
-                    <div class="account-card">
-                        <div>
-                            <div class="email">📧 ${acc.email}</div>
-                            <div class="date">Added: ${acc.created_at}</div>
-                        </div>
-                        <button class="delete-btn" onclick="deleteAccount('${acc.email}')">🗑️ Delete</button>
-                    </div>
-                `).join('');
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }
-    
-    // Add Account
-    async function addAccount() {
-        const email = document.getElementById('newEmail').value;
-        const password = document.getElementById('newPassword').value;
-        const msgDiv = document.getElementById('addMsg');
-        
-        msgDiv.className = 'msg';
-        msgDiv.style.display = 'none';
-        
-        if (!email || !password) {
-            msgDiv.textContent = 'Please enter both email and password!';
-            msgDiv.className = 'msg error';
-            return;
-        }
-        
-        try {
-            const res = await fetch('/api/add-account', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, password })
-            });
-            const data = await res.json();
-            
-            if (res.ok) {
-                msgDiv.textContent = data.message;
-                msgDiv.className = 'msg success';
-                document.getElementById('newEmail').value = '';
-                document.getElementById('newPassword').value = '';
-                loadAccountStats(); // Refresh list
-            } else {
-                msgDiv.textContent = data.error;
-                msgDiv.className = 'msg error';
-            }
-        } catch (e) {
-            msgDiv.textContent = 'Failed to add account!';
-            msgDiv.className = 'msg error';
-        }
-    }
-    
-    // Delete Account
-    async function deleteAccount(email) {
-        if (!confirm(`Delete ${email}?`)) return;
-        
-        try {
-            const res = await fetch('/api/delete-account', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email })
-            });
-            
-            if (res.ok) {
-                loadAccountStats();
-            } else {
-                alert('Failed to delete!');
-            }
-        } catch (e) {
-            alert('Error!');
-        }
-    }
-    
-    // Fetch OTPs
-    async function fetchOTPs() {
-        const otpDiv = document.getElementById('otpResults');
-        otpDiv.innerHTML = '<div class="loading"><div class="spinner"></div>Fetching OTPs from all accounts...</div>';
-        
-        try {
-            const res = await fetch('/api/fetch-otps');
-            const data = await res.json();
-            
-            // Update last fetch time
-            const now = new Date();
-            document.getElementById('lastFetch').textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-            
-            // Count active OTPs
-            const activeCount = data.filter(d => d.code !== 'No emails found' && d.code !== 'Error').length;
-            document.getElementById('activeOTPs').textContent = activeCount;
-            
-            if (data.length === 0) {
-                otpDiv.innerHTML = '<div class="no-otp">No accounts configured</div>';
+                list.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>No accounts added yet</p></div>';
                 return;
             }
-            
-            otpDiv.innerHTML = data.map(item => {
-                const isActive = item.code !== 'No emails found' && item.code !== 'Error';
+
+            list.innerHTML = data.accounts.map((acc, i) => {
+                const initial = acc.email.charAt(0).toUpperCase();
                 return `
-                    <div class="otp-item" style="border-color: ${isActive ? 'rgba(0,255,136,0.2)' : 'rgba(255,255,255,0.05)'}">
-                        <div>
-                            <div class="otp-code" style="color: ${isActive ? '#00ff88' : '#666'}">${item.code}</div>
-                            <div class="otp-email">📧 ${item.email}</div>
-                            ${item.sender !== 'N/A' ? `<div class="otp-time">From: ${item.sender.substring(0, 40)}</div>` : ''}
+                    <div class="acc-item">
+                        <div class="acc-left">
+                            <div class="acc-avatar">${initial}</div>
+                            <div class="acc-info">
+                                <div class="acc-email">${acc.email}</div>
+                                <div class="acc-date">${acc.created_at}</div>
+                            </div>
                         </div>
-                        <div style="text-align: right;">
-                            <div class="otp-time">${item.time}</div>
-                            <div style="font-size: 11px; color: #555; margin-top: 4px;">${item.subject.substring(0, 30)}...</div>
-                        </div>
+                        <button class="acc-del" onclick="delAccount('${acc.email}')">Delete</button>
                     </div>
                 `;
             }).join('');
-            
-        } catch (e) {
-            otpDiv.innerHTML = '<div class="no-otp" style="color: #ff4757;">Error fetching OTPs!</div>';
+        } catch(e) { console.error(e); }
+    }
+
+    /* ===== ADD ACCOUNT ===== */
+    async function addAccount() {
+        const email = document.getElementById('inpEmail').value.trim();
+        const pass = document.getElementById('inpPass').value.trim();
+        const msg = document.getElementById('addMsg');
+
+        msg.className = 'add-msg';
+        msg.style.display = 'none';
+
+        if (!email || !pass) {
+            msg.textContent = 'Email and App Password are required';
+            msg.className = 'add-msg err';
+            return;
+        }
+
+        try {
+            const res = await fetch('/api/add-account', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email, password: pass})
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                msg.textContent = data.message;
+                msg.className = 'add-msg ok';
+                document.getElementById('inpEmail').value = '';
+                document.getElementById('inpPass').value = '';
+                loadAccounts();
+            } else {
+                msg.textContent = data.error;
+                msg.className = 'add-msg err';
+            }
+        } catch(e) {
+            msg.textContent = 'Failed to add account';
+            msg.className = 'add-msg err';
         }
     }
-    
-    // Enter key for login
-    document.getElementById('loginPass').addEventListener('keypress', function(e) {
-        if (e.key === 'Enter') login();
-    });
+
+    /* ===== DELETE ACCOUNT ===== */
+    async function delAccount(email) {
+        if (!confirm('Delete ' + email + '?')) return;
+        try {
+            await fetch('/api/delete-account', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email})
+            });
+            loadAccounts();
+        } catch(e) { alert('Error deleting account'); }
+    }
+
+    /* ===== FETCH OTPs ===== */
+    async function fetchOTPs() {
+        const btn = document.getElementById('fetchBtn');
+        const area = document.getElementById('otpArea');
+
+        btn.classList.add('loading');
+        document.getElementById('fetchIcon').textContent = '⟳';
+        document.getElementById('fetchText').textContent = 'Fetching...';
+
+        area.innerHTML = '<div class="loading-state"><div class="loader"></div><p>Checking all accounts...</p></div>';
+
+        try {
+            const res = await fetch('/api/fetch-otps');
+            const data = await res.json();
+
+            // Update stats
+            const now = new Date();
+            document.getElementById('statTime').textContent = now.toLocaleTimeString('en-US', {hour:'2-digit', minute:'2-digit', hour12: true});
+
+            const validOTPs = data.filter(d => d.code !== 'No emails found' && d.code !== 'Error' && d.code !== 'Code not found');
+            document.getElementById('statOTP').textContent = validOTPs.length;
+
+            if (data.length === 0) {
+                area.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>No accounts configured</p></div>';
+            } else {
+                let html = '<div class="otp-header"><span>#</span><span>OTP Code</span><span>Account</span><span>Time</span></div>';
+                html += '<div class="otp-list">';
+
+                data.forEach((item, i) => {
+                    const num = String(i + 1).padStart(2, '0');
+                    const isErr = item.code === 'No emails found' || item.code === 'Error' || item.code === 'Code not found';
+                    const codeClass = isErr ? 'otp-code error-code' : 'otp-code';
+                    const senderText = item.sender && item.sender !== 'N/A' ? item.sender.substring(0, 50) : '';
+
+                    html += `
+                        <div class="otp-row">
+                            <div class="otp-serial">${num}</div>
+                            <div class="otp-main">
+                                <div class="otp-code-line">
+                                    <span class="${codeClass}">${item.code}</span>
+                                </div>
+                                ${senderText ? '<div class="otp-sender">' + senderText + '</div>' : ''}
+                            </div>
+                            <div class="otp-email-col">${item.email}</div>
+                            <div class="otp-time-col">${item.time}</div>
+                        </div>
+                    `;
+                });
+
+                html += '</div>';
+                area.innerHTML = html;
+            }
+        } catch(e) {
+            area.innerHTML = '<div class="empty-state" style="color:#ef4444"><div class="icon">⚠️</div><p>Failed to fetch OTPs</p></div>';
+        }
+
+        btn.classList.remove('loading');
+        document.getElementById('fetchIcon').textContent = '↓';
+        document.getElementById('fetchText').textContent = 'Fetch All OTPs';
+    }
 </script>
 
 </body>
