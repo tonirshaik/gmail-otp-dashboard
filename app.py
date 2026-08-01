@@ -44,6 +44,15 @@ def load_accounts():
     return []
 
 def extract_otp(text):
+    # === নতুন যোগ করা হলো: URL এবং HTML Encoding ক্লিন আপ ===
+    # ইমেইলে থাকা লিংকগুলো আগেই বাদ দেওয়া হচ্ছে (যেমন: 2Fwww, 3Dhttp ইত্যাদি)
+    text = re.sub(r'3Dhttps?://\S+', ' ', text, re.IGNORECASE)
+    text = re.sub(r'3Dwww\.\S+', ' ', text, re.IGNORECASE)
+    text = re.sub(r'https?://\S+', ' ', text, re.IGNORECASE)
+    text = re.sub(r'www\.\S+', ' ', text, re.IGNORECASE)
+    text = re.sub(r'=2F', ' ', text, re.IGNORECASE)
+    text = re.sub(r'3D', ' ', text, re.IGNORECASE)
+    
     text_lower = text.lower()
 
     # ১. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড (সবচেয়ে নিরাপদ)
@@ -76,6 +85,9 @@ def extract_otp(text):
         w_lower = w.lower()
         if w_lower in ignore_words:
             continue
+        # নতুন: যদি কোনো শব্দ www বা http দিয়ে শুরু হয়, তবে তার অংশ হিসেবে কোড ধরবে না
+        if w_lower.startswith('www') or w_lower.startswith('http'):
+            continue
         if w.isdigit() and len(w) == 4 and 2000 <= int(w) <= 2030:
             continue
         if any(c.isdigit() for c in w):
@@ -83,8 +95,7 @@ def extract_otp(text):
         if len(w) >= 6 and not w.isalpha():
             return w
 
-    # ৪. বড় ডিজিট কোড (৫-৮ ডিজিট) - শুধুমাত্র ভেরিফিকেশন ইমেইল হলে (GitHub এর জন্য)
-    # পিন্টারেস্টের মতো ZIP code (94107) কে ভুলে কোড ভাববে না তার জন্য কন্টেক্সট চেক
+    # ৪. বড় ডিজিট কোড (৫-৮ ডিজিট) - শুধুমাত্র ভেরিফিকেশন ইমেইল হলে
     otp_keywords = ['verification', 'verify', 'code', 'otp', 'auth', 'login', 'security', 'password', 'pin', 'token', 'sudo', 'confirm', 'alert']
     has_otp_context = any(kw in text_lower for kw in otp_keywords)
 
@@ -335,7 +346,7 @@ def add_account():
 
     data = request.json or {}
     email_input = data.get('email')
-    password_input = data.get('password")
+    password_input = data.get('password')
 
     if not email_input or not password_input:
         return jsonify({"error": "Email and App Password required"}), 400
