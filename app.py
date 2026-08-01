@@ -327,6 +327,66 @@ def fetch_otps():
     all_otps = get_latest_otps()
     return jsonify(all_otps)
 
+# ============================================
+# 🆕 নতুন API - অ্যাকাউন্ট তথ্য ও সংখ্যা দেখানোর জন্য
+# ============================================
+
+@app.route('/api/account-stats')
+def account_stats():
+    """মোট অ্যাকাউন্ট সংখ্যা ও স্ট্যাটাস দেখানোর API"""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    
+    accounts = load_accounts()
+    total_accounts = len(accounts)
+    
+    return jsonify({
+        "total_accounts": total_accounts,
+        "accounts": accounts
+    })
+
+@app.route('/api/accounts-list')
+def accounts_list():
+    """শুধু অ্যাকাউন্ট লিস্ট দেখানোর API"""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    
+    accounts = load_accounts()
+    # পাসওয়ার্ড হাইড করে শুধু ইমেইল ও তারিখ দেখানো হচ্ছে
+    safe_accounts = []
+    for acc in accounts:
+        safe_accounts.append({
+            "email": acc.get('email', ''),
+            "created_at": acc.get('created_at', '').strftime("%Y-%m-%d %H:%M") if acc.get('created_at') else 'N/A'
+        })
+    
+    return jsonify({
+        "total": len(safe_accounts),
+        "accounts": safe_accounts
+    })
+
+@app.route('/api/delete-account', methods=['POST'])
+def delete_account():
+    """অ্যাকাউন্ট ডিলিট করার API"""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    
+    if accounts_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 400
+    
+    data = request.json or {}
+    email_to_delete = data.get('email')
+    
+    if not email_to_delete:
+        return jsonify({"error": "Email required!"}), 400
+    
+    result = accounts_collection.delete_one({"email": email_to_delete})
+    
+    if result.deleted_count > 0:
+        return jsonify({"message": f"Account {email_to_delete} deleted!"})
+    else:
+        return jsonify({"error": "Account not found!"}), 404
+
 @app.route('/api/add-account', methods=['POST'])
 def add_account():
     if not session.get('logged_in'):
@@ -352,7 +412,13 @@ def add_account():
         "created_at": datetime.now()
     })
 
-    return jsonify({"message": "Account added permanently to Database!"})
+    # নতুন করে টোটাল কাউন্ট রিটার্ন করা হচ্ছে
+    new_total = accounts_collection.count_documents({})
+    
+    return jsonify({
+        "message": "Account added permanently to Database!",
+        "total_accounts": new_total
+    })
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
