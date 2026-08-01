@@ -44,17 +44,24 @@ def load_accounts():
     return []
 
 def extract_otp(text):
-    # === URL এবং HTML Encoding ক্লিন আপ ===
-    text = re.sub(r'3Dhttps?://\S+', ' ', text, re.IGNORECASE)
-    text = re.sub(r'3Dwww\.\S+', ' ', text, re.IGNORECASE)
-    text = re.sub(r'https?://\S+', ' ', text, re.IGNORECASE)
-    text = re.sub(r'www\.\S+', ' ', text, re.IGNORECASE)
-    text = re.sub(r'=2F', ' ', text, re.IGNORECASE)
-    text = re.sub(r'3D', ' ', text, re.IGNORECASE)
-    
-    text_lower = text.lower()
+    # ১. সবার আগে বিশুদ্ধ ডিজিট কোড খোঁজা (GitHub, Microsoft এর জন্য)
+    digits = re.findall(r'\b\d{5,8}\b', text)
+    for d in digits:
+        return d
 
-    # ১. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড (সবচেয়ে নিরাপদ উপায়)
+    # ২. স্পেস বা ফাঁকা ফাঁকা থাকা কোড ধরার লজিক
+    spaced_code = re.search(r'\b([A-Z0-9]\s+[A-Z0-9](?:\s+[A-Z0-9]){3,10})\b', text, re.IGNORECASE)
+    if spaced_code:
+        clean_spaced = re.sub(r'\s+', ' ', spaced_code.group(0))
+        if any(c.isdigit() for c in clean_spaced.replace(' ', '')):
+            return clean_spaced
+
+    # ৩. G- দিয়ে শুরু কোড
+    gcode = re.search(r'\bG-[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
+    if gcode:
+        return gcode.group(0)
+
+    # ৪. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড
     after_keyword = re.search(r'(?:code|pin|otp|verification|password|verify|auth|token)[:\s#]+([A-Z0-9\-]{4,12})', text, re.IGNORECASE)
     if after_keyword:
         code_val = after_keyword.group(1).strip()
@@ -63,51 +70,29 @@ def extract_otp(text):
             if not (code_val.isdigit() and len(code_val) == 4 and 2000 <= int(code_val) <= 2030):
                 return code_val
 
-    # ২. স্পেস বা ফাঁকা ফাঁকা থাকা কোড
-    spaced_code = re.search(r'\b([A-Z0-9]\s+[A-Z0-9](?:\s+[A-Z0-9]){3,10})\b', text, re.IGNORECASE)
-    if spaced_code:
-        clean_spaced = re.sub(r'\s+', ' ', spaced_code.group(0))
-        if any(c.isdigit() for c in clean_spaced.replace(' ', '')):
-            return clean_spaced
-
-    # ৩. সাধারণ আলফানিউমারিক কোড (শুধুমাত্র লেটার ও ডিজিট মিক্সড থাকলে, যেমন: HKR5K7)
+    # ৫. সাধারণ আলফানিউমারিক কোড
     words = re.findall(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
     ignore_words = {
         'code', 'pin', 'otp', 'verify', 'true', 'false', 'your', 'this',
         'that', 'with', 'from', 'http', 'https', 'gmail', 'google',
-        'html', 'github', 'microsoft', 'facebook', 'apple',
+        'html', '3dhttp', 'github', 'microsoft', 'facebook', 'apple',
         'amazon', 'twitter', 'linkedin', 'please', 'click', 'here',
         'sign', 'link', 'copy', 'paste', 'enter', 'valid', 'expire',
-        'minute', 'hour', 'have', 'donot', 'sudo', 'reply', 'forward'
+        'minute', 'hour', 'have', 'donot', 'sudo'
     }
-    
+
     for w in words:
         w_lower = w.lower()
-        if w_lower in ignore_words or w_lower.startswith('www') or w_lower.startswith('http'):
+        if w_lower in ignore_words:
             continue
-            
-        # নতুন লজিক: যদি শব্দটা শুধু ডিজিট হয় এবং ৫ ডিজিট বা তার বেশি হয় (যেমন ZIP code 94107), তবে এখানে একদমই ইগনোর করবে
-        if w.isdigit() and len(w) >= 5:
-            continue
-            
         if w.isdigit() and len(w) == 4 and 2000 <= int(w) <= 2030:
             continue
-            
-        # কমপক্ষে একটি ডিজিট এবং একটি লেটার থাকতে হবে (মানে আলফানিউমেরিক হতে হবে)
-        if any(c.isdigit() for c in w) and any(c.isalpha() for c in w):
+        if any(c.isdigit() for c in w):
+            return w
+        if len(w) >= 6 and not w.isalpha():
             return w
 
-    # ৪. বিশুদ্ধ ডিজিট কোড (৫-৮ ডিজিট) - শুধুমাত্র ভেরিফিকেশন কন্টেক্সট থাকলে (GitHub Sudo এর জন্য)
-    otp_keywords = ['verification', 'verify', 'code', 'otp', 'auth', 'login', 'security', 'password', 'pin', 'token', 'sudo', 'confirm', 'alert']
-    has_otp_context = any(kw in text_lower for kw in otp_keywords)
-
-    # ইমেইলে যদি ভেরিফিকেশনের কোনো শব্দ না থাকে, তবে ৫-৮ ডিজিটের নম্বরকে কোড ভাববে না
-    if has_otp_context:
-        digits = re.findall(r'\b\d{5,8}\b', text)
-        for d in digits:
-            return d
-
-    # ৫. ৪ ডিজিটের সাধারণ কোড
+    # ৬. ৪ ডিজিটের কোড (সবশেষে)
     digits = re.findall(r'\b\d{4}\b', text)
     for d in digits:
         if 2000 <= int(d) <= 2030:
@@ -146,6 +131,7 @@ def get_email_body(msg):
         except:
             pass
 
+    # যদি text/plain খালি থাকে, তবে html_body থেকে ট্যাগ বাদ দিয়ে টেক্সট নেওয়া হবে
     if not body.strip() and html_body:
         body = re.sub(r'<[^>]+>', ' ', html_body)
         body = re.sub(r'&nbsp;', ' ', body)
