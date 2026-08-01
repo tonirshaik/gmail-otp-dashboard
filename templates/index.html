@@ -1,681 +1,474 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="bn">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gmail OTP Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
     <style>
-        :root {
-            --bg-color: #0b0f19;
-            --card-bg: rgba(18, 24, 38, 0.75);
-            --card-border: rgba(255, 255, 255, 0.08);
-            --text-main: #f3f4f6;
-            --text-muted: #9ca3af;
-            --accent-blue: #3b82f6;
-            --accent-cyan: #06b6d4;
-            --accent-green: #10b981;
-            --accent-red: #ef4444;
-            --gradient-primary: linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%);
-            --gradient-btn: linear-gradient(135deg, #2563eb 0%, #7c3aed 100%);
-            --shadow-glow: 0 0 25px rgba(59, 130, 246, 0.25);
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Plus Jakarta Sans', sans-serif;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            background-color: var(--bg-color);
-            background-image: 
-                radial-gradient(circle at 15% 20%, rgba(59, 130, 246, 0.12) 0%, transparent 40%),
-                radial-gradient(circle at 85% 80%, rgba(139, 92, 246, 0.12) 0%, transparent 40%);
-            background-attachment: fixed;
-            color: var(--text-main);
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            background: #0a0a0f;
+            color: #fff;
             min-height: 100vh;
+        }
+        
+        /* Login Page */
+        .login-container {
             display: flex;
             justify-content: center;
             align-items: center;
-            padding: 20px;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
         }
-
-        .container {
-            position: relative;
+        .login-box {
+            background: rgba(255,255,255,0.05);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255,255,255,0.1);
+            width: 350px;
+        }
+        .login-box h2 { text-align: center; margin-bottom: 30px; }
+        .login-box input {
             width: 100%;
-            max-width: 480px;
-            background: var(--card-bg);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid var(--card-border);
-            border-radius: 24px;
-            padding: 32px 28px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4), var(--shadow-glow);
+            padding: 12px;
+            border: 1px solid rgba(255,255,255,0.2);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.1);
+            color: #fff;
+            font-size: 16px;
+            margin-bottom: 20px;
         }
-
-        .hidden { display: none !important; }
-
+        .login-box button {
+            width: 100%;
+            padding: 12px;
+            background: #00d4ff;
+            border: none;
+            border-radius: 10px;
+            color: #000;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .login-box button:hover { background: #00b8d9; }
+        
+        /* Dashboard */
+        .dashboard { display: none; padding: 20px; }
+        
+        /* Top Bar */
         .top-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 24px;
-            position: relative;
-        }
-
-        .header-title {
-            font-size: 20px;
-            font-weight: 700;
-            background: linear-gradient(135deg, #60a5fa, #a78bfa, #22d3ee);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-
-        .settings-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid var(--card-border);
-            color: var(--text-main);
-            width: 40px;
-            height: 40px;
-            border-radius: 12px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.3s ease;
-        }
-
-        .settings-btn:hover {
-            background: rgba(59, 130, 246, 0.2);
-            border-color: var(--accent-blue);
-            color: var(--accent-cyan);
-            transform: rotate(45deg);
-        }
-
-        .settings-popup {
-            display: none;
-            position: absolute;
-            top: 50px;
-            right: 0;
-            width: 320px;
-            background: #111827;
-            border: 1px solid var(--card-border);
-            border-radius: 18px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-            z-index: 100;
-            animation: fadeIn 0.2s ease-in-out;
-        }
-
-        .settings-popup.active { display: block; }
-
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(-10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes customSpin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .rotating {
-            display: inline-block;
-            animation: customSpin 0.8s linear infinite;
-        }
-
-        /* সবুজ পালসিং ডট */
-        .new-dot {
-            position: absolute;
-            top: 14px;
-            right: 14px;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #10b981;
-            z-index: 5;
-        }
-
-        .new-dot::before {
-            content: '';
-            position: absolute;
-            top: -4px;
-            left: -4px;
-            width: 18px;
-            height: 18px;
-            border-radius: 50%;
-            background: rgba(16, 185, 129, 0.4);
-            animation: dotPulse 1.5s ease-in-out infinite;
-        }
-
-        @keyframes dotPulse {
-            0%, 100% { transform: scale(0.8); opacity: 0.6; }
-            50% { transform: scale(1.6); opacity: 0; }
-        }
-
-        .popup-title {
-            font-size: 13px;
-            font-weight: 600;
-            color: var(--accent-cyan);
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-            text-transform: uppercase;
-        }
-
-        .input-group { margin-bottom: 12px; }
-
-        .input-group input {
-            width: 100%;
-            padding: 12px 14px;
-            background: rgba(0, 0, 0, 0.4);
-            border: 1px solid var(--card-border);
-            border-radius: 12px;
-            color: #fff;
-            font-size: 13px;
-            outline: none;
-            transition: all 0.3s ease;
-        }
-
-        .input-group input:focus { border-color: var(--accent-blue); }
-
-        .btn {
-            width: 100%;
-            padding: 12px;
-            border: none;
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 14px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: all 0.3s ease;
-        }
-
-        .btn-primary {
-            background: var(--gradient-btn);
-            color: #fff;
-        }
-
-        .btn-refresh {
-            background: rgba(6, 182, 212, 0.15);
-            color: var(--accent-cyan);
-            border: 1px solid rgba(6, 182, 212, 0.3);
+            padding: 15px 25px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 15px;
             margin-bottom: 20px;
         }
-
-        .btn-refresh:hover {
-            background: rgba(6, 182, 212, 0.25);
+        .top-bar h1 { font-size: 22px; }
+        .logout-btn {
+            padding: 8px 20px;
+            background: #ff4757;
+            border: none;
+            border-radius: 8px;
             color: #fff;
-            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
+            cursor: pointer;
         }
-
-        .btn-logout {
-            background: rgba(239, 68, 68, 0.1);
-            color: var(--accent-red);
-            border: 1px solid rgba(239, 68, 68, 0.2);
-            margin-top: 15px;
+        
+        /* Stats Cards */
+        .stats-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
         }
-
-        .btn-logout:hover {
-            background: rgba(239, 68, 68, 0.2);
-            color: #fff;
-        }
-
-        .msg-status {
-            font-size: 12px;
+        .stat-card {
+            background: linear-gradient(135deg, rgba(0,212,255,0.1), rgba(0,212,255,0.05));
+            border: 1px solid rgba(0,212,255,0.2);
+            border-radius: 15px;
+            padding: 20px;
             text-align: center;
-            margin-bottom: 12px;
-            display: none;
         }
-
-        .otp-container {
-            max-height: 420px;
-            overflow-y: auto;
-            padding-right: 4px;
+        .stat-card .number {
+            font-size: 42px;
+            font-weight: 700;
+            color: #00d4ff;
         }
-
-        .otp-container::-webkit-scrollbar { width: 5px; }
-        .otp-container::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
-
-        .otp-card {
-            background: rgba(15, 23, 42, 0.6);
-            border: 1px solid rgba(59, 130, 246, 0.2);
-            border-radius: 14px;
-            padding: 16px;
-            margin-bottom: 12px;
-            position: relative;
-            overflow: hidden;
+        .stat-card .label {
+            font-size: 14px;
+            color: #888;
+            margin-top: 5px;
         }
-
-        .otp-card::before {
-            content: '';
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 4px;
-            height: 100%;
-            background: var(--gradient-primary);
+        .stat-card.green { border-color: rgba(0,255,136,0.3); }
+        .stat-card.green .number { color: #00ff88; }
+        .stat-card.purple { border-color: rgba(168,85,247,0.3); }
+        .stat-card.purple .number { color: #a855f7; }
+        
+        /* Account List */
+        .section-title {
+            font-size: 18px;
+            margin-bottom: 15px;
+            padding-left: 10px;
+            border-left: 3px solid #00d4ff;
         }
-
-        /* নতুন কার্ডে সবুজ বর্ডার গ্লো */
-        .otp-card.is-new {
-            border-color: rgba(16, 185, 129, 0.4);
-            box-shadow: 0 0 20px rgba(16, 185, 129, 0.1);
+        .accounts-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 12px;
+            margin-bottom: 25px;
         }
-
-        .otp-email { 
-            font-size: 13px; 
-            font-weight: 600; 
-            color: var(--accent-cyan); 
-            margin-bottom: 6px; 
+        .account-card {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 12px;
+            padding: 15px;
             display: flex;
+            justify-content: space-between;
             align-items: center;
-            gap: 6px;
         }
-
-        .otp-subject { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
-
-        .otp-code-box {
-            text-align: center;
+        .account-card .email {
+            font-size: 14px;
+            color: #ccc;
+        }
+        .account-card .date {
+            font-size: 12px;
+            color: #666;
+            margin-top: 4px;
+        }
+        .delete-btn {
+            padding: 6px 12px;
+            background: rgba(255,71,87,0.2);
+            border: 1px solid rgba(255,71,87,0.3);
+            border-radius: 6px;
+            color: #ff4757;
+            cursor: pointer;
+            font-size: 12px;
+        }
+        .delete-btn:hover { background: rgba(255,71,87,0.4); }
+        
+        /* Add Account Form */
+        .add-form {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+        .add-form h3 { margin-bottom: 15px; }
+        .form-row {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .form-row input {
+            flex: 1;
+            min-width: 200px;
+            padding: 10px 15px;
+            background: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.15);
+            border-radius: 8px;
+            color: #fff;
+            font-size: 14px;
+        }
+        .form-row button {
+            padding: 10px 25px;
+            background: #00d4ff;
+            border: none;
+            border-radius: 8px;
+            color: #000;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        
+        /* OTP Results */
+        .otp-container {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid rgba(255,255,255,0.08);
+            border-radius: 15px;
+            padding: 20px;
+        }
+        .otp-item {
+            background: rgba(0,212,255,0.05);
+            border: 1px solid rgba(0,212,255,0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .otp-code {
             font-size: 24px;
             font-weight: 700;
-            color: #38bdf8;
-            letter-spacing: 3px;
-            background: rgba(56, 189, 248, 0.1);
-            padding: 12px 14px;
-            border-radius: 8px;
-            border: 1px solid rgba(56, 189, 248, 0.3);
-            margin-bottom: 8px;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            user-select: none;
+            color: #00ff88;
+            font-family: monospace;
         }
-
-        .otp-code-box:hover {
-            background: rgba(56, 189, 248, 0.2);
-            border-color: #38bdf8;
-            transform: translateY(-1px);
-        }
-
-        .otp-code-box:active { transform: scale(0.96); }
-
-        .otp-time { font-size: 11px; color: var(--text-muted); }
-        .empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px 0; }
-
-        .toast {
-            visibility: hidden;
-            min-width: 160px;
-            background: rgba(16, 185, 129, 0.95);
-            color: #fff;
+        .otp-email { font-size: 13px; color: #888; }
+        .otp-time { font-size: 12px; color: #666; }
+        .no-otp { color: #666; font-style: italic; }
+        
+        /* Loading */
+        .loading {
             text-align: center;
-            border-radius: 30px;
-            padding: 10px 20px;
-            position: fixed;
-            z-index: 1000;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 13px;
-            font-weight: 600;
-            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
-            opacity: 0;
-            transition: opacity 0.3s, bottom 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            backdrop-filter: blur(8px);
+            padding: 40px;
+            color: #888;
         }
-
-        .toast.show {
-            visibility: visible;
-            opacity: 1;
-            bottom: 35px;
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(255,255,255,0.1);
+            border-top-color: #00d4ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
         }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        
+        .msg {
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            display: none;
+        }
+        .msg.success { background: rgba(0,255,136,0.1); color: #00ff88; border: 1px solid rgba(0,255,136,0.2); display: block; }
+        .msg.error { background: rgba(255,71,87,0.1); color: #ff4757; border: 1px solid rgba(255,71,87,0.2); display: block; }
     </style>
 </head>
 <body>
 
-    <div class="container">
+<!-- Login Page -->
+<div class="login-container" id="loginPage">
+    <div class="login-box">
+        <h2>🔐 Login</h2>
+        <input type="password" id="loginPass" placeholder="Enter Master Password">
+        <button onclick="login()">Login</button>
+        <p id="loginError" style="color: #ff4757; text-align: center; margin-top: 15px; display: none;">Wrong Password!</p>
+    </div>
+</div>
+
+<!-- Dashboard -->
+<div class="dashboard" id="dashboard">
+    <div class="top-bar">
+        <h1>📬 Gmail OTP Dashboard</h1>
+        <button class="logout-btn" onclick="logout()">Logout</button>
+    </div>
+    
+    <!-- Stats Cards -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="number" id="totalAccounts">0</div>
+            <div class="label">Total Gmail Accounts</div>
+        </div>
+        <div class="stat-card green">
+            <div class="number" id="activeOTPs">0</div>
+            <div class="label">Active OTPs Found</div>
+        </div>
+        <div class="stat-card purple">
+            <div class="number" id="lastFetch">--:--</div>
+            <div class="label">Last Fetch Time</div>
+        </div>
+    </div>
+    
+    <!-- Add Account Form -->
+    <div class="add-form">
+        <h3>➕ Add New Gmail Account</h3>
+        <div id="addMsg" class="msg"></div>
+        <div class="form-row">
+            <input type="email" id="newEmail" placeholder="Gmail Address">
+            <input type="password" id="newPassword" placeholder="App Password">
+            <button onclick="addAccount()">Add Account</button>
+        </div>
+    </div>
+    
+    <!-- Account List -->
+    <h3 class="section-title">📋 Added Accounts</h3>
+    <div class="accounts-grid" id="accountsList">
+        <div class="loading"><div class="spinner"></div>Loading accounts...</div>
+    </div>
+    
+    <!-- Fetch OTP Button -->
+    <div style="margin-bottom: 20px;">
+        <button onclick="fetchOTPs()" style="padding: 12px 30px; background: #00ff88; border: none; border-radius: 10px; color: #000; font-size: 16px; font-weight: 600; cursor: pointer;">
+            🔄 Fetch All OTPs
+        </button>
+    </div>
+    
+    <!-- OTP Results -->
+    <h3 class="section-title">🔑 OTP Results</h3>
+    <div class="otp-container" id="otpResults">
+        <div class="no-otp">Click "Fetch All OTPs" to get latest codes</div>
+    </div>
+</div>
+
+<script>
+    // Login Function
+    async function login() {
+        const pass = document.getElementById('loginPass').value;
+        const res = await fetch('/api/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password: pass })
+        });
         
-        <!-- LOGIN SECTION -->
-        <div id="loginSection">
-            <div class="header-title" style="justify-content: center; margin-bottom: 20px;">
-                <i class="fa-solid fa-lock"></i> Secure Login
-            </div>
-            <div id="loginError" class="msg-status" style="color: var(--accent-red);"></div>
-            <form id="loginForm">
-                <div class="input-group">
-                    <input type="password" id="masterPasswordInput" placeholder="Enter Master Password" required autocomplete="off">
-                </div>
-                <button type="submit" class="btn btn-primary">
-                    <i class="fa-solid fa-right-to-bracket"></i> Login
-                </button>
-            </form>
-        </div>
-
-        <!-- DASHBOARD SECTION -->
-        <div id="dashboardSection" class="hidden">
-            <div class="top-bar">
-                <div class="header-title">
-                    <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard
-                </div>
-                
-                <button class="settings-btn" id="settingsToggle" title="Add Account Settings">
-                    <i class="fa-solid fa-gear"></i>
-                </button>
-
-                <div class="settings-popup" id="settingsPopup">
-                    <div class="settings-auth" id="settingsAuth">
-                        <div class="popup-title">
-                            <i class="fa-solid fa-lock"></i> Enter Settings Password
-                        </div>
-                        <form id="settingsAuthForm">
-                            <div class="input-group">
-                                <input type="password" id="settingsPasswordInput" placeholder="Enter password" required autocomplete="off">
-                            </div>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fa-solid fa-key"></i> Unlock
-                            </button>
-                        </form>
-                        <div id="settingsAuthError" class="msg-status" style="color: var(--accent-red); display: none; margin-top: 8px; font-size: 13px;"></div>
-                    </div>
-
-                    <div class="settings-content hidden" id="settingsContent">
-                        <div class="popup-title">
-                            <i class="fa-solid fa-user-plus"></i> Add Gmail Account
-                        </div>
-                        <form id="addAccountForm">
-                            <div class="input-group">
-                                <input type="email" id="accEmail" placeholder="Gmail Address" required autocomplete="off">
-                            </div>
-                            <div class="input-group">
-                                <input type="password" id="accPassword" placeholder="16-digit App Password" required autocomplete="off">
-                            </div>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fa-solid fa-floppy-disk"></i> Save Account
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            </div>
-
-            <div id="statusMsg" class="msg-status"></div>
-
-            <button type="button" class="btn btn-refresh" id="refreshBtn">
-                <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
-            </button>
-
-            <div class="otp-container" id="otpContainer">
-                <div class="empty-state">
-                    <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                    Click "Refresh OTPs" to load emails.
-                </div>
-            </div>
-
-            <button type="button" class="btn btn-logout" onclick="logout()">
-                <i class="fa-solid fa-right-from-bracket"></i> Logout
-            </button>
-        </div>
-
-    </div>
-
-    <!-- Toast Notification -->
-    <div id="toast" class="toast">
-        <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copied!</span>
-    </div>
-
-    <script>
-        const loginSection = document.getElementById('loginSection');
-        const dashboardSection = document.getElementById('dashboardSection');
-        const loginForm = document.getElementById('loginForm');
-        const loginError = document.getElementById('loginError');
-
-        const settingsToggle = document.getElementById('settingsToggle');
-        const settingsPopup = document.getElementById('settingsPopup');
-        const otpContainer = document.getElementById('otpContainer');
-        const refreshBtn = document.getElementById('refreshBtn');
-        const addAccountForm = document.getElementById('addAccountForm');
-        const statusMsg = document.getElementById('statusMsg');
-
-        const settingsAuth = document.getElementById('settingsAuth');
-        const settingsContent = document.getElementById('settingsContent');
-        const settingsAuthForm = document.getElementById('settingsAuthForm');
-        const settingsPasswordInput = document.getElementById('settingsPasswordInput');
-        const settingsAuthError = document.getElementById('settingsAuthError');
-
-        // আগের কোডগুলো মনে রাখার জন্য
-        let previousCodes = [];
-
-        function resetSettingsPopup() {
-            settingsAuth.classList.remove('hidden');
-            settingsContent.classList.add('hidden');
-            settingsPasswordInput.value = '';
-            settingsAuthError.style.display = 'none';
-            settingsAuthError.innerText = '';
+        if (res.ok) {
+            document.getElementById('loginPage').style.display = 'none';
+            document.getElementById('dashboard').style.display = 'block';
+            loadAccountStats();
+        } else {
+            document.getElementById('loginError').style.display = 'block';
         }
-
-        settingsToggle.addEventListener('click', (e) => {
-            e.stopPropagation();
-            settingsPopup.classList.toggle('active');
-            if (!settingsPopup.classList.contains('active')) {
-                resetSettingsPopup();
-            }
-        });
-
-        settingsAuthForm.addEventListener('submit', (e) => {
-            e.preventDefault();
-            const password = settingsPasswordInput.value.trim();
-            if (password === '889900') {
-                settingsAuth.classList.add('hidden');
-                settingsContent.classList.remove('hidden');
-                settingsAuthError.style.display = 'none';
+    }
+    
+    // Logout Function
+    async function logout() {
+        await fetch('/api/logout', { method: 'POST' });
+        document.getElementById('loginPage').style.display = 'flex';
+        document.getElementById('dashboard').style.display = 'none';
+        document.getElementById('loginPass').value = '';
+        document.getElementById('loginError').style.display = 'none';
+    }
+    
+    // Load Account Stats & List
+    async function loadAccountStats() {
+        try {
+            const res = await fetch('/api/accounts-list');
+            const data = await res.json();
+            
+            // Update Stats
+            document.getElementById('totalAccounts').textContent = data.total;
+            
+            // Update Account List
+            const listDiv = document.getElementById('accountsList');
+            
+            if (data.total === 0) {
+                listDiv.innerHTML = '<div class="no-otp" style="grid-column: 1/-1; text-align: center; padding: 30px;">No accounts added yet</div>';
             } else {
-                settingsAuthError.innerText = 'Incorrect password. Please try again.';
-                settingsAuthError.style.display = 'block';
+                listDiv.innerHTML = data.accounts.map(acc => `
+                    <div class="account-card">
+                        <div>
+                            <div class="email">📧 ${acc.email}</div>
+                            <div class="date">Added: ${acc.created_at}</div>
+                        </div>
+                        <button class="delete-btn" onclick="deleteAccount('${acc.email}')">🗑️ Delete</button>
+                    </div>
+                `).join('');
             }
-        });
-
-        document.addEventListener('click', (e) => {
-            if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
-                settingsPopup.classList.remove('active');
-                resetSettingsPopup();
-            }
-        });
-
-        function showMessage(msg, isError = false) {
-            statusMsg.style.display = 'block';
-            statusMsg.style.color = isError ? 'var(--accent-red)' : 'var(--accent-green)';
-            statusMsg.innerText = msg;
-            setTimeout(() => {
-                statusMsg.style.display = 'none';
-            }, 4000);
+        } catch (e) {
+            console.error(e);
         }
-
-        function copyOTP(code) {
-            if (!code || code === 'Code not found' || code === 'No emails found') return;
-            navigator.clipboard.writeText(code).then(() => {
-                showToast(`Copied: ${code}`);
+    }
+    
+    // Add Account
+    async function addAccount() {
+        const email = document.getElementById('newEmail').value;
+        const password = document.getElementById('newPassword').value;
+        const msgDiv = document.getElementById('addMsg');
+        
+        msgDiv.className = 'msg';
+        msgDiv.style.display = 'none';
+        
+        if (!email || !password) {
+            msgDiv.textContent = 'Please enter both email and password!';
+            msgDiv.className = 'msg error';
+            return;
+        }
+        
+        try {
+            const res = await fetch('/api/add-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
             });
-        }
-
-        function showToast(message) {
-            const toast = document.getElementById('toast');
-            const toastMsg = document.getElementById('toastMsg');
-            toastMsg.innerText = message;
-            toast.classList.add('show');
-            setTimeout(() => { toast.classList.remove('show'); }, 2000);
-        }
-
-        loginForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const password = document.getElementById('masterPasswordInput').value;
-
-            try {
-                const res = await fetch('/api/login', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ password })
-                });
-
-                if (res.ok) {
-                    loginSection.classList.add('hidden');
-                    dashboardSection.classList.remove('hidden');
-                    fetchOTPs();
-                } else {
-                    loginError.style.display = 'block';
-                    loginError.innerText = "Wrong Master Password!";
-                }
-            } catch (err) {
-                loginError.style.display = 'block';
-                loginError.innerText = "Server Error!";
+            const data = await res.json();
+            
+            if (res.ok) {
+                msgDiv.textContent = data.message;
+                msgDiv.className = 'msg success';
+                document.getElementById('newEmail').value = '';
+                document.getElementById('newPassword').value = '';
+                loadAccountStats(); // Refresh list
+            } else {
+                msgDiv.textContent = data.error;
+                msgDiv.className = 'msg error';
             }
-        });
-
-        async function fetchOTPs() {
-            refreshBtn.disabled = true;
-            refreshBtn.style.opacity = '0.75';
-            refreshBtn.style.cursor = 'not-allowed';
-            refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking Gmail...`;
-
-            otpContainer.innerHTML = `
-                <div class="empty-state">
-                    <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                    Fetching OTPs from servers...
-                </div>`;
-
-            try {
-                const res = await fetch('/api/fetch-otps');
-
-                if (res.status === 401) {
-                    dashboardSection.classList.add('hidden');
-                    loginSection.classList.remove('hidden');
-                    return;
-                }
-
-                if (!res.ok) throw new Error("Failed");
-
-                const data = await res.json();
-                renderOTPs(data);
-
-            } catch (err) {
-                otpContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
-                        Error loading OTPs. Try again.
-                    </div>`;
-            } finally {
-                refreshBtn.disabled = false;
-                refreshBtn.style.opacity = '1';
-                refreshBtn.style.cursor = 'pointer';
-                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
-            }
+        } catch (e) {
+            msgDiv.textContent = 'Failed to add account!';
+            msgDiv.className = 'msg error';
         }
-
-        function renderOTPs(otps) {
-            if (!otps || otps.length === 0) {
-                otpContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        No Gmail accounts added yet.
-                    </div>`;
+    }
+    
+    // Delete Account
+    async function deleteAccount(email) {
+        if (!confirm(`Delete ${email}?`)) return;
+        
+        try {
+            const res = await fetch('/api/delete-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            
+            if (res.ok) {
+                loadAccountStats();
+            } else {
+                alert('Failed to delete!');
+            }
+        } catch (e) {
+            alert('Error!');
+        }
+    }
+    
+    // Fetch OTPs
+    async function fetchOTPs() {
+        const otpDiv = document.getElementById('otpResults');
+        otpDiv.innerHTML = '<div class="loading"><div class="spinner"></div>Fetching OTPs from all accounts...</div>';
+        
+        try {
+            const res = await fetch('/api/fetch-otps');
+            const data = await res.json();
+            
+            // Update last fetch time
+            const now = new Date();
+            document.getElementById('lastFetch').textContent = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+            
+            // Count active OTPs
+            const activeCount = data.filter(d => d.code !== 'No emails found' && d.code !== 'Error').length;
+            document.getElementById('activeOTPs').textContent = activeCount;
+            
+            if (data.length === 0) {
+                otpDiv.innerHTML = '<div class="no-otp">No accounts configured</div>';
                 return;
             }
-
-            // কোন কোন কার্ড নতুন তা চেক করা
-            let newCardEmails = [];
-            if (previousCodes.length > 0) {
-                otps.forEach(item => {
-                    if (item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error') {
-                        const prev = previousCodes.find(p => p.email === item.email);
-                        // আগে ছিল না বা কোড পরিবর্তন হয়েছে = নতুন
-                        if (!prev || prev.code !== item.code) {
-                            newCardEmails.push(item.email);
-                        }
-                    }
-                });
-            } else {
-                // প্রথমবার লোড হলে প্রথমটা নতুন হিসেবে দেখাবে
-                if (otps[0] && otps[0].code && otps[0].code !== 'Code not found' && otps[0].code !== 'No emails found' && otps[0].code !== 'Error') {
-                    newCardEmails.push(otps[0].email);
-                }
-            }
-
-            // কারেন্ট কোডগুলো সেভ করে রাখা
-            previousCodes = otps.map(item => ({ email: item.email, code: item.code }));
-
-            otpContainer.innerHTML = otps.map(item => {
-                const isNew = newCardEmails.includes(item.email);
-                const validCode = item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error';
-
+            
+            otpDiv.innerHTML = data.map(item => {
+                const isActive = item.code !== 'No emails found' && item.code !== 'Error';
                 return `
-                <div class="otp-card ${isNew ? 'is-new' : ''}">
-                    ${isNew ? '<div class="new-dot"></div>' : ''}
-                    <div class="otp-email">
-                        ${item.email}
-                    </div>
-                    ${validCode ? `
-                        <div class="otp-code-box" onclick="copyOTP('${item.code}')" title="Click to copy">
-                            ${item.code}
+                    <div class="otp-item" style="border-color: ${isActive ? 'rgba(0,255,136,0.2)' : 'rgba(255,255,255,0.05)'}">
+                        <div>
+                            <div class="otp-code" style="color: ${isActive ? '#00ff88' : '#666'}">${item.code}</div>
+                            <div class="otp-email">📧 ${item.email}</div>
+                            ${item.sender !== 'N/A' ? `<div class="otp-time">From: ${item.sender.substring(0, 40)}</div>` : ''}
                         </div>
-                    ` : `
-                        <div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">
-                            ${item.code || 'Code not found'}
+                        <div style="text-align: right;">
+                            <div class="otp-time">${item.time}</div>
+                            <div style="font-size: 11px; color: #555; margin-top: 4px;">${item.subject.substring(0, 30)}...</div>
                         </div>
-                    `}
-                    <div class="otp-time">
-                        <i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${item.sender || 'N/A'}
                     </div>
-                </div>`;
+                `;
             }).join('');
+            
+        } catch (e) {
+            otpDiv.innerHTML = '<div class="no-otp" style="color: #ff4757;">Error fetching OTPs!</div>';
         }
+    }
+    
+    // Enter key for login
+    document.getElementById('loginPass').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') login();
+    });
+</script>
 
-        addAccountForm.addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const email = document.getElementById('accEmail').value;
-            const password = document.getElementById('accPassword').value;
-
-            try {
-                const res = await fetch('/api/add-account', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
-                });
-
-                const result = await res.json();
-
-                if (res.ok) {
-                    showMessage(result.message || "Account added!");
-                    addAccountForm.reset();
-                    settingsPopup.classList.remove('active');
-                    fetchOTPs();
-                } else {
-                    showMessage(result.error || "Failed", true);
-                }
-            } catch (err) {
-                showMessage("Connection error", true);
-            }
-        });
-
-        refreshBtn.addEventListener('click', fetchOTPs);
-
-        async function logout() {
-            await fetch('/api/logout', { method: 'POST' });
-            dashboardSection.classList.add('hidden');
-            loginSection.classList.remove('hidden');
-            document.getElementById('masterPasswordInput').value = '';
-            previousCodes = [];
-        }
-    </script>
 </body>
 </html>
