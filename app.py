@@ -44,24 +44,9 @@ def load_accounts():
     return []
 
 def extract_otp(text):
-    # ১. সবার আগে বিশুদ্ধ ডিজিট কোড খোঁজা (GitHub, Microsoft এর জন্য)
-    digits = re.findall(r'\b\d{5,8}\b', text)
-    for d in digits:
-        return d
+    text_lower = text.lower()
 
-    # ২. স্পেস বা ফাঁকা ফাঁকা থাকা কোড ধরার লজিক
-    spaced_code = re.search(r'\b([A-Z0-9]\s+[A-Z0-9](?:\s+[A-Z0-9]){3,10})\b', text, re.IGNORECASE)
-    if spaced_code:
-        clean_spaced = re.sub(r'\s+', ' ', spaced_code.group(0))
-        if any(c.isdigit() for c in clean_spaced.replace(' ', '')):
-            return clean_spaced
-
-    # ৩. G- দিয়ে শুরু কোড
-    gcode = re.search(r'\bG-[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
-    if gcode:
-        return gcode.group(0)
-
-    # ৪. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড
+    # ১. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড (সবচেয়ে নিরাপদ)
     after_keyword = re.search(r'(?:code|pin|otp|verification|password|verify|auth|token)[:\s#]+([A-Z0-9\-]{4,12})', text, re.IGNORECASE)
     if after_keyword:
         code_val = after_keyword.group(1).strip()
@@ -70,7 +55,14 @@ def extract_otp(text):
             if not (code_val.isdigit() and len(code_val) == 4 and 2000 <= int(code_val) <= 2030):
                 return code_val
 
-    # ৫. সাধারণ আলফানিউমারিক কোড
+    # ২. স্পেস বা ফাঁকা ফাঁকা থাকা কোড
+    spaced_code = re.search(r'\b([A-Z0-9]\s+[A-Z0-9](?:\s+[A-Z0-9]){3,10})\b', text, re.IGNORECASE)
+    if spaced_code:
+        clean_spaced = re.sub(r'\s+', ' ', spaced_code.group(0))
+        if any(c.isdigit() for c in clean_spaced.replace(' ', '')):
+            return clean_spaced
+
+    # ৩. সাধারণ আলফানিউমারিক কোড (যেমন: HKR5K7)
     words = re.findall(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
     ignore_words = {
         'code', 'pin', 'otp', 'verify', 'true', 'false', 'your', 'this',
@@ -80,7 +72,6 @@ def extract_otp(text):
         'sign', 'link', 'copy', 'paste', 'enter', 'valid', 'expire',
         'minute', 'hour', 'have', 'donot', 'sudo'
     }
-
     for w in words:
         w_lower = w.lower()
         if w_lower in ignore_words:
@@ -92,7 +83,17 @@ def extract_otp(text):
         if len(w) >= 6 and not w.isalpha():
             return w
 
-    # ৬. ৪ ডিজিটের কোড (সবশেষে)
+    # ৪. বড় ডিজিট কোড (৫-৮ ডিজিট) - শুধুমাত্র ভেরিফিকেশন ইমেইল হলে (GitHub এর জন্য)
+    # পিন্টারেস্টের মতো ZIP code (94107) কে ভুলে কোড ভাববে না তার জন্য কন্টেক্সট চেক
+    otp_keywords = ['verification', 'verify', 'code', 'otp', 'auth', 'login', 'security', 'password', 'pin', 'token', 'sudo', 'confirm', 'alert']
+    has_otp_context = any(kw in text_lower for kw in otp_keywords)
+
+    if has_otp_context:
+        digits = re.findall(r'\b\d{5,8}\b', text)
+        for d in digits:
+            return d
+
+    # ৫. ৪ ডিজিটের সাধারণ কোড
     digits = re.findall(r'\b\d{4}\b', text)
     for d in digits:
         if 2000 <= int(d) <= 2030:
@@ -334,7 +335,7 @@ def add_account():
 
     data = request.json or {}
     email_input = data.get('email')
-    password_input = data.get('password')
+    password_input = data.get('password")
 
     if not email_input or not password_input:
         return jsonify({"error": "Email and App Password required"}), 400
