@@ -44,62 +44,94 @@ def load_accounts():
     return []
 
 def extract_otp(text):
-    # ১. সবার আগে বিশুদ্ধ ডিজিট কোড খোঁজা (GitHub, Microsoft এর জন্য)
-    digits = re.findall(r'\b\d{5,8}\b', text)
-    for d in digits:
-        return d
+    if not text:
+        return "Code not found"
 
-    # ২. স্পেস বা ফাঁকা ফাঁকা থাকা কোড ধরার লজিক
-    spaced_code = re.search(r'\b([A-Z0-9]\s+[A-Z0-9](?:\s+[A-Z0-9]){3,10})\b', text, re.IGNORECASE)
-    if spaced_code:
-        clean_spaced = re.sub(r'\s+', ' ', spaced_code.group(0))
-        if any(c.isdigit() for c in clean_spaced.replace(' ', '')):
-            return clean_spaced
+    text = re.sub(r'\s+', ' ', text)  # normalize spaces
 
-    # ৩. G- দিয়ে শুরু কোড
+    # ---------- Helper ----------
+    def is_year(s):
+        return s.isdigit() and len(s) == 4 and 2000 <= int(s) <= 2035
+
+    def is_valid_code(code):
+        if not code:
+            return False
+        code = code.strip()
+        if len(code) < 4 or len(code) > 12:
+            return False
+        if is_year(code):
+            return False
+        # pure alphabetic words ignore
+        if code.isalpha():
+            return False
+        ignore = {
+            'code', 'pin', 'otp', 'password', 'none', 'your', 'is', 'the',
+            'and', 'for', 'with', 'from', 'http', 'https', 'gmail', 'google',
+            'html', 'github', 'microsoft', 'facebook', 'apple', 'amazon',
+            'twitter', 'linkedin', 'please', 'click', 'here', 'sign', 'link',
+            'copy', 'paste', 'enter', 'valid', 'expire', 'minute', 'hour',
+            'have', 'donot', 'sudo', 'true', 'false', 'verify', 'token'
+        }
+        if code.lower() in ignore:
+            return False
+        return True
+
+    # ---------- 1. Keyword-based (most reliable) ----------
+    # Matches: "OTP is 123456", "verification code: 847291", "Your code 12 34 56" etc.
+    keyword_patterns = [
+        r'(?:your\s+)?(?:otp|code|pin|verification\s*code|security\s*code|auth(?:entication)?\s*code|one[-\s]?time\s*(?:password|code)|login\s*code|access\s*code)[\s:#\-]*([A-Z0-9][\sA-Z0-9\-]{3,14})',
+        r'(?:code|otp|pin|password)[\s:#\-]+is[\s:#\-]*([A-Z0-9][\sA-Z0-9\-]{3,14})',
+        r'(?:enter|use|type)[\s]+(?:the\s+)?(?:code|otp|pin)[\s:#\-]*([A-Z0-9][\sA-Z0-9\-]{3,14})',
+    ]
+
+    for pat in keyword_patterns:
+        m = re.search(pat, text, re.IGNORECASE)
+        if m:
+            raw = m.group(1).strip()
+            # clean spaces inside code (e.g. "1 2 3 4 5 6" → "123456")
+            clean = re.sub(r'\s+', '', raw)
+            if is_valid_code(clean) and any(c.isdigit() for c in clean):
+                return clean if len(clean) <= 10 else raw
+
+    # ---------- 2. G- codes (Google style) ----------
     gcode = re.search(r'\bG-[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
     if gcode:
         return gcode.group(0)
 
-    # ৪. নির্দিষ্ট কিওয়ার্ডের পরে থাকা কোড
-    after_keyword = re.search(r'(?:code|pin|otp|verification|password|verify|auth|token)[:\s#]+([A-Z0-9\-]{4,12})', text, re.IGNORECASE)
-    if after_keyword:
-        code_val = after_keyword.group(1).strip()
-        ignore_list = ['code', 'pin', 'otp', 'password', 'none', 'your', 'is', 'the', 'and', 'for', 'with']
-        if code_val.lower() not in ignore_list:
-            if not (code_val.isdigit() and len(code_val) == 4 and 2000 <= int(code_val) <= 2030):
-                return code_val
+    # ---------- 3. Spaced alphanumeric codes ----------
+    spaced = re.search(r'\b([A-Z0-9](?:\s+[A-Z0-9]){3,9})\b', text, re.IGNORECASE)
+    if spaced:
+        clean_spaced = re.sub(r'\s+', '', spaced.group(0))
+        if is_valid_code(clean_spaced) and any(c.isdigit() for c in clean_spaced):
+            return clean_spaced
 
-    # ৫. সাধারণ আলফানিউমারিক কোড
-    words = re.findall(r'\b[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
-    ignore_words = {
-        'code', 'pin', 'otp', 'verify', 'true', 'false', 'your', 'this',
-        'that', 'with', 'from', 'http', 'https', 'gmail', 'google',
-        'html', '3dhttp', 'github', 'microsoft', 'facebook', 'apple',
-        'amazon', 'twitter', 'linkedin', 'please', 'click', 'here',
-        'sign', 'link', 'copy', 'paste', 'enter', 'valid', 'expire',
-        'minute', 'hour', 'have', 'donot', 'sudo'
-    }
+    # ---------- 4. Prefer pure 6-digit codes (most common OTP length) ----------
+    six_digits = re.findall(r'(?<!\d)\d{6}(?!\d)', text)
+    for d in six_digits:
+        if is_valid_code(d):
+            return d
 
-    for w in words:
-        w_lower = w.lower()
-        if w_lower in ignore_words:
-            continue
-        if w.isdigit() and len(w) == 4 and 2000 <= int(w) <= 2030:
-            continue
-        if any(c.isdigit() for c in w):
+    # ---------- 5. 4 / 5 / 7 / 8 digit codes (only if they look like OTP context) ----------
+    other_digits = re.findall(r'(?<!\d)\d{4,8}(?!\d)', text)
+    for d in other_digits:
+        if is_valid_code(d):
+            # Extra filter for pure 5-digit: only accept if nearby keywords exist
+            if len(d) == 5:
+                pos = text.find(d)
+                if pos != -1:
+                    context = text[max(0, pos-80):pos+80].lower()
+                    if not any(kw in context for kw in ['otp', 'code', 'pin', 'verify', 'verification', 'security', 'login', 'auth', 'password', 'one-time', 'onetime']):
+                        continue  # skip lonely 5-digit numbers
+            return d
+
+    # ---------- 6. Alphanumeric codes (e.g. AB12CD, X7Y9Z2) ----------
+    alphanum = re.findall(r'\b(?=[A-Z0-9]*\d)[A-Z0-9]{5,10}\b', text, re.IGNORECASE)
+    for w in alphanum:
+        if is_valid_code(w):
             return w
-        if len(w) >= 6 and not w.isalpha():
-            return w
-
-    # ৬. ৪ ডিজিটের কোড (সবশেষে)
-    digits = re.findall(r'\b\d{4}\b', text)
-    for d in digits:
-        if 2000 <= int(d) <= 2030:
-            continue
-        return d
 
     return "Code not found"
+
 
 # HTML থেকে টেক্সট বের করার ফাংশন
 def get_email_body(msg):
