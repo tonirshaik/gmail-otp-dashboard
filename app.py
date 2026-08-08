@@ -57,11 +57,10 @@ def extract_otp(text):
         if not code:
             return False
         code = code.strip()
-        if len(code) < 4 or len(code) > 12:
+        if len(code) < 4 or len(code) > 10:
             return False
         if is_year(code):
             return False
-        # pure alphabetic words ignore
         if code.isalpha():
             return False
         ignore = {
@@ -70,64 +69,97 @@ def extract_otp(text):
             'html', 'github', 'microsoft', 'facebook', 'apple', 'amazon',
             'twitter', 'linkedin', 'please', 'click', 'here', 'sign', 'link',
             'copy', 'paste', 'enter', 'valid', 'expire', 'minute', 'hour',
-            'have', 'donot', 'sudo', 'true', 'false', 'verify', 'token'
+            'have', 'donot', 'sudo', 'true', 'false', 'verify', 'token',
+            'number', 'order', 'invoice', 'reference', 'zip', 'tracking'
         }
         if code.lower() in ignore:
             return False
         return True
 
+    def clean_code(raw):
+        raw = raw.strip()
+        raw = re.split(r'\s+(?:to|for|is|and|or|the|a|an|in|on|at|by|will|has)\b', raw, flags=re.IGNORECASE)[0]
+        clean = re.sub(r'\s+', '', raw)
+        clean = re.sub(r'[^A-Z0-9\-]+$', '', clean, flags=re.IGNORECASE)
+        return clean
+
+    def has_bad_context(code, window=55):
+        pos = text.lower().find(code.lower()) if code else -1
+        if pos == -1:
+            # try finding digits only version
+            pos = text.find(code)
+        if pos == -1:
+            return False
+        context = text[max(0, pos - window):pos + window].lower()
+        bad_words = [
+            'order', 'invoice', 'tracking', 'reference', 'receipt',
+            'transaction', 'amount', 'price', 'zip code', 'postal code',
+            'order id', 'order number', 'invoice number', 'tracking number',
+            'ref no', 'ref:', 'txn', 'payment', 'total', 'bdt', 'usd', 'inr',
+            'error code', 'status code', 'promo code', 'coupon code'
+        ]
+        return any(bw in context for bw in bad_words)
+
     # ---------- 1. Keyword-based (most reliable) ----------
-    # Matches: "OTP is 123456", "verification code: 847291", "Your code 12 34 56" etc.
     keyword_patterns = [
-        r'(?:your\s+)?(?:otp|code|pin|verification\s*code|security\s*code|auth(?:entication)?\s*code|one[-\s]?time\s*(?:password|code)|login\s*code|access\s*code)[\s:#\-]*([A-Z0-9][\sA-Z0-9\-]{3,14})',
-        r'(?:code|otp|pin|password)[\s:#\-]+is[\s:#\-]*([A-Z0-9][\sA-Z0-9\-]{3,14})',
-        r'(?:enter|use|type)[\s]+(?:the\s+)?(?:code|otp|pin)[\s:#\-]*([A-Z0-9][\sA-Z0-9\-]{3,14})',
+        # Strong OTP phrases
+        r'(?:your\s+)?(?:otp|verification\s*code|security\s*code|auth(?:entication)?\s*code|one[-\s]?time\s*(?:password|code)|login\s*code|access\s*code)[\s:#\-]*(?:is[\s:#\-]*)?([A-Z0-9][A-Z0-9\s\-]{2,14})',
+        # "code is XXX" / "code: XXX" / "code XXX"
+        r'(?<![a-z])(?:code|otp|pin)[\s:#\-]+(?:is[\s:#\-]*)?([A-Z0-9][A-Z0-9\s\-]{2,14})',
+        # "enter/use/type the code"
+        r'(?:enter|use|type)\s+(?:the\s+)?(?:code|otp|pin)[\s:#\-]*([A-Z0-9][A-Z0-9\s\-]{2,14})',
+        # "PIN is" / "PIN:"
+        r'(?<![a-z])pin[\s:#\-]+(?:is[\s:#\-]*)?([A-Z0-9][A-Z0-9\s\-]{2,10})',
     ]
 
     for pat in keyword_patterns:
         m = re.search(pat, text, re.IGNORECASE)
         if m:
-            raw = m.group(1).strip()
-            # clean spaces inside code (e.g. "1 2 3 4 5 6" → "123456")
-            clean = re.sub(r'\s+', '', raw)
+            clean = clean_code(m.group(1))
             if is_valid_code(clean) and any(c.isdigit() for c in clean):
-                return clean if len(clean) <= 10 else raw
+                if not has_bad_context(clean):
+                    return clean
 
     # ---------- 2. G- codes (Google style) ----------
     gcode = re.search(r'\bG-[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
     if gcode:
         return gcode.group(0)
 
-    # ---------- 3. Spaced alphanumeric codes ----------
-    spaced = re.search(r'\b([A-Z0-9](?:\s+[A-Z0-9]){3,9})\b', text, re.IGNORECASE)
+    # ---------- 3. Spaced digit codes like "1 2 3 4 5 6" ----------
+    spaced = re.search(r'\b(\d(?:\s+\d){3,7})\b', text)
     if spaced:
         clean_spaced = re.sub(r'\s+', '', spaced.group(0))
-        if is_valid_code(clean_spaced) and any(c.isdigit() for c in clean_spaced):
+        if is_valid_code(clean_spaced) and not has_bad_context(clean_spaced):
             return clean_spaced
 
-    # ---------- 4. Prefer pure 6-digit codes (most common OTP length) ----------
+    # ---------- 4. Prefer pure 6-digit codes ----------
     six_digits = re.findall(r'(?<!\d)\d{6}(?!\d)', text)
     for d in six_digits:
-        if is_valid_code(d):
+        if is_valid_code(d) and not has_bad_context(d):
             return d
 
-    # ---------- 5. 4 / 5 / 7 / 8 digit codes (only if they look like OTP context) ----------
+    # ---------- 5. 4 / 7 / 8 digit (skip lonely 5-digit) ----------
     other_digits = re.findall(r'(?<!\d)\d{4,8}(?!\d)', text)
     for d in other_digits:
-        if is_valid_code(d):
-            # Extra filter for pure 5-digit: only accept if nearby keywords exist
-            if len(d) == 5:
-                pos = text.find(d)
-                if pos != -1:
-                    context = text[max(0, pos-80):pos+80].lower()
-                    if not any(kw in context for kw in ['otp', 'code', 'pin', 'verify', 'verification', 'security', 'login', 'auth', 'password', 'one-time', 'onetime']):
-                        continue  # skip lonely 5-digit numbers
-            return d
+        if not is_valid_code(d):
+            continue
+        if has_bad_context(d):
+            continue
+        if len(d) == 5:
+            pos = text.find(d)
+            if pos == -1:
+                continue
+            context = text[max(0, pos - 40):pos + 40].lower()
+            strong = ['otp', 'verification code', 'security code', 'login code',
+                      'access code', 'one-time', 'onetime', 'one time', 'auth code']
+            if not any(kw in context for kw in strong):
+                continue
+        return d
 
-    # ---------- 6. Alphanumeric codes (e.g. AB12CD, X7Y9Z2) ----------
-    alphanum = re.findall(r'\b(?=[A-Z0-9]*\d)[A-Z0-9]{5,10}\b', text, re.IGNORECASE)
+    # ---------- 6. Alphanumeric (must have letter + digit) ----------
+    alphanum = re.findall(r'\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{5,10}\b', text, re.IGNORECASE)
     for w in alphanum:
-        if is_valid_code(w):
+        if is_valid_code(w) and not has_bad_context(w):
             return w
 
     return "Code not found"
