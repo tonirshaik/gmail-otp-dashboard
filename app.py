@@ -7,7 +7,9 @@ import json
 import threading
 import hmac
 from datetime import datetime, timezone, timedelta
-from email.utils import parsedate_to_datetime
+from email.utils import parsedate_to_datetime, parseaddr
+from email.header import decode_header, make_header
+import html as html_lib
 from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
 from pymongo import MongoClient
@@ -70,172 +72,251 @@ def load_accounts():
             return []
     return []
 
+# ======================= OTP / Code extractor (v2) =======================
+# Ekta email-er text theke shob dhoroner code (OTP, PIN, verification code,
+# security code, login code, passcode ...) khuje ber kore.
+# Prottek candidate-ke "score" deya hoy: kache keyword ache kina, nijer line-e
+# ache kina, address/order/price er moto jinisher kache ache kina.
+
+_ZW = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u00ad"), None)
+_BN = {ord(c): str(i) for i, c in enumerate("০১২৩৪৫৬৭৮৯")}
+
+_STRONG_KW = re.compile(r"""(?ix)
+    \botp\b | \bpass\s?code\b | \bpin\b | ওটিপি | পিন |
+    one[-\s]?time(?:\s+(?:password|passcode|pin|code))? |
+    (?:verification|verify|confirmation|security|authentication|authorization|authenticator|
+       access|login|log[-\s]?in|sign[-\s]?in|activation|registration|reset|recovery|
+       temporary|temp|2fa|two[-\s]?factor|mfa)\s*(?:code|pin|passcode|password|key|token) |
+    (?:ভেরিফিকেশন|ভেরিফাই|যাচাই|নিরাপত্তা|সিকিউরিটি|লগইন)\s*কোড | ভেরিফিকেশন
+""")
+_WEAK_KW = re.compile(r"(?i)\bcode\b|\btoken\b|কোড|\bcódigo\b|\bcodice\b|\bkod\b")
+
+_NEG = re.compile(
+    r"(?i)\b(?:order|invoice|tracking|receipt|transaction|txn|amount|price|total|balance|zip|postal|"
+    r"phone|tel|call|mobile|a/c|street|st\.|avenue|ave|parkway|road|rd\.|suite|floor|apt|copyright|"
+    r"usd|bdt|inr|eur|tk|ref|reference|payment|paid|due|bill|flight|booking|ticket|version|build)\b|[$€£৳%©]")
+_PROMO_BEFORE = re.compile(
+    r"(?i)(?:promo(?:tion(?:al)?)?|coupon|discount|referral|invite|gift|voucher|zip|postal|post|area|"
+    r"country|dial|error|status|tracking|response|order|invoice|reference|ref|case|ticket|booking|"
+    r"flight|customer|member)\s*(?:code|number|no\.?|id|#)?\s*[:#-]?\s*$")
+_MARKETING = re.compile(
+    r"(?i)discount|coupon|promo|checkout|\bsale\b|\bdeal\b|% off|\boff\b|free shipping|\bsave\b|"
+    r"shop now|buy now|cashback|voucher")
+_INTENT = re.compile(
+    r"(?i)sign[-\s]?in|log[-\s]?in|\bverify\b|verification|\bconfirm|authenticate|do not share|"
+    r"don't share|never share|expires? in|valid for|will expire|within \d+ minutes?|শেয়ার করবেন না")
+_AFTER = re.compile(r"(?i)^\s*(?:is|as|are|was)\b[^\n]{0,70}?\b(?:code|otp|pin|passcode|password|কোড)\b")
+_LABEL = re.compile(r"(?i)(?:\bis|\bare|:|=|#|[-–—])\s*$")
+_IMPER = re.compile(r"(?i)\b(?:enter|type|input|use|submit|provide)\b[^\n]{0,40}$")
+
+_LB = r"(?<![\w#$@.,/+=&?-])"
+_CAND = [
+    ("spaced",  re.compile(_LB + r"(\d(?:[ \t]\d){3,7})(?![\w@.]|[ \t]\d)")),
+    ("grouped", re.compile(_LB + r"(\d{3,4}[ -]\d{3,4})(?![\w@]|[.,:/-]\d|[ -]\d)")),
+    ("dashed",  re.compile(_LB + r"([A-Za-z]{1,3}-(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{4,10})(?![\w@]|-)")),
+    ("digits",  re.compile(_LB + r"(\d{4,10})(?![\w@]|[.,:/-]\d)")),
+    ("alnum",   re.compile(_LB + r"((?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{4,12})(?![\w@]|[.,:/-]\w)")),
+]
+_LETTERS = re.compile(
+    r"(?i:\b(?:otp|pass\s?code|pin|code|verification\s+code|security\s+code)\b)\s*(?:is\b)?\s*[:=\-–]?\s*\b([A-Z]{4,10})\b")
+_LETTER_STOP = {"CODE", "EMAIL", "YOUR", "THIS", "THAT", "WITH", "FROM", "HERE", "LOGIN", "VERIFY",
+                "VALID", "EXPIRES", "GOOGLE", "GITHUB", "ACCOUNT", "PLEASE", "ENTER", "COPY", "PASTE",
+                "SIGN", "NOTE", "HELLO", "DEAR", "THANK", "THANKS", "TEAM", "EXPIRE", "MINUTES"}
+
+
+def _find_keywords(t):
+    kws, strong_spans = [], []
+    for m in _STRONG_KW.finditer(t):
+        kws.append((m.start(), m.end(), True))
+        strong_spans.append((m.start(), m.end()))
+    for m in _WEAK_KW.finditer(t):
+        if any(a <= m.start() and m.end() <= b for a, b in strong_spans):
+            continue
+        kws.append((m.start(), m.end(), False))
+    return kws
+
+
+def _score_candidate(t, kws, s, e, kind, text, has_intent):
+    line_start = t.rfind("\n", 0, s) + 1
+    nl = t.find("\n", e)
+    line_end = len(t) if nl == -1 else nl
+    before_line = t[line_start:s]
+    after_line = t[e:line_end]
+    own_line = re.fullmatch(r"[\W_]*" + re.escape(text) + r"[\W_]*", t[line_start:line_end]) is not None
+
+    # ager text ta jodi promo/order/zip er moto hoy, ta code na
+    if _PROMO_BEFORE.search(before_line[-40:]):
+        return -99
+
+    # ---- keyword kotota kache ----
+    kw_val, strong_hit = 0, False
+    for ks, ke, strong in kws:
+        if ke > s:
+            continue
+        d = s - ke
+        between_nl = t.count("\n", ke, s)
+        if ks >= line_start:                         # ek-i line-e
+            v = (7 if strong else 4) if d <= 30 else ((5 if strong else 2) if d <= 80 else 0)
+        elif between_nl <= 1 and d <= 40:            # ager line-er shesh-e
+            v = 6 if strong else 3
+        elif own_line and d <= 250:                  # code nijer line-e, keyword upore
+            v = 5 if strong else 3
+        else:
+            v = 0
+        if v > kw_val:
+            kw_val, strong_hit = v, strong
+
+    if _AFTER.match(after_line):                     # "123456 is your ... code"
+        if 7 > kw_val:
+            kw_val, strong_hit = 7, True
+
+    if kw_val == 0 and has_intent:                   # keyword nai, kintu sign-in/verify jatiyo kotha ache
+        stripped = before_line.rstrip().lower()
+        if own_line or stripped.endswith(("use", "enter", "type", "is", ":")) or (kind == "digits" and len(text) == 6):
+            kw_val = 4
+
+    if kw_val == 0:
+        return -99
+
+    score = kw_val
+    if _LABEL.search(before_line):
+        score += 2
+    if _IMPER.search(before_line):
+        score += 2
+    if own_line:
+        score += 2
+    if kind in ("spaced", "grouped"):
+        score += 2
+    if not before_line.strip() and t[:line_start].rstrip().endswith(":"):
+        score += 2                       # "Code:" ager line-e, code porer line-e
+    if has_intent:
+        score += 1
+    if kind == "digits" and len(text) == 6:
+        score += 1
+
+    # ---- shastir hisab ----
+    window = t[max(0, s - 45):min(len(t), e + 45)]
+    n_neg = len(_NEG.findall(window))
+    score -= min(n_neg, 2) if strong_hit else min(3 * n_neg, 9)
+
+    if not strong_hit and _MARKETING.search(t[max(0, s - 80):min(len(t), e + 80)]):
+        score -= 5
+
+    if kind == "digits":
+        if len(text) == 4 and 1990 <= int(text) <= 2035 and kw_val < 7:
+            score -= 4
+        if re.fullmatch(r"(\d)\1+", text):
+            score -= 2 if strong_hit else 8
+    return score
+
+
 def extract_otp(text):
     if not text:
         return "Code not found"
 
-    text = re.sub(r'\s+', ' ', text)  # normalize spaces
+    t = text.translate(_ZW).translate(_BN)
+    t = re.sub(r"https?://\S+|www\.\S+", " ", t)      # link-er bhitorer token bad
+    t = re.sub(r"\S+@\S+\.\S+", " ", t)               # email address bad
+    t = re.sub(r"[ \t\r\f\v]+", " ", t)
+    t = re.sub(r" *\n *", "\n", t)
+    t = re.sub(r"\n{2,}", "\n", t)
 
-    # ---------- Helper ----------
-    def is_year(s):
-        return s.isdigit() and len(s) == 4 and 2000 <= int(s) <= 2035
+    kws = _find_keywords(t)
+    if not kws and not _INTENT.search(t):
+        return "Code not found"
+    has_intent = bool(_INTENT.search(t))
 
-    def is_valid_code(code):
-        if not code:
-            return False
-        code = code.strip()
-        if len(code) < 4 or len(code) > 10:
-            return False
-        if is_year(code):
-            return False
-        if code.isalpha():
-            return False
-        ignore = {
-            'code', 'pin', 'otp', 'password', 'none', 'your', 'is', 'the',
-            'and', 'for', 'with', 'from', 'http', 'https', 'gmail', 'google',
-            'html', 'github', 'microsoft', 'facebook', 'apple', 'amazon',
-            'twitter', 'linkedin', 'please', 'click', 'here', 'sign', 'link',
-            'copy', 'paste', 'enter', 'valid', 'expire', 'minute', 'hour',
-            'have', 'donot', 'sudo', 'true', 'false', 'verify', 'token',
-            'number', 'order', 'invoice', 'reference', 'zip', 'tracking'
-        }
-        if code.lower() in ignore:
-            return False
-        return True
+    cands = []
+    for kind, rx in _CAND:
+        for m in rx.finditer(t):
+            cands.append((m.start(1), m.end(1), kind, m.group(1)))
+    wide = [(s, e) for s, e, k, _ in cands if k in ("spaced", "grouped", "dashed")]
+    cands = [c for c in cands
+             if c[2] in ("spaced", "grouped", "dashed")
+             or not any(ws <= c[0] and c[1] <= we for ws, we in wide)]
 
-    def clean_code(raw):
-        raw = raw.strip()
-        raw = re.split(r'\s+(?:to|for|is|and|or|the|a|an|in|on|at|by|will|has)\b', raw, flags=re.IGNORECASE)[0]
-        clean = re.sub(r'\s+', '', raw)
-        clean = re.sub(r'[^A-Z0-9\-]+$', '', clean, flags=re.IGNORECASE)
-        return clean
+    best = None   # (score, -start, output)
+    for s, e, kind, raw in cands:
+        sc = _score_candidate(t, kws, s, e, kind, raw, has_intent)
+        out = re.sub(r"\s+", "", raw) if kind in ("spaced", "grouped") else raw
+        if kind == "grouped":
+            out = out.replace(" ", "")
+        if sc >= 6 and (best is None or (sc, -s) > (best[0], best[1])):
+            best = (sc, -s, out)
 
-    def has_bad_context(code, window=55):
-        pos = text.lower().find(code.lower()) if code else -1
-        if pos == -1:
-            # try finding digits only version
-            pos = text.find(code)
-        if pos == -1:
-            return False
-        context = text[max(0, pos - window):pos + window].lower()
-        bad_words = [
-            'order', 'invoice', 'tracking', 'reference', 'receipt',
-            'transaction', 'amount', 'price', 'zip code', 'postal code',
-            'order id', 'order number', 'invoice number', 'tracking number',
-            'ref no', 'ref:', 'txn', 'payment', 'total', 'bdt', 'usd', 'inr',
-            'error code', 'status code', 'promo code', 'coupon code'
-        ]
-        return any(bw in context for bw in bad_words)
-
-    # ---------- 1. Keyword-based (most reliable) ----------
-    keyword_patterns = [
-        # Strong OTP phrases
-        r'(?:your\s+)?(?:otp|verification\s*code|security\s*code|auth(?:entication)?\s*code|one[-\s]?time\s*(?:password|code)|login\s*code|access\s*code)[\s:#\-]*(?:is[\s:#\-]*)?([A-Z0-9][A-Z0-9\s\-]{2,14})',
-        # "code is XXX" / "code: XXX" / "code XXX"
-        r'(?<![a-z])(?:code|otp|pin)[\s:#\-]+(?:is[\s:#\-]*)?([A-Z0-9][A-Z0-9\s\-]{2,14})',
-        # "enter/use/type the code"
-        r'(?:enter|use|type)\s+(?:the\s+)?(?:code|otp|pin)[\s:#\-]*([A-Z0-9][A-Z0-9\s\-]{2,14})',
-        # "PIN is" / "PIN:"
-        r'(?<![a-z])pin[\s:#\-]+(?:is[\s:#\-]*)?([A-Z0-9][A-Z0-9\s\-]{2,10})',
-    ]
-
-    for pat in keyword_patterns:
-        m = re.search(pat, text, re.IGNORECASE)
-        if m:
-            clean = clean_code(m.group(1))
-            if is_valid_code(clean) and any(c.isdigit() for c in clean):
-                if not has_bad_context(clean):
-                    return clean
-
-    # ---------- 2. G- codes (Google style) ----------
-    gcode = re.search(r'\bG-[A-Z0-9]{4,10}\b', text, re.IGNORECASE)
-    if gcode:
-        return gcode.group(0)
-
-    # ---------- 3. Spaced digit codes like "1 2 3 4 5 6" ----------
-    spaced = re.search(r'\b(\d(?:\s+\d){3,7})\b', text)
-    if spaced:
-        clean_spaced = re.sub(r'\s+', '', spaced.group(0))
-        if is_valid_code(clean_spaced) and not has_bad_context(clean_spaced):
-            return clean_spaced
-
-    # ---------- 4. Prefer pure 6-digit codes ----------
-    six_digits = re.findall(r'(?<!\d)\d{6}(?!\d)', text)
-    for d in six_digits:
-        if is_valid_code(d) and not has_bad_context(d):
-            return d
-
-    # ---------- 5. 4 / 7 / 8 digit (skip lonely 5-digit) ----------
-    other_digits = re.findall(r'(?<!\d)\d{4,8}(?!\d)', text)
-    for d in other_digits:
-        if not is_valid_code(d):
+    # keyword-er thik pashe shudhu bornomala-r code (jemon  "code: ABCDEF")
+    for m in _LETTERS.finditer(t):
+        word = m.group(1)
+        s = m.start(1)
+        if word in _LETTER_STOP:
             continue
-        if has_bad_context(d):
+        if _PROMO_BEFORE.search(t[max(0, m.start() - 40):s]):
             continue
-        if len(d) == 5:
-            pos = text.find(d)
-            if pos == -1:
-                continue
-            context = text[max(0, pos - 40):pos + 40].lower()
-            strong = ['otp', 'verification code', 'security code', 'login code',
-                      'access code', 'one-time', 'onetime', 'one time', 'auth code']
-            if not any(kw in context for kw in strong):
-                continue
-        return d
+        if _MARKETING.search(t[max(0, s - 80):s + 80]):
+            continue
+        if best is None or (8, -s) > (best[0], best[1]):
+            best = (8, -s, word)
 
-    # ---------- 6. Alphanumeric (must have letter + digit) ----------
-    alphanum = re.findall(r'\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*\d)[A-Z0-9]{5,10}\b', text, re.IGNORECASE)
-    for w in alphanum:
-        if is_valid_code(w) and not has_bad_context(w):
-            return w
-
-    return "Code not found"
+    return best[2] if best else "Code not found"
 
 
-# HTML থেকে টেক্সট বের করার ফাংশন
-def get_email_body(msg):
-    body = ""
-    html_body = ""
+def html_to_text(html_body):
+    t = re.sub(r"(?is)<(script|style|head)[^>]*>.*?</\1>", " ", html_body)
+    t = re.sub(r"(?i)<br\s*/?>|</(?:p|div|tr|li|h[1-6]|table|td|th)>", "\n", t)
+    t = re.sub(r"<[^>]+>", " ", t)
+    t = html_lib.unescape(t).replace("\xa0", " ")
+    return t
 
-    if msg.is_multipart():
-        for part in msg.walk():
-            ctype = part.get_content_type()
-            if ctype == "text/plain" and not body:
-                try:
-                    body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                except:
-                    pass
-            elif ctype == "text/html" and not html_body:
-                try:
-                    html_body = part.get_payload(decode=True).decode('utf-8', errors='ignore')
-                except:
-                    pass
-    else:
+
+def get_email_texts(msg):
+    """Email theke text/plain ar html-text, dutoi ber kore (jeta-te code pawa jay)."""
+    plain, html_body = "", ""
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    for part in parts:
+        ctype = part.get_content_type()
+        if ctype not in ("text/plain", "text/html"):
+            continue
         try:
-            payload = msg.get_payload(decode=True)
-            if payload:
-                decoded = payload.decode('utf-8', errors='ignore')
-                if msg.get_content_type() == "text/html":
-                    html_body = decoded
-                else:
-                    body = decoded
-        except:
-            pass
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+            charset = part.get_content_charset() or "utf-8"
+            decoded = payload.decode(charset, errors="ignore")
+        except Exception:
+            continue
+        if ctype == "text/plain" and not plain:
+            plain = decoded
+        elif ctype == "text/html" and not html_body:
+            html_body = decoded
+    texts = []
+    if plain.strip():
+        texts.append(plain)
+    if html_body.strip():
+        texts.append(html_to_text(html_body))
+    return texts
 
-    # যদি text/plain খালি থাকে, তবে html_body থেকে ট্যাগ বাদ দিয়ে টেক্সট নেওয়া হবে
-    if not body.strip() and html_body:
-        body = re.sub(r'<[^>]+>', ' ', html_body)
-        body = re.sub(r'&nbsp;', ' ', body)
-        body = re.sub(r'&amp;', '&', body)
-        body = re.sub(r'&lt;', '<', body)
-        body = re.sub(r'&gt;', '>', body)
-        body = re.sub(r'\s+', ' ', body).strip()
 
-    return body
+def get_email_body(msg):
+    texts = get_email_texts(msg)
+    return texts[0] if texts else ""
+
+
+def decode_hdr(value, default=""):
+    if not value:
+        return default
+    try:
+        return str(make_header(decode_header(value)))
+    except Exception:
+        return str(value)
+
 
 # Ager email-er result jomiye rakha hoy, jate bar bar same email download na hoy.
 # Shudhu notun email ashle seta-i download hobe.
 EMAIL_CACHE = {}
+
+# Koyta shesh email dekhe code khujbe (kom dile download kom hobe)
+INBOX_SCAN_LIMIT = 5
+SPAM_SCAN_LIMIT = 3
 EMAIL_CACHE_MAX = 3000
 
 def fetch_email_info(mail, uid):
@@ -244,8 +325,10 @@ def fetch_email_info(mail, uid):
     for part in msg_data or []:
         if isinstance(part, tuple):
             msg = email.message_from_bytes(part[1])
-            subject = msg.get("Subject", "No Subject")
-            sender = msg.get("From", "Unknown Sender")
+            subject = decode_hdr(msg.get("Subject"), "No Subject")
+            raw_from = decode_hdr(msg.get("From"), "Unknown Sender")
+            name, addr = parseaddr(raw_from)
+            sender = name or addr or raw_from
             date_hdr = msg.get("Date")
 
             msg_dt = datetime.now()
@@ -259,8 +342,11 @@ def fetch_email_info(mail, uid):
                 except:
                     pass
 
-            body = get_email_body(msg)
-            otp = extract_otp(subject + " " + body)
+            otp = "Code not found"
+            for body in get_email_texts(msg) or [""]:
+                otp = extract_otp(subject + "\n" + body)
+                if otp != "Code not found":
+                    break
             return {
                 "sender": sender,
                 "subject": subject,
@@ -304,7 +390,7 @@ def check_gmail(account, mail_data):
 
         # 1. Prothome Inbox
         try:
-            result = scan_folder(mail, account['email'], "inbox", 7)
+            result = scan_folder(mail, account['email'], "inbox", INBOX_SCAN_LIMIT)
         except Exception as e:
             print(f"[INBOX ERROR] {account['email']}: {e}")
 
@@ -313,7 +399,7 @@ def check_gmail(account, mail_data):
             label = "SPAM"
             for folder in ["[Gmail]/Spam", "Spam"]:
                 try:
-                    result = scan_folder(mail, account['email'], folder, 5)
+                    result = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
                 except Exception:
                     result = None
                 if result:
