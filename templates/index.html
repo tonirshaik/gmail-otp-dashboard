@@ -762,51 +762,26 @@
             return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
-        // Code ashar 2 minute por card-e \"No emails found\" dekhabe
-        const EXPIRED_ITEM = { code: 'No emails found', sender: 'N/A', time: 'N/A' };
-
+        // Home-e code 2 minute dekhabe. expiresAt = kokhon home theke soribe.
+        // (Total Gmail list-e shesh code always thake)
         function normalizeExpiry(item) {
-            const valid = item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error';
-            if (!valid) return item;
+            if (!isValidItem(item)) return item;
             const ttl = item.ttl_seconds ?? 120;
             const age = item.age_seconds ?? 0;
-            const remainingMs = (ttl - age) * 1000;
-            if (remainingMs <= 0) return { ...item, ...EXPIRED_ITEM };
-            return { ...item, expiresAt: Date.now() + remainingMs };
-        }
-
-        function expireCard(card) {
-            delete card.dataset.expires;
-            card.classList.remove('is-new', 'expiring');
-            const dot = card.querySelector('.new-dot'); if (dot) dot.remove();
-            const ex = card.querySelector('.otp-expiry'); if (ex) ex.remove();
-            const box = card.querySelector('.otp-code-box');
-            if (box) {
-                box.removeAttribute('onclick');
-                box.removeAttribute('title');
-                box.style.cssText = 'cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;';
-                box.textContent = 'No emails found';
-            }
-            const tm = card.querySelector('.otp-time');
-            if (tm) tm.innerHTML = '<i class="fa-regular fa-clock"></i> Time: N/A | Sender: N/A';
+            return { ...item, expiresAt: Date.now() + (ttl - age) * 1000 };
         }
 
         function tickExpiry() {
             let homeExpired = false;
-            document.querySelectorAll('.otp-card[data-expires]').forEach(card => {
+            document.querySelectorAll('#otpContainer .otp-card[data-expires]').forEach(card => {
                 const left = Number(card.dataset.expires) - Date.now();
-                if (left <= 0) {
-                    // home-er card hole sorano hobe, popup-er list-e "No emails found" hobe
-                    if (otpContainer.contains(card)) homeExpired = true;
-                    else expireCard(card);
-                    return;
-                }
+                if (left <= 0) { homeExpired = true; return; }
                 const sec = Math.ceil(left / 1000);
                 const el = card.querySelector('.otp-expiry-time');
                 if (el) el.textContent = fmtLeft(sec);
                 card.classList.toggle('expiring', sec <= 20);
             });
-            if (homeExpired) renderHome();
+            if (homeExpired) renderHome();   // 2 minute shesh -> home theke sore jabe
         }
         setInterval(tickExpiry, 1000);
 
@@ -824,19 +799,13 @@
             return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
         }
 
-        // expire hoye gele item-ta "No emails found" hishabe dhore
-        function liveItems() {
-            const now = Date.now();
-            return allItems.map(it =>
-                (it.expiresAt && it.expiresAt <= now) ? { ...it, ...EXPIRED_ITEM, expiresAt: undefined } : it);
-        }
-
         function cardHTML(item, opts) {
             const validCode = isValidItem(item);
             const isNew = !!opts.isNew;
-            const leftSec = validCode ? Math.max(0, Math.ceil((item.expiresAt - Date.now()) / 1000)) : 0;
+            const withTimer = validCode && !!opts.showExpiry;
+            const leftSec = withTimer ? Math.max(0, Math.ceil((item.expiresAt - Date.now()) / 1000)) : 0;
             const card = `
-                <div class="otp-card ${isNew ? 'is-new' : ''}" ${validCode ? `data-expires="${item.expiresAt}"` : ''}>
+                <div class="otp-card ${isNew ? 'is-new' : ''}" ${withTimer ? `data-expires="${item.expiresAt}"` : ''}>
                     ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
                         ${escAttr(item.email)}
@@ -845,7 +814,7 @@
                         <div class="otp-code-box" onclick="copyOTP('${escAttr(item.code)}')" title="Click to copy">
                             ${escAttr(item.code)}
                         </div>
-                        <div class="otp-expiry"><i class="fa-solid fa-hourglass-half"></i> Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></div>
+                        ${withTimer ? `<div class="otp-expiry"><i class="fa-solid fa-hourglass-half"></i> Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></div>` : ''}
                     ` : `
                         <div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">
                             ${item.code || 'Code not found'}
@@ -873,7 +842,8 @@
                     </div>`;
                 return;
             }
-            const active = liveItems().filter(isValidItem);
+            const now = Date.now();
+            const active = allItems.filter(i => isValidItem(i) && i.expiresAt > now);
             if (active.length === 0) {
                 otpContainer.innerHTML = `
                     <div class="empty-state">
@@ -883,7 +853,7 @@
                 return;
             }
             const shown = active.slice(0, HOME_MAX);
-            let html = shown.map(item => cardHTML(item, { isNew: newCardEmails.includes(item.email), deletable: false })).join('');
+            let html = shown.map(item => cardHTML(item, { isNew: newCardEmails.includes(item.email), deletable: false, showExpiry: true })).join('');
             if (active.length > HOME_MAX) {
                 html += `<div class="empty-state" style="padding: 6px 0;">+${active.length - HOME_MAX} more active code(s) &middot; tap "Total Gmail Added" to see all</div>`;
             }
@@ -901,7 +871,7 @@
                 allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>No Gmail accounts added yet.</div>`;
                 return;
             }
-            allContainer.innerHTML = liveItems().map(item => cardHTML(item, { isNew: false, deletable: true })).join('');
+            allContainer.innerHTML = allItems.map(item => cardHTML(item, { isNew: false, deletable: true })).join('');
         }
 
         function accountsModalOpen() { return !accountsModal.classList.contains('hidden'); }
@@ -933,12 +903,12 @@
             newCardEmails = [];
             if (previousCodes.length > 0) {
                 allItems.forEach(item => {
-                    if (isValidItem(item)) {
+                    if (isValidItem(item) && item.expiresAt > Date.now()) {
                         const prev = previousCodes.find(p => p.email === item.email);
                         if (!prev || prev.code !== item.code) newCardEmails.push(item.email);
                     }
                 });
-            } else if (allItems[0] && isValidItem(allItems[0])) {
+            } else if (allItems[0] && isValidItem(allItems[0]) && allItems[0].expiresAt > Date.now()) {
                 newCardEmails.push(allItems[0].email);
             }
 
