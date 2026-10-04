@@ -1106,23 +1106,35 @@
                 && !deleteModalOpen() && !openWrap && !autoPaused;
         }
 
+        // Shudhu click / tap / key / scroll ke "kaj kora" dhora hoy.
+        // Mouse bhul kore nare gele bondho hoye thaka auto-refresh abar chalu hobe na.
         function markActivity() {
+            if (autoPaused) return;
             lastActivity = Date.now();
-            if (autoPaused && !dashboardIsOpen()) autoPaused = false;
-            if (autoPaused && dashboardIsOpen()) {
-                autoPaused = false;
-                setAutoStatus('<i class="fa-solid fa-bolt"></i> Auto-refresh ON');
-                fetchOTPs(true);
-            }
         }
-        ['pointerdown', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev =>
+        ['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(ev =>
             document.addEventListener(ev, markActivity, { passive: true }));
 
+        function resumeAutoRefresh() {
+            autoPaused = false;
+            lastActivity = Date.now();
+            setAutoStatus('<i class="fa-solid fa-bolt"></i> Auto-refresh ON');
+            fetchOTPs(true);
+        }
+
         setInterval(() => {
-            if (!dashboardIsOpen() || document.visibilityState !== 'visible') return;
+            if (!dashboardIsOpen()) {
+                // logout / session shesh hole abar notun kore shuru
+                autoPaused = false;
+                lastActivity = Date.now();
+                return;
+            }
+            if (document.visibilityState !== 'visible') return;
             if (!autoPaused && Date.now() - lastActivity > AUTO_IDLE_MINUTES * 60 * 1000) {
                 autoPaused = true;
-                setAutoStatus('<i class="fa-solid fa-pause"></i> Auto-refresh paused (inactive). Tap or move to resume');
+                setAutoStatus('<i class="fa-solid fa-pause"></i> Auto-refresh paused &middot; ' +
+                    '<button type="button" onclick="resumeAutoRefresh()" ' +
+                    'style="background:none;border:none;color:#22d3ee;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline;">Resume</button>');
                 return;
             }
             if (autoRefreshAllowed()) fetchOTPs(true);
@@ -1141,6 +1153,8 @@
             loginSection.classList.remove('hidden');
             document.getElementById('masterPasswordInput').value = '';
             previousCodes = [];
+            autoPaused = false;
+            lastActivity = Date.now();
         }
     </script>
 </body>
