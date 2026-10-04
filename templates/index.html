@@ -1006,6 +1006,8 @@
             if (!optRes.ok) throw new Error(opts.error || 'Failed');
             opts.challenge = b64uToBuf(opts.challenge);
             (opts.allowCredentials || []).forEach(c => c.id = b64uToBuf(c.id));
+            // Browser-ke bole: ei device-er fingerprint/face/PIN-i chai (phone/security-key option lukiye dey)
+            opts.hints = ['client-device'];
 
             const cred = await navigator.credentials.get({ publicKey: opts });
             const credential = {
