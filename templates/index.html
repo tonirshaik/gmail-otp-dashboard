@@ -311,6 +311,8 @@
         .otp-code-box:active { transform: scale(0.96); }
 
         .otp-time { font-size: 11px; color: var(--text-muted); }
+        .otp-expiry { font-size: 11px; color: var(--accent-cyan); margin-bottom: 6px; }
+        .otp-card.expiring .otp-expiry { color: var(--accent-red); }
         .empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 20px 0; }
 
         .toast {
@@ -476,7 +478,7 @@
                 <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
             </button>
             <div id="autoStatus" style="text-align:center; font-size:12px; opacity:0.65; margin-top:8px;">
-                <i class="fa-solid fa-bolt"></i> Auto-refresh ON
+                <i class="fa-regular fa-clock"></i> Last updated: --
             </div>
 
             <div class="otp-container" id="otpContainer">
@@ -689,7 +691,7 @@
                 renderOTPs(data);
                 const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 document.getElementById('autoStatus').innerHTML =
-                    `<i class="fa-solid fa-bolt"></i> Auto-refresh ON &middot; Last updated ${t}`;
+                    `<i class="fa-regular fa-clock"></i> Last updated ${t}`;
 
             } catch (err) {
                 // silent refresh e error hole purono OTP gulo thakbe, kichu muche jabe na
@@ -715,6 +717,47 @@
             return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
+        // Code ashar 2 minute por card-e \"No emails found\" dekhabe
+        const EXPIRED_ITEM = { code: 'No emails found', sender: 'N/A', time: 'N/A' };
+
+        function normalizeExpiry(item) {
+            const valid = item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error';
+            if (!valid) return item;
+            const ttl = item.ttl_seconds ?? 120;
+            const age = item.age_seconds ?? 0;
+            const remainingMs = (ttl - age) * 1000;
+            if (remainingMs <= 0) return { ...item, ...EXPIRED_ITEM };
+            return { ...item, expiresAt: Date.now() + remainingMs };
+        }
+
+        function expireCard(card) {
+            delete card.dataset.expires;
+            card.classList.remove('is-new', 'expiring');
+            const dot = card.querySelector('.new-dot'); if (dot) dot.remove();
+            const ex = card.querySelector('.otp-expiry'); if (ex) ex.remove();
+            const box = card.querySelector('.otp-code-box');
+            if (box) {
+                box.removeAttribute('onclick');
+                box.removeAttribute('title');
+                box.style.cssText = 'cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;';
+                box.textContent = 'No emails found';
+            }
+            const tm = card.querySelector('.otp-time');
+            if (tm) tm.innerHTML = '<i class="fa-regular fa-clock"></i> Time: N/A | Sender: N/A';
+        }
+
+        function tickExpiry() {
+            document.querySelectorAll('.otp-card[data-expires]').forEach(card => {
+                const left = Number(card.dataset.expires) - Date.now();
+                if (left <= 0) { expireCard(card); return; }
+                const s = Math.ceil(left / 1000);
+                const el = card.querySelector('.otp-expiry-time');
+                if (el) el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
+                card.classList.toggle('expiring', s <= 20);
+            });
+        }
+        setInterval(tickExpiry, 1000);
+
         function renderOTPs(otps) {
             if (!otps || otps.length === 0) {
                 otpContainer.innerHTML = `
@@ -724,6 +767,8 @@
                     </div>`;
                 return;
             }
+
+            otps = otps.map(normalizeExpiry);
 
             // কোন কোন কার্ড নতুন তা চেক করা
             let newCardEmails = [];
@@ -754,7 +799,7 @@
                 return `
                 <div class="otp-swipe">
                 <button type="button" class="swipe-delete" data-email="${escAttr(item.email)}" title="Remove this Gmail"><i class="fa-solid fa-trash"></i></button>
-                <div class="otp-card ${isNew ? 'is-new' : ''}">
+                <div class="otp-card ${isNew ? 'is-new' : ''}" ${validCode ? `data-expires="${item.expiresAt}"` : ''}>
                     ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
                         ${escAttr(item.email)}
@@ -763,6 +808,7 @@
                         <div class="otp-code-box" onclick="copyOTP('${escAttr(item.code)}')" title="Click to copy">
                             ${escAttr(item.code)}
                         </div>
+                        <div class="otp-expiry"><i class="fa-solid fa-hourglass-half"></i> Expires in <span class="otp-expiry-time">--:--</span></div>
                     ` : `
                         <div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">
                             ${item.code || 'Code not found'}
@@ -1088,6 +1134,7 @@
         deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) closeDeleteModal(); });
 
         // ---------- Auto refresh ----------
+        const AUTO_REFRESH_ENABLED = false;  // true korle auto-refresh abar chalu hobe
         const AUTO_REFRESH_SECONDS = 30;   // koto sekende ekbar check hobe
         const AUTO_IDLE_MINUTES = 2;       // koto minute kichu na korle auto-refresh thambe
         let lastActivity = Date.now();
@@ -1123,6 +1170,7 @@
         }
 
         setInterval(() => {
+            if (!AUTO_REFRESH_ENABLED) return;
             if (!dashboardIsOpen()) {
                 // logout / session shesh hole abar notun kore shuru
                 autoPaused = false;
@@ -1142,7 +1190,7 @@
 
         // tab-e fire asle sathe sathe ekbar update
         document.addEventListener('visibilitychange', () => {
-            if (document.visibilityState === 'visible' && autoRefreshAllowed()) {
+            if (AUTO_REFRESH_ENABLED && document.visibilityState === 'visible' && autoRefreshAllowed()) {
                 fetchOTPs(true);
             }
         });
