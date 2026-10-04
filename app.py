@@ -419,6 +419,18 @@ def fetch_otps():
     all_otps = get_latest_otps()
     return jsonify(all_otps)
 
+@app.route('/api/accounts-count')
+def accounts_count():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if accounts_collection is None:
+        return jsonify({"count": 0})
+    try:
+        return jsonify({"count": accounts_collection.count_documents({})})
+    except Exception as e:
+        print(f"Count error: {e}")
+        return jsonify({"count": 0})
+
 @app.route('/api/add-account', methods=['POST'])
 def add_account():
     if not session.get('logged_in'):
