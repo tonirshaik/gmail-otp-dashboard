@@ -628,7 +628,9 @@
                 if (res.ok) {
                     openSettingsContent();
                 } else {
-                    showSettingsError('Incorrect password. Please try again.');
+                    let msg = 'Incorrect password. Please try again.';
+                    try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (e2) {}
+                    showSettingsError(msg);
                 }
             } catch (err) {
                 showSettingsError('Server Error!');
@@ -682,8 +684,10 @@
                     dashboardSection.classList.remove('hidden');
                     fetchOTPs();
                 } else {
+                    let msg = "Wrong Master Password!";
+                    try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (e2) {}
                     loginError.style.display = 'block';
-                    loginError.innerText = "Wrong Master Password!";
+                    loginError.innerText = msg;
                 }
             } catch (err) {
                 loginError.style.display = 'block';
