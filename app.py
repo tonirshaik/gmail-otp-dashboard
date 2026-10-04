@@ -63,6 +63,7 @@ app.config.update(
 db = None
 accounts_collection = None
 passkeys_collection = None
+security_collection = None
 
 if MONGO_URI:
     try:
@@ -70,6 +71,7 @@ if MONGO_URI:
         db = client['gmail_otp_db']
         accounts_collection = db['accounts']
         passkeys_collection = db['passkeys']
+        security_collection = db['security']   # login lock-er state (shob worker-e eki)
         print("MongoDB Connected Successfully!")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
@@ -85,14 +87,14 @@ def load_accounts():
     return []
 
 # ======================= Password check + lockout =======================
-# 3 bar vul password dile 10 minute lock. IP onujayi gona hoy.
+# 3 bar vul password dile 10 minute lock.
+# Lock "global" -- IP/worker jai hok, lock thakle sothik password-o kaj korbe na.
+# State MongoDB-te thake (jate gunicorn-er ek-er besi worker/restart-e-o lock thake).
+# Fingerprint/Face login lock-er bhitore pore na.
 MAX_FAILS = 3
 LOCK_SECONDS = 10 * 60
-_fail_state = {}                 # (bucket, ip) -> {"fails", "last", "locked_until"}
+_fail_state = {}                 # Mongo na thakle / error hole fallback (shudhu ei process-e)
 _fail_lock = threading.Lock()
-
-def _client_ip():
-    return request.remote_addr or "unknown"
 
 def pw_equal(given, expected):
     if not expected:             # env set kora nai -> kono password-i match korbe na
@@ -102,30 +104,55 @@ def pw_equal(given, expected):
     except Exception:
         return False
 
+def _mem_get(bucket):
+    return _fail_state.setdefault(bucket, {"fails": 0, "last": 0, "locked_until": 0})
+
 def lock_remaining(bucket):
     """Lock thakle koto sekend baki, nahole 0."""
-    key = (bucket, _client_ip())
     now = time.time()
-    with _fail_lock:
-        st = _fail_state.get(key)
-        if not st:
+    if security_collection is not None:
+        try:
+            doc = security_collection.find_one({"_id": bucket})
+            if not doc:
+                return 0
+            if doc.get("locked_until", 0) > now:
+                return int(doc["locked_until"] - now) + 1
+            if doc.get("locked_until") or now - doc.get("last", 0) > LOCK_SECONDS:
+                security_collection.delete_one({"_id": bucket})   # lock sesh -> notun kore shuru
             return 0
+        except Exception as e:
+            print(f"Lock read error (memory fallback): {e}")
+    with _fail_lock:
+        st = _mem_get(bucket)
         if st["locked_until"] > now:
             return int(st["locked_until"] - now) + 1
         if st["locked_until"] or now - st["last"] > LOCK_SECONDS:
-            del _fail_state[key]         # lock sesh / purono vul -> notun kore shuru
+            st.update({"fails": 0, "last": 0, "locked_until": 0})
         return 0
 
 def register_fail(bucket):
     """Vul password gona hoy. (lock-er sekend, baki chance) ferot dey."""
-    key = (bucket, _client_ip())
     now = time.time()
+    if security_collection is not None:
+        try:
+            security_collection.update_one(
+                {"_id": bucket},
+                {"$inc": {"fails": 1}, "$set": {"last": now}, "$setOnInsert": {"locked_until": 0}},
+                upsert=True,
+            )
+            doc = security_collection.find_one({"_id": bucket}) or {}
+            fails = doc.get("fails", 1)
+            if fails >= MAX_FAILS:
+                security_collection.update_one(
+                    {"_id": bucket},
+                    {"$set": {"locked_until": now + LOCK_SECONDS, "fails": 0}},
+                )
+                return LOCK_SECONDS, 0
+            return 0, MAX_FAILS - fails
+        except Exception as e:
+            print(f"Lock write error (memory fallback): {e}")
     with _fail_lock:
-        if len(_fail_state) > 500:       # memory poriskar
-            for k in [k for k, v in _fail_state.items()
-                      if v["locked_until"] <= now and now - v["last"] > LOCK_SECONDS]:
-                del _fail_state[k]
-        st = _fail_state.setdefault(key, {"fails": 0, "last": now, "locked_until": 0})
+        st = _mem_get(bucket)
         st["fails"] += 1
         st["last"] = now
         if st["fails"] >= MAX_FAILS:
@@ -135,8 +162,13 @@ def register_fail(bucket):
         return 0, MAX_FAILS - st["fails"]
 
 def clear_fails(bucket):
+    if security_collection is not None:
+        try:
+            security_collection.delete_one({"_id": bucket})
+        except Exception as e:
+            print(f"Lock clear error: {e}")
     with _fail_lock:
-        _fail_state.pop((bucket, _client_ip()), None)
+        _fail_state.pop(bucket, None)
 
 def locked_response(secs):
     mins = max(1, math.ceil(secs / 60))
