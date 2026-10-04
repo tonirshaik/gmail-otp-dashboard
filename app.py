@@ -6,6 +6,7 @@ import time
 import json
 import threading
 import hmac
+import math
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime, parseaddr
 from email.header import decode_header, make_header
@@ -14,6 +15,7 @@ from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
 from pymongo import MongoClient
 from flask_cors import CORS
+from werkzeug.middleware.proxy_fix import ProxyFix
 from webauthn import (
     generate_registration_options, verify_registration_response,
     generate_authentication_options, verify_authentication_response,
@@ -27,13 +29,23 @@ from webauthn.helpers.structs import (
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
+# Render proxy-r pichone thake, tai asol client IP pete lage (lockout-er jonno)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
-# Session Secure Key & Master Password
-app.secret_key = os.environ.get("SECRET_KEY", "your_secret_session_key_123")
-MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", "12342")
+# Session Secure Key & Passwords -- shob Render-er Environment theke ashbe, code-e kono default nai
+SECRET_KEY = os.environ.get("SECRET_KEY", "")
+if not SECRET_KEY:
+    print("WARNING: SECRET_KEY set kora nai! Ekta temporary key use hocche (restart dile sobai logout hobe).")
+    SECRET_KEY = os.urandom(32).hex()
+app.secret_key = SECRET_KEY
+
+MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", "")
+SETTINGS_PASSWORD = os.environ.get("SETTINGS_PASSWORD", "")
+if not MASTER_PASSWORD:
+    print("WARNING: MASTER_PASSWORD set kora nai! Login bondho thakbe.")
+if not SETTINGS_PASSWORD:
+    print("WARNING: SETTINGS_PASSWORD set kora nai! Settings unlock / delete bondho thakbe.")
 MONGO_URI = os.environ.get("MONGO_URI", "")
-# Settings password ekhon server-e check hoy (age index.html-e hardcode chilo)
-SETTINGS_PASSWORD = os.environ.get("SETTINGS_PASSWORD", "889900")
 
 # Passkey (fingerprint / face) config
 RP_ID = os.environ.get("RP_ID", "gmail-otp-dashboard.onrender.com")
@@ -71,6 +83,75 @@ def load_accounts():
             print(f"Error loading accounts from Mongo: {e}")
             return []
     return []
+
+# ======================= Password check + lockout =======================
+# 3 bar vul password dile 10 minute lock. IP onujayi gona hoy.
+MAX_FAILS = 3
+LOCK_SECONDS = 10 * 60
+_fail_state = {}                 # (bucket, ip) -> {"fails", "last", "locked_until"}
+_fail_lock = threading.Lock()
+
+def _client_ip():
+    return request.remote_addr or "unknown"
+
+def pw_equal(given, expected):
+    if not expected:             # env set kora nai -> kono password-i match korbe na
+        return False
+    try:
+        return hmac.compare_digest(str(given).encode("utf-8"), expected.encode("utf-8"))
+    except Exception:
+        return False
+
+def lock_remaining(bucket):
+    """Lock thakle koto sekend baki, nahole 0."""
+    key = (bucket, _client_ip())
+    now = time.time()
+    with _fail_lock:
+        st = _fail_state.get(key)
+        if not st:
+            return 0
+        if st["locked_until"] > now:
+            return int(st["locked_until"] - now) + 1
+        if st["locked_until"] or now - st["last"] > LOCK_SECONDS:
+            del _fail_state[key]         # lock sesh / purono vul -> notun kore shuru
+        return 0
+
+def register_fail(bucket):
+    """Vul password gona hoy. (lock-er sekend, baki chance) ferot dey."""
+    key = (bucket, _client_ip())
+    now = time.time()
+    with _fail_lock:
+        if len(_fail_state) > 500:       # memory poriskar
+            for k in [k for k, v in _fail_state.items()
+                      if v["locked_until"] <= now and now - v["last"] > LOCK_SECONDS]:
+                del _fail_state[k]
+        st = _fail_state.setdefault(key, {"fails": 0, "last": now, "locked_until": 0})
+        st["fails"] += 1
+        st["last"] = now
+        if st["fails"] >= MAX_FAILS:
+            st["locked_until"] = now + LOCK_SECONDS
+            st["fails"] = 0
+            return LOCK_SECONDS, 0
+        return 0, MAX_FAILS - st["fails"]
+
+def clear_fails(bucket):
+    with _fail_lock:
+        _fail_state.pop((bucket, _client_ip()), None)
+
+def locked_response(secs):
+    mins = max(1, math.ceil(secs / 60))
+    return jsonify({
+        "error": f"Too many wrong attempts. Try again in {mins} minute(s).",
+        "locked": True,
+        "retry_after": secs,
+    }), 429
+
+def wrong_password_response(bucket, msg):
+    locked, left = register_fail(bucket)
+    if locked:
+        return locked_response(locked)
+    return jsonify({"error": f"{msg} ({left} attempt(s) left)"}), 401
+
 
 # ======================= OTP / Code extractor (v2) =======================
 # Ekta email-er text theke shob dhoroner code (OTP, PIN, verification code,
@@ -485,12 +566,18 @@ def home():
 
 @app.route('/api/login', methods=['POST'])
 def login():
+    if not MASTER_PASSWORD:
+        return jsonify({"error": "Server not configured (MASTER_PASSWORD missing)"}), 503
+    secs = lock_remaining('login')
+    if secs:
+        return locked_response(secs)
     data = request.json or {}
     password = data.get('password')
-    if password and hmac.compare_digest(str(password), MASTER_PASSWORD):
+    if password and pw_equal(password, MASTER_PASSWORD):
+        clear_fails('login')
         session['logged_in'] = True
         return jsonify({"success": True})
-    return jsonify({"error": "Wrong password!"}), 401
+    return wrong_password_response('login', "Wrong password!")
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -536,9 +623,13 @@ def delete_account():
         if not verified_at or (time.time() - verified_at) > 60:
             return jsonify({"error": "Fingerprint verification expired. Try again."}), 401
     else:
+        secs = lock_remaining('settings')
+        if secs:
+            return locked_response(secs)
         pw = str(data.get('password', '')).strip()
-        if not hmac.compare_digest(pw, SETTINGS_PASSWORD):
-            return jsonify({"error": "Incorrect password"}), 401
+        if not pw_equal(pw, SETTINGS_PASSWORD):
+            return wrong_password_response('settings', "Incorrect password")
+        clear_fails('settings')
 
     result = accounts_collection.delete_one({"email": email_input})
     if result.deleted_count == 0:
@@ -579,12 +670,16 @@ def add_account():
 def settings_unlock():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
+    secs = lock_remaining('settings')
+    if secs:
+        return locked_response(secs)
     data = request.json or {}
     pw = str(data.get('password', '')).strip()
-    if hmac.compare_digest(pw, SETTINGS_PASSWORD):
+    if pw_equal(pw, SETTINGS_PASSWORD):
+        clear_fails('settings')
         session['settings_unlocked'] = True
         return jsonify({"success": True})
-    return jsonify({"error": "Incorrect password"}), 401
+    return wrong_password_response('settings', "Incorrect password")
 
 
 # ---------------- Passkey: fingerprint / face ----------------
