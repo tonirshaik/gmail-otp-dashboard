@@ -230,6 +230,12 @@ _CAND = [
     ("digits",  re.compile(_LB + r"(\d{4,10})(?![\w@]|[.,:/-]\d)")),
     ("alnum",   re.compile(_LB + r"((?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{4,12})(?![\w@]|[.,:/-]\w)")),
 ]
+# CSS / unit jinish (48px, 12pt, 300ms ...) kokhono code na
+_UNIT = re.compile(
+    r"(?i)^\d+(?:px|pt|em|rem|ex|ch|vh|vw|vmin|vmax|cm|mm|pc|ms|dpi|dppx|khz|hz|kb|mb|gb|tb|st|nd|rd|th|am|pm)$")
+_CSS_CTX = re.compile(
+    r"(?i)(?:font(?:-size|-family|-weight)?|padding|margin|width|height|line-height|border|background|color|letter-spacing)\s*:")
+
 _LETTERS = re.compile(
     r"(?i:\b(?:otp|pass\s?code|pin|code|verification\s+code|security\s+code)\b)\s*(?:is\b)?\s*[:=\-–]?\s*\b([A-Z]{4,10})\b")
 _LETTER_STOP = {"CODE", "EMAIL", "YOUR", "THIS", "THAT", "WITH", "FROM", "HERE", "LOGIN", "VERIFY",
@@ -250,6 +256,11 @@ def _find_keywords(t):
 
 
 def _score_candidate(t, kws, s, e, kind, text, has_intent):
+    if kind in ("alnum", "dashed") and _UNIT.match(text):
+        return -99
+    if _CSS_CTX.search(t[max(0, s - 60):min(len(t), e + 30)]):
+        return -99                                   # CSS-er bhitore, email-er code na
+
     line_start = t.rfind("\n", 0, s) + 1
     nl = t.find("\n", e)
     line_end = len(t) if nl == -1 else nl
@@ -374,7 +385,8 @@ def extract_otp(text):
 
 
 def html_to_text(html_body):
-    t = re.sub(r"(?is)<(script|style|head)[^>]*>.*?</\1>", " ", html_body)
+    t = re.sub(r"(?s)<!--.*?-->", " ", html_body)          # HTML comment (mso CSS ityadi) bad
+    t = re.sub(r"(?is)<(script|style|head)[^>]*>.*?</\1>", " ", t)
     t = re.sub(r"(?i)<br\s*/?>|</(?:p|div|tr|li|h[1-6]|table|td|th)>", "\n", t)
     t = re.sub(r"<[^>]+>", " ", t)
     t = html_lib.unescape(t).replace("\xa0", " ")
