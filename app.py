@@ -319,6 +319,9 @@ INBOX_SCAN_LIMIT = 5
 SPAM_SCAN_LIMIT = 3
 EMAIL_CACHE_MAX = 3000
 
+# Code ashar koto sekende porjonto card-e dekhabe. Er por "No emails found" hoye jabe.
+OTP_TTL_SECONDS = 120   # 2 minutes
+
 def fetch_email_info(mail, uid):
     """Ekta email download kore OTP, sender, subject, time ber kore."""
     _, msg_data = mail.uid('fetch', uid, '(BODY.PEEK[])')
@@ -332,13 +335,14 @@ def fetch_email_info(mail, uid):
             date_hdr = msg.get("Date")
 
             msg_dt = datetime.now()
+            epoch = time.time()          # asol (timezone-thik) unix time, expiry hisabe lage
             if date_hdr:
                 try:
                     parsed_dt = parsedate_to_datetime(date_hdr)
-                    if parsed_dt.tzinfo:
-                        msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
-                    else:
-                        msg_dt = parsed_dt
+                    if parsed_dt.tzinfo is None:
+                        parsed_dt = parsed_dt.replace(tzinfo=timezone.utc)
+                    epoch = parsed_dt.timestamp()
+                    msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
                 except:
                     pass
 
@@ -352,7 +356,7 @@ def fetch_email_info(mail, uid):
                 "subject": subject,
                 "code": None if otp == "Code not found" else otp,
                 "time": msg_dt.strftime("%I:%M %p"),
-                "timestamp": msg_dt.timestamp(),
+                "timestamp": epoch,
             }
     return None
 
@@ -380,6 +384,10 @@ def scan_folder(mail, acct_email, folder, limit):
             return info
     return None
 
+def is_fresh(info):
+    """Email ta ki OTP_TTL_SECONDS-er moddhe eshechhe?"""
+    return bool(info) and (time.time() - info["timestamp"]) < OTP_TTL_SECONDS
+
 def check_gmail(account, mail_data):
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
@@ -394,6 +402,10 @@ def check_gmail(account, mail_data):
         except Exception as e:
             print(f"[INBOX ERROR] {account['email']}: {e}")
 
+        # 2 minute-er purono code hole dhorbo na
+        if result and not is_fresh(result):
+            result = None
+
         # 2. Inbox-e na pele Spam
         if not result:
             label = "SPAM"
@@ -401,6 +413,8 @@ def check_gmail(account, mail_data):
                 try:
                     result = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
                 except Exception:
+                    result = None
+                if result and not is_fresh(result):
                     result = None
                 if result:
                     break
@@ -414,6 +428,8 @@ def check_gmail(account, mail_data):
                 "code": result["code"],
                 "time": result["time"],
                 "timestamp": result["timestamp"],
+                "age_seconds": max(0, int(time.time() - result["timestamp"])),
+                "ttl_seconds": OTP_TTL_SECONDS,
             })
         else:
             mail_data.append({
