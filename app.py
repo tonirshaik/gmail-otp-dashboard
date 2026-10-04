@@ -233,120 +233,103 @@ def get_email_body(msg):
 
     return body
 
+# Ager email-er result jomiye rakha hoy, jate bar bar same email download na hoy.
+# Shudhu notun email ashle seta-i download hobe.
+EMAIL_CACHE = {}
+EMAIL_CACHE_MAX = 3000
+
+def fetch_email_info(mail, uid):
+    """Ekta email download kore OTP, sender, subject, time ber kore."""
+    _, msg_data = mail.uid('fetch', uid, '(BODY.PEEK[])')
+    for part in msg_data or []:
+        if isinstance(part, tuple):
+            msg = email.message_from_bytes(part[1])
+            subject = msg.get("Subject", "No Subject")
+            sender = msg.get("From", "Unknown Sender")
+            date_hdr = msg.get("Date")
+
+            msg_dt = datetime.now()
+            if date_hdr:
+                try:
+                    parsed_dt = parsedate_to_datetime(date_hdr)
+                    if parsed_dt.tzinfo:
+                        msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
+                    else:
+                        msg_dt = parsed_dt
+                except:
+                    pass
+
+            body = get_email_body(msg)
+            otp = extract_otp(subject + " " + body)
+            return {
+                "sender": sender,
+                "subject": subject,
+                "code": None if otp == "Code not found" else otp,
+                "time": msg_dt.strftime("%I:%M %p"),
+                "timestamp": msg_dt.timestamp(),
+            }
+    return None
+
+def scan_folder(mail, acct_email, folder, limit):
+    """Folder-er shesh `limit`-ta email dekhe, OTP thakle result dey."""
+    status, _ = mail.select(folder, readonly=True)   # readonly: email 'read' hoye jabe na
+    if status != 'OK':
+        return None
+    status, data = mail.uid('search', None, 'ALL')
+    if status != 'OK' or not data or not data[0]:
+        return None
+
+    uids = data[0].split()[-limit:]
+    for uid in reversed(uids):
+        key = (acct_email, folder, uid)
+        info = EMAIL_CACHE.get(key)
+        if info is None:
+            info = fetch_email_info(mail, uid)
+            if info is None:
+                continue
+            if len(EMAIL_CACHE) > EMAIL_CACHE_MAX:
+                EMAIL_CACHE.clear()
+            EMAIL_CACHE[key] = info
+        if info["code"]:
+            return info
+    return None
+
 def check_gmail(account, mail_data):
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
         mail.login(account['email'], account['password'])
 
-        found_otp = False
+        result = None
+        label = "INBOX"
 
-        # ১. প্রথমে Inbox চেক করা হবে
-        if not found_otp:
-            try:
-                status, _ = mail.select("inbox")
-                if status == 'OK':
-                    status, messages = mail.search(None, 'ALL')
-                    if status == 'OK' and messages[0]:
-                        email_ids = messages[0].split()
-                        recent_ids = email_ids[-7:] if len(email_ids) >= 7 else email_ids
+        # 1. Prothome Inbox
+        try:
+            result = scan_folder(mail, account['email'], "inbox", 7)
+        except Exception as e:
+            print(f"[INBOX ERROR] {account['email']}: {e}")
 
-                        for e_id in reversed(recent_ids):
-                            _, msg_data = mail.fetch(e_id, '(RFC822)')
-                            for response_part in msg_data:
-                                if isinstance(response_part, tuple):
-                                    msg = email.message_from_bytes(response_part[1])
-                                    subject = msg.get("Subject", "No Subject")
-                                    sender = msg.get("From", "Unknown Sender")
-                                    date_hdr = msg.get("Date")
-
-                                    msg_dt = datetime.now()
-                                    if date_hdr:
-                                        try:
-                                            parsed_dt = parsedate_to_datetime(date_hdr)
-                                            if parsed_dt.tzinfo:
-                                                msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
-                                            else:
-                                                msg_dt = parsed_dt
-                                        except:
-                                            pass
-
-                                    body = get_email_body(msg)
-                                    full_text = subject + " " + body
-
-                                    otp = extract_otp(full_text)
-                                    if otp != "Code not found":
-                                        print(f"[INBOX] Found OTP: {otp} from {account['email']}")
-                                        mail_data.append({
-                                            "email": account['email'],
-                                            "sender": sender,
-                                            "subject": subject,
-                                            "code": otp,
-                                            "time": msg_dt.strftime("%I:%M %p"),
-                                            "timestamp": msg_dt.timestamp()
-                                        })
-                                        found_otp = True
-                                        break
-                            if found_otp:
-                                break
-            except Exception as e:
-                print(f"[INBOX ERROR] {account['email']}: {e}")
-
-        # ২. Inbox এ না পাওয়া গেলে Spam চেক করা হবে
-        if not found_otp:
-            spam_folders = ["[Gmail]/Spam", "Spam"]
-            for folder in spam_folders:
+        # 2. Inbox-e na pele Spam
+        if not result:
+            label = "SPAM"
+            for folder in ["[Gmail]/Spam", "Spam"]:
                 try:
-                    status, _ = mail.select(folder)
-                    if status == 'OK':
-                        status, messages = mail.search(None, 'ALL')
-                        if status == 'OK' and messages[0]:
-                            email_ids = messages[0].split()
-                            recent_ids = email_ids[-5:] if len(email_ids) >= 5 else email_ids
+                    result = scan_folder(mail, account['email'], folder, 5)
+                except Exception:
+                    result = None
+                if result:
+                    break
 
-                            for e_id in reversed(recent_ids):
-                                _, msg_data = mail.fetch(e_id, '(RFC822)')
-                                for response_part in msg_data:
-                                    if isinstance(response_part, tuple):
-                                        msg = email.message_from_bytes(response_part[1])
-                                        subject = msg.get("Subject", "No Subject")
-                                        sender = msg.get("From", "Unknown Sender")
-                                        date_hdr = msg.get("Date")
-
-                                        msg_dt = datetime.now()
-                                        if date_hdr:
-                                            try:
-                                                parsed_dt = parsedate_to_datetime(date_hdr)
-                                                if parsed_dt.tzinfo:
-                                                    msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
-                                                else:
-                                                    msg_dt = parsed_dt
-                                            except:
-                                                pass
-
-                                        body = get_email_body(msg)
-                                        full_text = subject + " " + body
-
-                                        otp = extract_otp(full_text)
-                                        if otp != "Code not found":
-                                            print(f"[SPAM] MATCHED OTP: {otp} from {account['email']}")
-                                            mail_data.append({
-                                                "email": account['email'],
-                                                "sender": sender,
-                                                "subject": subject,
-                                                "code": otp,
-                                                "time": msg_dt.strftime("%I:%M %p"),
-                                                "timestamp": msg_dt.timestamp()
-                                            })
-                                            found_otp = True
-                                            break
-                                if found_otp:
-                                    break
-                        if found_otp:
-                            break
-                except Exception as e:
-                    pass
-
-        if not found_otp:
+        if result:
+            print(f"[{label}] Found OTP: {result['code']} from {account['email']}")
+            mail_data.append({
+                "email": account['email'],
+                "sender": result["sender"],
+                "subject": result["subject"],
+                "code": result["code"],
+                "time": result["time"],
+                "timestamp": result["timestamp"],
+            })
+        else:
             mail_data.append({
                 "email": account['email'],
                 "sender": "N/A",
@@ -356,7 +339,10 @@ def check_gmail(account, mail_data):
                 "timestamp": 0
             })
 
-        mail.logout()
+        try:
+            mail.logout()
+        except Exception:
+            pass
     except Exception as e:
         print(f"Error reading {account['email']}: {e}")
         mail_data.append({
@@ -430,6 +416,33 @@ def accounts_count():
     except Exception as e:
         print(f"Count error: {e}")
         return jsonify({"count": 0})
+
+@app.route('/api/delete-account', methods=['POST'])
+def delete_account():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if accounts_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+
+    data = request.json or {}
+    email_input = str(data.get('email', '')).strip()
+    if not email_input:
+        return jsonify({"error": "Email required"}), 400
+
+    # Protibar settings password ba fingerprint/face lagbe
+    if data.get('use_passkey'):
+        verified_at = session.pop('delete_auth_at', 0)
+        if not verified_at or (time.time() - verified_at) > 60:
+            return jsonify({"error": "Fingerprint verification expired. Try again."}), 401
+    else:
+        pw = str(data.get('password', '')).strip()
+        if not hmac.compare_digest(pw, SETTINGS_PASSWORD):
+            return jsonify({"error": "Incorrect password"}), 401
+
+    result = accounts_collection.delete_one({"email": email_input})
+    if result.deleted_count == 0:
+        return jsonify({"error": "Account not found"}), 404
+    return jsonify({"message": "Account removed"})
 
 @app.route('/api/add-account', methods=['POST'])
 def add_account():
@@ -556,7 +569,7 @@ def passkey_auth_verify():
     challenge = session.pop('auth_challenge', None)
     if not challenge or passkeys_collection is None:
         return jsonify({"error": "Expired. Try again."}), 400
-    if purpose == 'settings' and not session.get('logged_in'):
+    if purpose in ('settings', 'delete') and not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
     stored = passkeys_collection.find_one({"credential_id": credential.get('id')})
@@ -583,6 +596,8 @@ def passkey_auth_verify():
     session['logged_in'] = True
     if purpose == 'settings':
         session['settings_unlocked'] = True
+    elif purpose == 'delete':
+        session['delete_auth_at'] = time.time()
     return jsonify({"success": True})
 
 
