@@ -419,6 +419,10 @@
                 </div>
             </div>
 
+            <div id="accountCountBar" style="display:flex; align-items:center; justify-content:center; gap:8px; margin: 0 0 14px; padding: 8px 12px; border-radius: 10px; background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.25); color: #67e8f9; font-size: 14px; font-weight: 600;">
+                <i class="fa-solid fa-envelope"></i>
+                <span>Total Gmail Added: <span id="accountCount">0</span></span>
+            </div>
             <div id="statusMsg" class="msg-status"></div>
 
             <button type="button" class="btn btn-refresh" id="refreshBtn">
@@ -568,7 +572,18 @@
             }
         });
 
+        async function loadAccountCount() {
+            try {
+                const res = await fetch('/api/accounts-count');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('accountCount').innerText = data.count;
+                }
+            } catch (err) {}
+        }
+
         async function fetchOTPs() {
+            loadAccountCount();
             refreshBtn.disabled = true;
             refreshBtn.style.opacity = '0.75';
             refreshBtn.style.cursor = 'not-allowed';
