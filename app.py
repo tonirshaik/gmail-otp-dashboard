@@ -319,7 +319,7 @@ INBOX_SCAN_LIMIT = 5
 SPAM_SCAN_LIMIT = 3
 EMAIL_CACHE_MAX = 3000
 
-# Code ashar koto sekende porjonto card-e dekhabe. Er por "No emails found" hoye jabe.
+# Home-e code koto sekende porjonto dekhabe (client eta use kore). Total Gmail list-e shesh code always thake.
 OTP_TTL_SECONDS = 120   # 2 minutes
 
 def fetch_email_info(mail, uid):
@@ -384,40 +384,39 @@ def scan_folder(mail, acct_email, folder, limit):
             return info
     return None
 
-def is_fresh(info):
-    """Email ta ki OTP_TTL_SECONDS-er moddhe eshechhe?"""
-    return bool(info) and (time.time() - info["timestamp"]) < OTP_TTL_SECONDS
-
 def check_gmail(account, mail_data):
     try:
         mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
         mail.login(account['email'], account['password'])
 
-        result = None
-        label = "INBOX"
+        inbox_res, spam_res = None, None
 
-        # 1. Prothome Inbox
+        # 1. Inbox
         try:
-            result = scan_folder(mail, account['email'], "inbox", INBOX_SCAN_LIMIT)
+            inbox_res = scan_folder(mail, account['email'], "inbox", INBOX_SCAN_LIMIT)
         except Exception as e:
             print(f"[INBOX ERROR] {account['email']}: {e}")
 
-        # 2 minute-er purono code hole dhorbo na
-        if result and not is_fresh(result):
-            result = None
+        # 2. Spam (inbox-e code thakleo dekhbo, jate spam-e notun code ashle miss na hoy)
+        for folder in ["[Gmail]/Spam", "Spam"]:
+            try:
+                spam_res = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
+            except Exception:
+                spam_res = None
+            if spam_res:
+                break
 
-        # 2. Inbox-e na pele Spam
-        if not result:
-            label = "SPAM"
-            for folder in ["[Gmail]/Spam", "Spam"]:
-                try:
-                    result = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
-                except Exception:
-                    result = None
-                if result and not is_fresh(result):
-                    result = None
-                if result:
-                    break
+        # 3. Duto-r moddhe jeta shobcheye notun (timestamp boro) seta
+        result, label = None, "INBOX"
+        if inbox_res and spam_res:
+            if spam_res["timestamp"] > inbox_res["timestamp"]:
+                result, label = spam_res, "SPAM"
+            else:
+                result = inbox_res
+        elif spam_res:
+            result, label = spam_res, "SPAM"
+        else:
+            result = inbox_res
 
         if result:
             print(f"[{label}] Found OTP: {result['code']} from {account['email']}")
