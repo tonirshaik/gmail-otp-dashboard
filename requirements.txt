@@ -3,3 +3,4 @@ gunicorn==22.0.0
 pymongo==4.8.0
 dnspython==2.6.1
 Flask-Cors==4.0.1
+webauthn>=2.0.0
