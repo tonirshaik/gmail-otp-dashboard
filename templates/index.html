@@ -391,6 +391,37 @@
         }
         .btn-danger { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; }
         .btn-cancel { background: rgba(255,255,255,0.06); color: var(--text-muted); margin-top: 8px; }
+        /* ---- all accounts popup ---- */
+        .accounts-box {
+            width: 100%;
+            max-width: 440px;
+            background: #111827;
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 16px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+        }
+        .accounts-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            color: #67e8f9;
+            font-weight: 700;
+            font-size: 15px;
+        }
+        .accounts-close {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 18px;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+        #allContainer { max-height: 62vh; overflow-y: auto; padding-right: 4px; }
+        #allContainer::-webkit-scrollbar { width: 5px; }
+        #allContainer::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
+        #accountCountBar:active { transform: scale(0.98); }
     </style>
 </head>
 <body>
@@ -468,9 +499,10 @@
                 </div>
             </div>
 
-            <div id="accountCountBar" style="display:flex; align-items:center; justify-content:center; gap:8px; margin: 0 0 14px; padding: 8px 12px; border-radius: 10px; background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.25); color: #67e8f9; font-size: 14px; font-weight: 600;">
+            <div id="accountCountBar" role="button" tabindex="0" title="View all Gmail accounts" style="cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin: 0 0 14px; padding: 8px 12px; border-radius: 10px; background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.25); color: #67e8f9; font-size: 14px; font-weight: 600;">
                 <i class="fa-solid fa-envelope"></i>
                 <span>Total Gmail Added: <span id="accountCount">0</span></span>
+                <i class="fa-solid fa-chevron-right" style="font-size:11px; opacity:0.7;"></i>
             </div>
             <div id="statusMsg" class="msg-status"></div>
 
@@ -493,6 +525,17 @@
             </button>
         </div>
 
+    </div>
+
+    <!-- All Gmail accounts popup -->
+    <div id="accountsModal" class="modal-overlay hidden">
+        <div class="accounts-box">
+            <div class="accounts-head">
+                <span><i class="fa-solid fa-envelope"></i> All Gmail Accounts (<span id="allCount">0</span>)</span>
+                <button type="button" class="accounts-close" id="accountsCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div id="allContainer"></div>
+        </div>
     </div>
 
     <!-- Toast Notification -->
@@ -531,6 +574,8 @@
         const settingsToggle = document.getElementById('settingsToggle');
         const settingsPopup = document.getElementById('settingsPopup');
         const otpContainer = document.getElementById('otpContainer');
+        const allContainer = document.getElementById('allContainer');
+        const accountsModal = document.getElementById('accountsModal');
         const refreshBtn = document.getElementById('refreshBtn');
         const addAccountForm = document.getElementById('addAccountForm');
         const statusMsg = document.getElementById('statusMsg');
@@ -747,58 +792,50 @@
         }
 
         function tickExpiry() {
+            let homeExpired = false;
             document.querySelectorAll('.otp-card[data-expires]').forEach(card => {
                 const left = Number(card.dataset.expires) - Date.now();
-                if (left <= 0) { expireCard(card); return; }
-                const s = Math.ceil(left / 1000);
+                if (left <= 0) {
+                    // home-er card hole sorano hobe, popup-er list-e "No emails found" hobe
+                    if (otpContainer.contains(card)) homeExpired = true;
+                    else expireCard(card);
+                    return;
+                }
+                const sec = Math.ceil(left / 1000);
                 const el = card.querySelector('.otp-expiry-time');
-                if (el) el.textContent = Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0');
-                card.classList.toggle('expiring', s <= 20);
+                if (el) el.textContent = fmtLeft(sec);
+                card.classList.toggle('expiring', sec <= 20);
             });
+            if (homeExpired) renderHome();
         }
         setInterval(tickExpiry, 1000);
 
-        function renderOTPs(otps) {
-            if (!otps || otps.length === 0) {
-                otpContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        No Gmail accounts added yet.
-                    </div>`;
-                return;
-            }
+        // ---- state ----
+        let allItems = [];          // shob account (code thak ba na thak)
+        let newCardEmails = [];     // home-e "new" dot dekhabe jegulo-te
+        let hasLoaded = false;
+        const HOME_MAX = 2;         // home-e maximum koyta card
 
-            otps = otps.map(normalizeExpiry);
+        function isValidItem(item) {
+            return !!(item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error');
+        }
 
-            // কোন কোন কার্ড নতুন তা চেক করা
-            let newCardEmails = [];
-            if (previousCodes.length > 0) {
-                otps.forEach(item => {
-                    if (item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error') {
-                        const prev = previousCodes.find(p => p.email === item.email);
-                        // আগে ছিল না বা কোড পরিবর্তন হয়েছে = নতুন
-                        if (!prev || prev.code !== item.code) {
-                            newCardEmails.push(item.email);
-                        }
-                    }
-                });
-            } else {
-                // প্রথমবার লোড হলে প্রথমটা নতুন হিসেবে দেখাবে
-                if (otps[0] && otps[0].code && otps[0].code !== 'Code not found' && otps[0].code !== 'No emails found' && otps[0].code !== 'Error') {
-                    newCardEmails.push(otps[0].email);
-                }
-            }
+        function fmtLeft(sec) {
+            return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+        }
 
-            // কারেন্ট কোডগুলো সেভ করে রাখা
-            previousCodes = otps.map(item => ({ email: item.email, code: item.code }));
+        // expire hoye gele item-ta "No emails found" hishabe dhore
+        function liveItems() {
+            const now = Date.now();
+            return allItems.map(it =>
+                (it.expiresAt && it.expiresAt <= now) ? { ...it, ...EXPIRED_ITEM, expiresAt: undefined } : it);
+        }
 
-            otpContainer.innerHTML = otps.map(item => {
-                const isNew = newCardEmails.includes(item.email);
-                const validCode = item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error';
-
-                return `
-                <div class="otp-swipe">
-                <button type="button" class="swipe-delete" data-email="${escAttr(item.email)}" title="Remove this Gmail"><i class="fa-solid fa-trash"></i></button>
+        function cardHTML(item, opts) {
+            const validCode = isValidItem(item);
+            const isNew = !!opts.isNew;
+            const leftSec = validCode ? Math.max(0, Math.ceil((item.expiresAt - Date.now()) / 1000)) : 0;
+            const card = `
                 <div class="otp-card ${isNew ? 'is-new' : ''}" ${validCode ? `data-expires="${item.expiresAt}"` : ''}>
                     ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
@@ -808,7 +845,7 @@
                         <div class="otp-code-box" onclick="copyOTP('${escAttr(item.code)}')" title="Click to copy">
                             ${escAttr(item.code)}
                         </div>
-                        <div class="otp-expiry"><i class="fa-solid fa-hourglass-half"></i> Expires in <span class="otp-expiry-time">--:--</span></div>
+                        <div class="otp-expiry"><i class="fa-solid fa-hourglass-half"></i> Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></div>
                     ` : `
                         <div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">
                             ${item.code || 'Code not found'}
@@ -817,9 +854,98 @@
                     <div class="otp-time">
                         <i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${escAttr(item.sender || 'N/A')}
                     </div>
-                </div>
                 </div>`;
-            }).join('');
+            if (!opts.deletable) return card;
+            return `
+                <div class="otp-swipe">
+                    <button type="button" class="swipe-delete" data-email="${escAttr(item.email)}" title="Remove this Gmail"><i class="fa-solid fa-trash"></i></button>
+                    ${card}
+                </div>`;
+        }
+
+        // Home: shudhu jeigulo-te code ache (max 2 ta)
+        function renderHome() {
+            if (allItems.length === 0) {
+                otpContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                        No Gmail accounts added yet.
+                    </div>`;
+                return;
+            }
+            const active = liveItems().filter(isValidItem);
+            if (active.length === 0) {
+                otpContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-envelope-open" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                        No active codes right now.<br>New codes will show up here.
+                    </div>`;
+                return;
+            }
+            const shown = active.slice(0, HOME_MAX);
+            let html = shown.map(item => cardHTML(item, { isNew: newCardEmails.includes(item.email), deletable: false })).join('');
+            if (active.length > HOME_MAX) {
+                html += `<div class="empty-state" style="padding: 6px 0;">+${active.length - HOME_MAX} more active code(s) &middot; tap "Total Gmail Added" to see all</div>`;
+            }
+            otpContainer.innerHTML = html;
+        }
+
+        // Popup: shob Gmail account (delete kora jay)
+        function renderAll() {
+            document.getElementById('allCount').innerText = allItems.length;
+            if (!hasLoaded) {
+                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>Loading...</div>`;
+                return;
+            }
+            if (allItems.length === 0) {
+                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>No Gmail accounts added yet.</div>`;
+                return;
+            }
+            allContainer.innerHTML = liveItems().map(item => cardHTML(item, { isNew: false, deletable: true })).join('');
+        }
+
+        function accountsModalOpen() { return !accountsModal.classList.contains('hidden'); }
+
+        function openAccountsModal() {
+            loadAccountCount();
+            renderAll();
+            accountsModal.classList.remove('hidden');
+            if (!hasLoaded && !isFetching) fetchOTPs(true);
+        }
+
+        function closeAccountsModal() {
+            if (openWrap) setSwipe(openWrap, false);
+            accountsModal.classList.add('hidden');
+        }
+
+        document.getElementById('accountCountBar').addEventListener('click', openAccountsModal);
+        document.getElementById('accountCountBar').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAccountsModal(); }
+        });
+        document.getElementById('accountsCloseBtn').addEventListener('click', closeAccountsModal);
+        accountsModal.addEventListener('click', (e) => { if (e.target === accountsModal) closeAccountsModal(); });
+
+        function renderOTPs(otps) {
+            hasLoaded = true;
+            allItems = (otps || []).map(normalizeExpiry);
+
+            // kon kon card notun ta check kora
+            newCardEmails = [];
+            if (previousCodes.length > 0) {
+                allItems.forEach(item => {
+                    if (isValidItem(item)) {
+                        const prev = previousCodes.find(p => p.email === item.email);
+                        if (!prev || prev.code !== item.code) newCardEmails.push(item.email);
+                    }
+                });
+            } else if (allItems[0] && isValidItem(allItems[0])) {
+                newCardEmails.push(allItems[0].email);
+            }
+
+            previousCodes = allItems.map(item => ({ email: item.email, code: item.code }));
+
+            renderHome();
+            if (accountsModalOpen()) renderAll();
         }
 
         addAccountForm.addEventListener('submit', async (e) => {
@@ -974,7 +1100,7 @@
             openWrap = open ? wrap : (openWrap === wrap ? null : openWrap);
         }
 
-        otpContainer.addEventListener('pointerdown', (e) => {
+        allContainer.addEventListener('pointerdown', (e) => {
             const card = e.target.closest('.otp-card');
             if (!card) return;
             const wrap = card.parentElement;
@@ -987,7 +1113,7 @@
             };
         });
 
-        otpContainer.addEventListener('pointermove', (e) => {
+        allContainer.addEventListener('pointermove', (e) => {
             if (!swipe || e.pointerId !== swipe.id) return;
             const dx = e.clientX - swipe.startX;
             const dy = e.clientY - swipe.startY;
@@ -1015,11 +1141,11 @@
             s.wrap.dataset.dragged = '1';
             setTimeout(() => { delete s.wrap.dataset.dragged; }, 80);
         }
-        otpContainer.addEventListener('pointerup', endSwipe);
-        otpContainer.addEventListener('pointercancel', endSwipe);
+        allContainer.addEventListener('pointerup', endSwipe);
+        allContainer.addEventListener('pointercancel', endSwipe);
 
         // drag-er por ba khola obosthay click holey OTP copy hobe na
-        otpContainer.addEventListener('click', (e) => {
+        allContainer.addEventListener('click', (e) => {
             const wrap = e.target.closest('.otp-swipe');
             if (!wrap) return;
             if (wrap.dataset.dragged === '1') { e.stopPropagation(); e.preventDefault(); return; }
@@ -1073,22 +1199,20 @@
         }
 
         function removeCardFromScreen(email) {
-            const wrap = [...otpContainer.querySelectorAll('.otp-swipe')]
+            const wrap = [...allContainer.querySelectorAll('.otp-swipe')]
                 .find(w => w.querySelector('.swipe-delete').dataset.email === email);
             previousCodes = previousCodes.filter(p => p.email !== email);
+            allItems = allItems.filter(i => i.email !== email);
+            newCardEmails = newCardEmails.filter(e => e !== email);
             if (openWrap === wrap) openWrap = null;
+            renderHome();
+            document.getElementById('allCount').innerText = allItems.length;
             if (wrap) {
                 wrap.style.transition = 'opacity 0.25s ease';
                 wrap.style.opacity = '0';
                 setTimeout(() => {
                     wrap.remove();
-                    if (!otpContainer.querySelector('.otp-swipe')) {
-                        otpContainer.innerHTML = `
-                            <div class="empty-state">
-                                <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                                No Gmail accounts added yet.
-                            </div>`;
-                    }
+                    if (!allContainer.querySelector('.otp-swipe')) renderAll();
                 }, 260);
             }
             loadAccountCount();
@@ -1201,6 +1325,10 @@
             loginSection.classList.remove('hidden');
             document.getElementById('masterPasswordInput').value = '';
             previousCodes = [];
+            allItems = [];
+            newCardEmails = [];
+            hasLoaded = false;
+            closeAccountsModal();
             autoPaused = false;
             lastActivity = Date.now();
         }
