@@ -342,6 +342,53 @@
             opacity: 1;
             bottom: 35px;
         }
+        /* ---- swipe to delete ---- */
+        .otp-swipe {
+            position: relative;
+            overflow: hidden;
+            border-radius: 14px;
+            margin-bottom: 12px;
+        }
+        .otp-swipe .otp-card {
+            margin-bottom: 0;
+            transition: transform 0.2s ease;
+            touch-action: pan-y;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .swipe-delete {
+            position: absolute;
+            top: 0; left: 0; bottom: 0;
+            width: 76px;
+            border: none;
+            background: rgba(239, 68, 68, 0.92);
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 500;
+            padding: 20px;
+        }
+        .modal-box {
+            width: 100%;
+            max-width: 340px;
+            background: #111827;
+            border: 1px solid var(--card-border);
+            border-radius: 18px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+        }
+        .btn-danger { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; }
+        .btn-cancel { background: rgba(255,255,255,0.06); color: var(--text-muted); margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -428,6 +475,9 @@
             <button type="button" class="btn btn-refresh" id="refreshBtn">
                 <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
             </button>
+            <div id="autoStatus" style="text-align:center; font-size:12px; opacity:0.65; margin-top:8px;">
+                <i class="fa-solid fa-bolt"></i> Auto-refresh ON
+            </div>
 
             <div class="otp-container" id="otpContainer">
                 <div class="empty-state">
@@ -444,6 +494,28 @@
     </div>
 
     <!-- Toast Notification -->
+    <div id="deleteModal" class="modal-overlay hidden">
+        <div class="modal-box">
+            <div class="popup-title" style="color: var(--accent-red);">
+                <i class="fa-solid fa-trash"></i> Remove Gmail
+            </div>
+            <div id="deleteTarget" style="font-size: 13px; margin-bottom: 14px; word-break: break-all; color: var(--text-main);"></div>
+            <form id="deleteForm">
+                <div class="input-group">
+                    <input type="password" id="deletePasswordInput" placeholder="Enter settings password" required autocomplete="off">
+                </div>
+                <button type="submit" class="btn btn-danger">
+                    <i class="fa-solid fa-trash"></i> Remove with Password
+                </button>
+            </form>
+            <button type="button" class="btn btn-primary hidden" id="deletePasskeyBtn" style="margin-top: 8px;">
+                <i class="fa-solid fa-fingerprint"></i> Remove with Fingerprint / Face
+            </button>
+            <div id="deleteError" class="msg-status" style="color: var(--accent-red); margin: 8px 0 0; font-size: 13px;"></div>
+            <button type="button" class="btn btn-cancel" id="deleteCancelBtn">Cancel</button>
+        </div>
+    </div>
+
     <div id="toast" class="toast">
         <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copied!</span>
     </div>
@@ -582,18 +654,25 @@
             } catch (err) {}
         }
 
-        async function fetchOTPs() {
-            loadAccountCount();
-            refreshBtn.disabled = true;
-            refreshBtn.style.opacity = '0.75';
-            refreshBtn.style.cursor = 'not-allowed';
-            refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking Gmail...`;
+        let isFetching = false;
 
-            otpContainer.innerHTML = `
-                <div class="empty-state">
-                    <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                    Fetching OTPs from servers...
-                </div>`;
+        async function fetchOTPs(silent = false) {
+            if (isFetching) return;
+            isFetching = true;
+
+            if (!silent) {
+                loadAccountCount();
+                refreshBtn.disabled = true;
+                refreshBtn.style.opacity = '0.75';
+                refreshBtn.style.cursor = 'not-allowed';
+                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking Gmail...`;
+
+                otpContainer.innerHTML = `
+                    <div class="empty-state">
+                        <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                        Fetching OTPs from servers...
+                    </div>`;
+            }
 
             try {
                 const res = await fetch('/api/fetch-otps');
@@ -608,19 +687,32 @@
 
                 const data = await res.json();
                 renderOTPs(data);
+                const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+                document.getElementById('autoStatus').innerHTML =
+                    `<i class="fa-solid fa-bolt"></i> Auto-refresh ON &middot; Last updated ${t}`;
 
             } catch (err) {
-                otpContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
-                        Error loading OTPs. Try again.
-                    </div>`;
+                // silent refresh e error hole purono OTP gulo thakbe, kichu muche jabe na
+                if (!silent) {
+                    otpContainer.innerHTML = `
+                        <div class="empty-state">
+                            <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
+                            Error loading OTPs. Try again.
+                        </div>`;
+                }
             } finally {
-                refreshBtn.disabled = false;
-                refreshBtn.style.opacity = '1';
-                refreshBtn.style.cursor = 'pointer';
-                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
+                isFetching = false;
+                if (!silent) {
+                    refreshBtn.disabled = false;
+                    refreshBtn.style.opacity = '1';
+                    refreshBtn.style.cursor = 'pointer';
+                    refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
+                }
             }
+        }
+
+        function escAttr(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
         function renderOTPs(otps) {
@@ -660,6 +752,8 @@
                 const validCode = item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error';
 
                 return `
+                <div class="otp-swipe">
+                <button type="button" class="swipe-delete" data-email="${escAttr(item.email)}" title="Remove this Gmail"><i class="fa-solid fa-trash"></i></button>
                 <div class="otp-card ${isNew ? 'is-new' : ''}">
                     ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
@@ -677,6 +771,7 @@
                     <div class="otp-time">
                         <i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${item.sender || 'N/A'}
                     </div>
+                </div>
                 </div>`;
             }).join('');
         }
@@ -708,7 +803,7 @@
             }
         });
 
-        refreshBtn.addEventListener('click', fetchOTPs);
+        refreshBtn.addEventListener('click', () => fetchOTPs());
 
         // ---------- Fingerprint / Face (Passkey) ----------
         const passkeyLoginBtn = document.getElementById('passkeyLoginBtn');
@@ -816,6 +911,227 @@
                 showToast('Fingerprint / Face enabled!');
             } catch (err) {
                 showToast(err.message || 'Could not enable');
+            }
+        });
+
+        // ---------- Swipe to delete ----------
+        const OPEN_W = 76;
+        let swipe = null;
+        let openWrap = null;
+
+        function setSwipe(wrap, open) {
+            const card = wrap.querySelector('.otp-card');
+            const btn = wrap.querySelector('.swipe-delete');
+            card.style.transform = open ? `translateX(${OPEN_W}px)` : '';
+            btn.style.opacity = open ? '1' : '0';
+            wrap.classList.toggle('open', open);
+            openWrap = open ? wrap : (openWrap === wrap ? null : openWrap);
+        }
+
+        otpContainer.addEventListener('pointerdown', (e) => {
+            const card = e.target.closest('.otp-card');
+            if (!card) return;
+            const wrap = card.parentElement;
+            if (openWrap && openWrap !== wrap) setSwipe(openWrap, false);
+            swipe = {
+                wrap, card, id: e.pointerId,
+                startX: e.clientX, startY: e.clientY,
+                base: wrap.classList.contains('open') ? OPEN_W : 0,
+                horizontal: null, x: 0
+            };
+        });
+
+        otpContainer.addEventListener('pointermove', (e) => {
+            if (!swipe || e.pointerId !== swipe.id) return;
+            const dx = e.clientX - swipe.startX;
+            const dy = e.clientY - swipe.startY;
+            if (swipe.horizontal === null) {
+                if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+                swipe.horizontal = Math.abs(dx) > Math.abs(dy);
+                if (swipe.horizontal) {
+                    try { swipe.card.setPointerCapture(e.pointerId); } catch (err) {}
+                    swipe.card.style.transition = 'none';
+                }
+            }
+            if (!swipe.horizontal) return;
+            swipe.x = Math.max(0, Math.min(OPEN_W + 20, swipe.base + dx));
+            swipe.card.style.transform = `translateX(${swipe.x}px)`;
+            swipe.wrap.querySelector('.swipe-delete').style.opacity = Math.min(swipe.x / 50, 1);
+        });
+
+        function endSwipe() {
+            if (!swipe) return;
+            const s = swipe;
+            swipe = null;
+            if (!s.horizontal) return;
+            s.card.style.transition = '';
+            setSwipe(s.wrap, s.x > OPEN_W / 2);
+            s.wrap.dataset.dragged = '1';
+            setTimeout(() => { delete s.wrap.dataset.dragged; }, 80);
+        }
+        otpContainer.addEventListener('pointerup', endSwipe);
+        otpContainer.addEventListener('pointercancel', endSwipe);
+
+        // drag-er por ba khola obosthay click holey OTP copy hobe na
+        otpContainer.addEventListener('click', (e) => {
+            const wrap = e.target.closest('.otp-swipe');
+            if (!wrap) return;
+            if (wrap.dataset.dragged === '1') { e.stopPropagation(); e.preventDefault(); return; }
+            const delBtn = e.target.closest('.swipe-delete');
+            if (delBtn) {
+                openDeleteModal(delBtn.dataset.email);
+                return;
+            }
+            if (wrap.classList.contains('open')) {
+                e.stopPropagation(); e.preventDefault();
+                setSwipe(wrap, false);
+            }
+        }, true);
+
+        document.addEventListener('click', (e) => {
+            if (openWrap && !openWrap.contains(e.target)) setSwipe(openWrap, false);
+        });
+
+        // ---------- Delete Gmail (password / fingerprint) ----------
+        const deleteModal = document.getElementById('deleteModal');
+        const deleteTarget = document.getElementById('deleteTarget');
+        const deleteForm = document.getElementById('deleteForm');
+        const deletePasswordInput = document.getElementById('deletePasswordInput');
+        const deletePasskeyBtn = document.getElementById('deletePasskeyBtn');
+        const deleteError = document.getElementById('deleteError');
+        let deleteTargetEmail = null;
+
+        if (window.PublicKeyCredential) deletePasskeyBtn.classList.remove('hidden');
+
+        function deleteModalOpen() { return !deleteModal.classList.contains('hidden'); }
+
+        function openDeleteModal(email) {
+            deleteTargetEmail = email;
+            deleteTarget.innerText = email;
+            deletePasswordInput.value = '';
+            deleteError.style.display = 'none';
+            deleteModal.classList.remove('hidden');
+            setTimeout(() => deletePasswordInput.focus(), 50);
+        }
+
+        function closeDeleteModal() {
+            deleteModal.classList.add('hidden');
+            deleteTargetEmail = null;
+            deletePasswordInput.value = '';
+            if (openWrap) setSwipe(openWrap, false);
+        }
+
+        function showDeleteError(msg) {
+            deleteError.innerText = msg;
+            deleteError.style.display = 'block';
+        }
+
+        function removeCardFromScreen(email) {
+            const wrap = [...otpContainer.querySelectorAll('.otp-swipe')]
+                .find(w => w.querySelector('.swipe-delete').dataset.email === email);
+            previousCodes = previousCodes.filter(p => p.email !== email);
+            if (openWrap === wrap) openWrap = null;
+            if (wrap) {
+                wrap.style.transition = 'opacity 0.25s ease';
+                wrap.style.opacity = '0';
+                setTimeout(() => {
+                    wrap.remove();
+                    if (!otpContainer.querySelector('.otp-swipe')) {
+                        otpContainer.innerHTML = `
+                            <div class="empty-state">
+                                <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                                No Gmail accounts added yet.
+                            </div>`;
+                    }
+                }, 260);
+            }
+            loadAccountCount();
+        }
+
+        async function deleteAccountRequest(email, extra) {
+            const res = await fetch('/api/delete-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, ...extra })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+        }
+
+        deleteForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = deleteTargetEmail;
+            try {
+                await deleteAccountRequest(email, { password: deletePasswordInput.value });
+                closeDeleteModal();
+                removeCardFromScreen(email);
+                showToast('Gmail removed');
+            } catch (err) {
+                showDeleteError(err.message || 'Failed');
+            }
+        });
+
+        deletePasskeyBtn.addEventListener('click', async () => {
+            const email = deleteTargetEmail;
+            try {
+                await passkeyAuth('delete');
+                await deleteAccountRequest(email, { use_passkey: true });
+                closeDeleteModal();
+                removeCardFromScreen(email);
+                showToast('Gmail removed');
+            } catch (err) {
+                showDeleteError(err.message || 'Fingerprint verification failed');
+            }
+        });
+
+        document.getElementById('deleteCancelBtn').addEventListener('click', closeDeleteModal);
+        deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) closeDeleteModal(); });
+
+        // ---------- Auto refresh ----------
+        const AUTO_REFRESH_SECONDS = 30;   // koto sekende ekbar check hobe
+        const AUTO_IDLE_MINUTES = 5;       // koto minute kichu na korle auto-refresh thambe
+        let lastActivity = Date.now();
+        let autoPaused = false;
+
+        function dashboardIsOpen() {
+            return !dashboardSection.classList.contains('hidden');
+        }
+
+        function setAutoStatus(html) {
+            document.getElementById('autoStatus').innerHTML = html;
+        }
+
+        function autoRefreshAllowed() {
+            return dashboardIsOpen() && document.visibilityState === 'visible'
+                && !deleteModalOpen() && !openWrap && !autoPaused;
+        }
+
+        function markActivity() {
+            lastActivity = Date.now();
+            if (autoPaused && !dashboardIsOpen()) autoPaused = false;
+            if (autoPaused && dashboardIsOpen()) {
+                autoPaused = false;
+                setAutoStatus('<i class="fa-solid fa-bolt"></i> Auto-refresh ON');
+                fetchOTPs(true);
+            }
+        }
+        ['pointerdown', 'keydown', 'touchstart', 'mousemove', 'scroll'].forEach(ev =>
+            document.addEventListener(ev, markActivity, { passive: true }));
+
+        setInterval(() => {
+            if (!dashboardIsOpen() || document.visibilityState !== 'visible') return;
+            if (!autoPaused && Date.now() - lastActivity > AUTO_IDLE_MINUTES * 60 * 1000) {
+                autoPaused = true;
+                setAutoStatus('<i class="fa-solid fa-pause"></i> Auto-refresh paused (inactive). Tap or move to resume');
+                return;
+            }
+            if (autoRefreshAllowed()) fetchOTPs(true);
+        }, AUTO_REFRESH_SECONDS * 1000);
+
+        // tab-e fire asle sathe sathe ekbar update
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && autoRefreshAllowed()) {
+                fetchOTPs(true);
             }
         });
 
