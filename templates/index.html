@@ -757,11 +757,11 @@
                 <div class="otp-card ${isNew ? 'is-new' : ''}">
                     ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
-                        ${item.email}
+                        ${escAttr(item.email)}
                     </div>
                     ${validCode ? `
-                        <div class="otp-code-box" onclick="copyOTP('${item.code}')" title="Click to copy">
-                            ${item.code}
+                        <div class="otp-code-box" onclick="copyOTP('${escAttr(item.code)}')" title="Click to copy">
+                            ${escAttr(item.code)}
                         </div>
                     ` : `
                         <div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">
@@ -769,7 +769,7 @@
                         </div>
                     `}
                     <div class="otp-time">
-                        <i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${item.sender || 'N/A'}
+                        <i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${escAttr(item.sender || 'N/A')}
                     </div>
                 </div>
                 </div>`;
