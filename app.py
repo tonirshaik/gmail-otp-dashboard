@@ -5,12 +5,23 @@ import re
 import time
 import json
 import threading
+import hmac
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime
 from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
 from pymongo import MongoClient
 from flask_cors import CORS
+from webauthn import (
+    generate_registration_options, verify_registration_response,
+    generate_authentication_options, verify_authentication_response,
+    options_to_json,
+)
+from webauthn.helpers import base64url_to_bytes, bytes_to_base64url
+from webauthn.helpers.structs import (
+    PublicKeyCredentialDescriptor, AuthenticatorSelectionCriteria,
+    AuthenticatorAttachment, ResidentKeyRequirement, UserVerificationRequirement,
+)
 
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
@@ -19,16 +30,32 @@ CORS(app, supports_credentials=True)
 app.secret_key = os.environ.get("SECRET_KEY", "your_secret_session_key_123")
 MASTER_PASSWORD = os.environ.get("MASTER_PASSWORD", "12342")
 MONGO_URI = os.environ.get("MONGO_URI", "")
+# Settings password ekhon server-e check hoy (age index.html-e hardcode chilo)
+SETTINGS_PASSWORD = os.environ.get("SETTINGS_PASSWORD", "889900")
+
+# Passkey (fingerprint / face) config
+RP_ID = os.environ.get("RP_ID", "gmail-otp-dashboard.onrender.com")
+RP_NAME = "Gmail OTP Dashboard"
+ORIGIN = os.environ.get("ORIGIN", "https://gmail-otp-dashboard.onrender.com")
+OWNER_ID = b"owner"
+
+app.config.update(
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+)
 
 # MongoDB Connection
 db = None
 accounts_collection = None
+passkeys_collection = None
 
 if MONGO_URI:
     try:
         client = MongoClient(MONGO_URI)
         db = client['gmail_otp_db']
         accounts_collection = db['accounts']
+        passkeys_collection = db['passkeys']
         print("MongoDB Connected Successfully!")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
@@ -373,7 +400,7 @@ def home():
 def login():
     data = request.json or {}
     password = data.get('password')
-    if password == MASTER_PASSWORD:
+    if password and hmac.compare_digest(str(password), MASTER_PASSWORD):
         session['logged_in'] = True
         return jsonify({"success": True})
     return jsonify({"error": "Wrong password!"}), 401
@@ -381,6 +408,7 @@ def login():
 @app.route('/api/logout', methods=['POST'])
 def logout():
     session.pop('logged_in', None)
+    session.pop('settings_unlocked', None)
     return jsonify({"success": True})
 
 @app.route('/api/fetch-otps')
@@ -395,6 +423,8 @@ def fetch_otps():
 def add_account():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
+    if not session.get('settings_unlocked'):
+        return jsonify({"error": "Settings locked. Unlock first."}), 403
 
     data = request.json or {}
     email_input = data.get('email')
@@ -418,6 +448,132 @@ def add_account():
 
     return jsonify({"message": "Account added permanently to Database!"})
 
+# ---------------- Settings unlock (server-side) ----------------
+@app.route('/api/settings-unlock', methods=['POST'])
+def settings_unlock():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    data = request.json or {}
+    pw = str(data.get('password', '')).strip()
+    if hmac.compare_digest(pw, SETTINGS_PASSWORD):
+        session['settings_unlocked'] = True
+        return jsonify({"success": True})
+    return jsonify({"error": "Incorrect password"}), 401
+
+
+# ---------------- Passkey: fingerprint / face ----------------
+def _json_response(text):
+    return Response(text, mimetype='application/json')
+
+@app.route('/api/passkey/register/options', methods=['POST'])
+def passkey_register_options():
+    if not (session.get('logged_in') and session.get('settings_unlocked')):
+        return jsonify({"error": "Unlock settings first"}), 401
+    if passkeys_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+
+    existing = list(passkeys_collection.find({}, {'_id': 0, 'credential_id': 1}))
+    options = generate_registration_options(
+        rp_id=RP_ID,
+        rp_name=RP_NAME,
+        user_id=OWNER_ID,
+        user_name="owner",
+        exclude_credentials=[
+            PublicKeyCredentialDescriptor(id=base64url_to_bytes(p['credential_id']))
+            for p in existing
+        ],
+        authenticator_selection=AuthenticatorSelectionCriteria(
+            authenticator_attachment=AuthenticatorAttachment.PLATFORM,
+            resident_key=ResidentKeyRequirement.PREFERRED,
+            user_verification=UserVerificationRequirement.REQUIRED,
+        ),
+    )
+    session['reg_challenge'] = bytes_to_base64url(options.challenge)
+    return _json_response(options_to_json(options))
+
+@app.route('/api/passkey/register/verify', methods=['POST'])
+def passkey_register_verify():
+    if not (session.get('logged_in') and session.get('settings_unlocked')):
+        return jsonify({"error": "Unlock settings first"}), 401
+    challenge = session.pop('reg_challenge', None)
+    if not challenge or passkeys_collection is None:
+        return jsonify({"error": "Registration expired. Try again."}), 400
+    try:
+        v = verify_registration_response(
+            credential=request.get_json(),
+            expected_challenge=base64url_to_bytes(challenge),
+            expected_rp_id=RP_ID,
+            expected_origin=ORIGIN,
+            require_user_verification=True,
+        )
+    except Exception as e:
+        print(f"Passkey register error: {e}")
+        return jsonify({"error": "Verification failed"}), 400
+
+    passkeys_collection.insert_one({
+        "credential_id": bytes_to_base64url(v.credential_id),
+        "public_key": bytes_to_base64url(v.credential_public_key),
+        "sign_count": v.sign_count,
+        "created_at": datetime.now(),
+    })
+    return jsonify({"success": True})
+
+@app.route('/api/passkey/auth/options', methods=['POST'])
+def passkey_auth_options():
+    if passkeys_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    creds = list(passkeys_collection.find({}, {'_id': 0, 'credential_id': 1}))
+    if not creds:
+        return jsonify({"error": "No fingerprint registered yet"}), 404
+    options = generate_authentication_options(
+        rp_id=RP_ID,
+        allow_credentials=[
+            PublicKeyCredentialDescriptor(id=base64url_to_bytes(c['credential_id']))
+            for c in creds
+        ],
+        user_verification=UserVerificationRequirement.REQUIRED,
+    )
+    session['auth_challenge'] = bytes_to_base64url(options.challenge)
+    return _json_response(options_to_json(options))
+
+@app.route('/api/passkey/auth/verify', methods=['POST'])
+def passkey_auth_verify():
+    body = request.get_json() or {}
+    purpose = body.get('purpose', 'login')
+    credential = body.get('credential') or {}
+    challenge = session.pop('auth_challenge', None)
+    if not challenge or passkeys_collection is None:
+        return jsonify({"error": "Expired. Try again."}), 400
+    if purpose == 'settings' and not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+
+    stored = passkeys_collection.find_one({"credential_id": credential.get('id')})
+    if not stored:
+        return jsonify({"error": "Unknown passkey"}), 401
+    try:
+        v = verify_authentication_response(
+            credential=credential,
+            expected_challenge=base64url_to_bytes(challenge),
+            expected_rp_id=RP_ID,
+            expected_origin=ORIGIN,
+            credential_public_key=base64url_to_bytes(stored['public_key']),
+            credential_current_sign_count=stored.get('sign_count', 0),
+            require_user_verification=True,
+        )
+    except Exception as e:
+        print(f"Passkey auth error: {e}")
+        return jsonify({"error": "Verification failed"}), 401
+
+    passkeys_collection.update_one(
+        {"credential_id": stored['credential_id']},
+        {"$set": {"sign_count": v.new_sign_count}},
+    )
+    session['logged_in'] = True
+    if purpose == 'settings':
+        session['settings_unlocked'] = True
+    return jsonify({"success": True})
+
+
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 8000))
-    app.run(host='0.0.0.0', port=port, debug=True)
+    app.run(host='0.0.0.0', port=port, debug=False)
