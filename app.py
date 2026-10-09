@@ -387,6 +387,61 @@ def extract_otp(text):
     return best[2] if best else "Code not found"
 
 
+# ======================= Code-er asol meyad (email theke pora) =======================
+# Email-e \"valid for 10 minutes\" / \"expires in 5 minutes\" / \"১০ মিনিটের মধ্যে\" lekha thakle
+# server seta pore prottek code-er nijer meyad boshay. Na thakle default (OTP_TTL_SECONDS).
+TTL_MIN_SECONDS = 30            # eta-r kom hole dhore nebo email-e vul/onno kichu lekha
+TTL_MAX_SECONDS = 24 * 3600     # eta-r besi hole dhore nebo OTP-er meyad na
+
+_TTL_NUM = r"(\d{1,4}(?:\.\d+)?)"
+_TTL_UNIT = r"(seconds?|secs?|minutes?|mins?|hours?|hrs?|সেকেন্ড|মিনিট|ঘণ্টা|ঘন্টা)"
+_TTL_PATTERNS = [
+    # valid for 10 minutes / good for 10 minutes / active for the next 10 min
+    re.compile(r"(?i)\b(?:valid|good|active|usable|available|effective)\s+(?:for|within|during)\s+(?:the\s+)?(?:next\s+|only\s+|about\s+|approximately\s+)*"
+               + _TTL_NUM + r"[\s-]*" + _TTL_UNIT),
+    # expires in 5 minutes / will expire after 5 min / expiring within 5 minutes
+    re.compile(r"(?i)\bexpir(?:es?|ed|ing|ation|y)\b[^\n.]{0,25}?\b(?:in|after|within)\s+(?:the\s+)?(?:next\s+|about\s+|approximately\s+)*"
+               + _TTL_NUM + r"[\s-]*" + _TTL_UNIT),
+    # expiration time: 10 minutes
+    re.compile(r"(?i)\bexpir(?:ation|y)(?:\s+time)?\s*[:=-]\s*" + _TTL_NUM + r"[\s-]*" + _TTL_UNIT),
+    # use it within 10 minutes / enter within the next 10 minutes
+    re.compile(r"(?i)\bwithin\s+(?:the\s+)?(?:next\s+)?" + _TTL_NUM + r"[\s-]*" + _TTL_UNIT),
+    # validity: 10 minutes / 10 minutes validity
+    re.compile(r"(?i)\bvalidity(?:\s+period)?\s*[:=-]?\s*" + _TTL_NUM + r"[\s-]*" + _TTL_UNIT),
+    # (Bangla) মেয়াদ ১০ মিনিট / বৈধ থাকবে ১০ মিনিট / কার্যকর থাকবে ...
+    re.compile(r"(?:মেয়াদ|বৈধ|কার্যকর|ভ্যালিড)[^\n]{0,30}?" + _TTL_NUM + r"\s*" + _TTL_UNIT),
+    # (Bangla) ১০ মিনিটের মধ্যে / ১০ মিনিট পর্যন্ত
+    re.compile(_TTL_NUM + r"\s*" + _TTL_UNIT + r"(?:ের)?\s*(?:মধ্যে|পর্যন্ত|পরে)"),
+]
+
+def _unit_seconds(unit):
+    u = unit.lower()
+    if u.startswith(("sec", "সেকেন্ড")):
+        return 1
+    if u.startswith(("min", "মিনিট")):
+        return 60
+    return 3600          # hour / hr / ঘণ্টা / ঘন্টা
+
+def extract_ttl(text):
+    """Email-er text theke code-er meyad (sekende) ber kore. Na pele None.
+    Ekadhik meyad paile shobcheye chhotota (nirapod dik)."""
+    if not text:
+        return None
+    t = text.translate(_ZW).translate(_BN)
+    t = re.sub(r"https?://\S+|www\.\S+", " ", t)
+    t = re.sub(r"\s+", " ", t)
+    found = []
+    for rx in _TTL_PATTERNS:
+        for m in rx.finditer(t):
+            try:
+                secs = int(round(float(m.group(1)) * _unit_seconds(m.group(2))))
+            except (ValueError, IndexError):
+                continue
+            if TTL_MIN_SECONDS <= secs <= TTL_MAX_SECONDS:
+                found.append(secs)
+    return min(found) if found else None
+
+
 def html_to_text(html_body):
     t = re.sub(r"(?s)<!--.*?-->", " ", html_body)          # HTML comment (mso CSS ityadi) bad
     t = re.sub(r"(?is)<(script|style|head)[^>]*>.*?</\1>", " ", t)
@@ -448,7 +503,7 @@ SPAM_SCAN_LIMIT = 3
 EMAIL_CACHE_MAX = 3000
 
 # Home-e code koto sekende porjonto dekhabe (client eta use kore). Total Gmail list-e shesh code always thake.
-OTP_TTL_SECONDS = 120   # 2 minutes
+OTP_TTL_SECONDS = 120   # 2 minutes -- shudhu tokhon, jokhon email-e meyad lekha nai
 
 def fetch_email_info(mail, uid):
     """Ekta email download kore OTP, sender, subject, time ber kore."""
@@ -475,16 +530,26 @@ def fetch_email_info(mail, uid):
                     pass
 
             otp = "Code not found"
-            for body in get_email_texts(msg) or [""]:
-                otp = extract_otp(subject + "\n" + body)
+            ttl = None
+            bodies = get_email_texts(msg) or [""]
+            for body in bodies:
+                full = subject + "\n" + body
+                otp = extract_otp(full)
                 if otp != "Code not found":
+                    ttl = extract_ttl(full)          # jei text-e code pelam, shekhane meyad khuji
                     break
+            if otp != "Code not found" and ttl is None:
+                for body in bodies:                  # oi text-e na thakle onno text-e (plain/html) dekhi
+                    ttl = extract_ttl(subject + "\n" + body)
+                    if ttl:
+                        break
             return {
                 "sender": sender,
                 "subject": subject,
                 "code": None if otp == "Code not found" else otp,
                 "time": msg_dt.strftime("%I:%M %p"),
                 "timestamp": epoch,
+                "ttl_seconds": ttl,                  # None hole default meyad
             }
     return None
 
@@ -580,7 +645,8 @@ def check_gmail(account, mail_data):
                 "time": result["time"],
                 "timestamp": result["timestamp"],
                 "age_seconds": max(0, int(time.time() - result["timestamp"])),
-                "ttl_seconds": OTP_TTL_SECONDS,
+                "ttl_seconds": result.get("ttl_seconds") or OTP_TTL_SECONDS,
+                "ttl_from_email": bool(result.get("ttl_seconds")),
             })
         else:
             mail_data.append({
