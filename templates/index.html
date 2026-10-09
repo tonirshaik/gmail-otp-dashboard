@@ -488,6 +488,62 @@
         .card-pin.pinned { color: #fbbf24; }
         .otp-card.is-pinned { border-color: rgba(251, 191, 36, 0.35); }
         .otp-card.is-pinned::before { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
+
+        /* ---- masked code (tap to reveal) ---- */
+        .otp-code-box.masked { letter-spacing: 6px; color: #7dd3fc; }
+        .reveal-eye { font-size: 14px; opacity: 0.7; margin-left: 6px; letter-spacing: normal; }
+
+        /* ---- countdown ring ---- */
+        .otp-expiry { display: flex; align-items: center; gap: 6px; }
+        .ring { transform: rotate(-90deg); flex: none; }
+        .ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 3; }
+        .ring-fg {
+            fill: none; stroke: var(--accent-cyan); stroke-width: 3; stroke-linecap: round;
+            transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
+        }
+        .otp-card.expiring .ring-fg { stroke: var(--accent-red); }
+
+        /* ---- skeleton loader ---- */
+        .skeleton-card {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            border-radius: 14px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+        .sk {
+            background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.13) 50%, rgba(255,255,255,0.05) 75%);
+            background-size: 200% 100%;
+            animation: shimmer 1.3s linear infinite;
+            border-radius: 8px;
+        }
+        .sk-line { height: 12px; margin-bottom: 12px; }
+        .sk-box { height: 50px; margin-bottom: 12px; }
+        .sk.w60 { width: 60%; }
+        .sk.w40 { width: 40%; margin-bottom: 0; }
+        @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+        /* ---- account health ---- */
+        .health-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+        .health-dot.ok { background: #10b981; box-shadow: 0 0 6px rgba(16, 185, 129, 0.7); }
+        .health-dot.warn { background: #f59e0b; box-shadow: 0 0 6px rgba(245, 158, 11, 0.7); }
+        .health-dot.bad { background: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.7); }
+        .health-msg { font-size: 11px; }
+        .health-msg.warn { color: #fcd34d; }
+        .health-msg.bad { color: #fca5a5; }
+        .health-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; }
+        .health-badge.warn { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
+        .health-badge.bad { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
+
+        /* ---- auto-copy toggle + keyboard hint ---- */
+        .mini-toggle {
+            display: block; margin: 8px auto 12px; background: none;
+            border: 1px solid var(--card-border); color: var(--text-muted);
+            border-radius: 999px; font-size: 12px; padding: 5px 12px; cursor: pointer;
+        }
+        .mini-toggle.on { color: var(--accent-green); border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); }
+        .kbd-hint { text-align: center; font-size: 11px; color: var(--text-muted); opacity: 0.6; margin-top: 12px; }
+        @media (hover: none), (pointer: coarse) { .kbd-hint { display: none; } }
     </style>
 </head>
 <body>
@@ -569,6 +625,7 @@
             <div id="accountCountBar" role="button" tabindex="0" title="View all Gmail accounts" style="cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin: 0 0 14px; padding: 8px 12px; border-radius: 10px; background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.25); color: #67e8f9; font-size: 14px; font-weight: 600;">
                 <i class="fa-solid fa-envelope"></i>
                 <span>Total Gmail Added: <span id="accountCount">0</span></span>
+                <span id="healthBadge" class="health-badge hidden"></span>
                 <i class="fa-solid fa-chevron-right" style="font-size:11px; opacity:0.7;"></i>
             </div>
             <div id="statusMsg" class="msg-status"></div>
@@ -583,6 +640,9 @@
                 <i class="fa-regular fa-clock"></i> Last updated: --
             </div>
             <div id="liveStatus"></div>
+            <button type="button" id="autoCopyBtn" class="mini-toggle on" title="Copy new codes automatically when they arrive live">
+                <i class="fa-regular fa-copy"></i> Auto-copy new code: <b>ON</b>
+            </button>
 
             <div class="otp-container" id="otpContainer">
                 <div class="empty-state">
@@ -591,6 +651,7 @@
                 </div>
             </div>
 
+            <div class="kbd-hint">R refresh &middot; W wait &middot; C copy &middot; / search &middot; Esc close</div>
             <button type="button" class="btn btn-logout" onclick="logout()">
                 <i class="fa-solid fa-right-from-bracket"></i> Logout
             </button>
@@ -822,11 +883,7 @@
                 refreshBtn.style.cursor = 'not-allowed';
                 refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking Gmail...`;
 
-                otpContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        Fetching OTPs from servers...
-                    </div>`;
+                otpContainer.innerHTML = skeletonHTML(2);
             }
 
             try {
@@ -878,7 +935,7 @@
             if (!isValidItem(item)) return item;
             const ttl = item.ttl_seconds ?? 120;
             const age = item.age_seconds ?? 0;
-            return { ...item, expiresAt: Date.now() + (ttl - age) * 1000 };
+            return { ...item, expiresAt: Date.now() + (ttl - age) * 1000, ttlMs: ttl * 1000 };
         }
 
         function tickExpiry() {
@@ -890,6 +947,11 @@
                 const el = card.querySelector('.otp-expiry-time');
                 if (el) el.textContent = fmtLeft(sec);
                 card.classList.toggle('expiring', sec <= 20);
+                const ring = card.querySelector('.ring-fg');
+                if (ring) {
+                    const ttlMs = Number(card.dataset.ttl) || 120000;
+                    ring.style.strokeDashoffset = RING_C * (1 - Math.max(0, Math.min(1, left / ttlMs)));
+                }
             });
             if (homeExpired) renderHome();   // 2 minute shesh -> home theke sore jabe
         }
@@ -909,36 +971,124 @@
             return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
         }
 
+        // ---------- mask / ring / health helpers ----------
+        const MASK_CODES = true;          // true: code "•••" thake, tap korle dekha jay
+        const REVEAL_MS = 15000;          // dekhano code koto ms por abar lukabe
+        const RING_C = 2 * Math.PI * 10;  // countdown ring-er poridhi (r = 10)
+        const revealedAt = new Map();     // codeKey -> kokhon dekhano hoyechhe
+
+        function healthOf(item) {
+            if (item.code === 'Error') return /login failed/i.test(item.sender || '') ? 'bad' : 'warn';
+            return 'ok';
+        }
+        const HEALTH_TITLE = { ok: 'Connected', warn: 'Connection problem - try refresh', bad: 'Login failed - check App Password' };
+
+        function codeKey(item) { return item.email + '|' + item.code; }
+        function isRevealed(item) {
+            if (!MASK_CODES) return true;
+            const ts = revealedAt.get(codeKey(item));
+            return !!ts && (Date.now() - ts) < REVEAL_MS;
+        }
+        function maskText(code) { return '•'.repeat(Math.min(String(code).length, 10)); }
+
+        function setBoxRevealed(box, revealed) {
+            box.classList.toggle('masked', !revealed);
+            if (revealed) {
+                box.textContent = box.dataset.code;
+                box.title = 'Click to copy';
+            } else {
+                box.innerHTML = maskText(box.dataset.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>';
+                box.title = 'Tap to reveal & copy';
+            }
+        }
+
+        function onCodeTap(box) {
+            const code = box.dataset.code;
+            if (!code) return;
+            if (box.classList.contains('masked')) {
+                revealedAt.set(box.dataset.key, Date.now());
+                setBoxRevealed(box, true);
+            }
+            copyOTP(code);
+        }
+
+        // dekhano code REVEAL_MS por nije abar lukiye jabe
+        setInterval(() => {
+            if (!MASK_CODES) return;
+            const now = Date.now();
+            document.querySelectorAll('.otp-code-box[data-key]:not(.masked)').forEach(box => {
+                const ts = revealedAt.get(box.dataset.key);
+                if (!ts || now - ts >= REVEAL_MS) setBoxRevealed(box, false);
+            });
+            revealedAt.forEach((ts, k) => { if (now - ts > REVEAL_MS) revealedAt.delete(k); });
+        }, 1000);
+
+        // tab theke soresh gele sathe sathe shob code lukiye felo
+        document.addEventListener('visibilitychange', () => {
+            if (!MASK_CODES || document.visibilityState !== 'hidden') return;
+            revealedAt.clear();
+            document.querySelectorAll('.otp-code-box[data-key]:not(.masked)').forEach(box => setBoxRevealed(box, false));
+        });
+
+        function updateHealthBadge() {
+            const el = document.getElementById('healthBadge');
+            if (!el) return;
+            const bad = allItems.filter(i => healthOf(i) === 'bad').length;
+            const warn = allItems.filter(i => healthOf(i) === 'warn').length;
+            const n = bad + warn;
+            if (!n) { el.className = 'health-badge hidden'; return; }
+            el.className = 'health-badge ' + (bad ? 'bad' : 'warn');
+            el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${n}`;
+            el.title = n + ' account(s) need attention';
+        }
+
+        function skeletonHTML(n) {
+            return Array.from({ length: n || 2 }, () => `
+                <div class="skeleton-card">
+                    <div class="sk sk-line w60"></div>
+                    <div class="sk sk-box"></div>
+                    <div class="sk sk-line w40"></div>
+                </div>`).join('');
+        }
+
         function cardHTML(item, opts) {
             const validCode = isValidItem(item);
             const isNew = !!opts.isNew;
             const withTimer = validCode && !!opts.showExpiry;
-            const leftSec = withTimer ? Math.max(0, Math.ceil((item.expiresAt - Date.now()) / 1000)) : 0;
+            const leftMs = withTimer ? Math.max(0, item.expiresAt - Date.now()) : 0;
+            const ttlMs = item.ttlMs || 120000;
+            const leftSec = Math.ceil(leftMs / 1000);
+            const ringOffset = RING_C * (1 - Math.max(0, Math.min(1, leftMs / ttlMs)));
+            const revealed = validCode && isRevealed(item);
+            const health = healthOf(item);
             const pinned = isPinned(item.email);
             const pinBtn = opts.pinnable
                 ? `<button type="button" class="card-pin ${pinned ? 'pinned' : ''}" data-email="${escAttr(item.email)}" title="${pinned ? 'Unpin' : 'Pin to top'}"><i class="fa-${pinned ? 'solid' : 'regular'} fa-star"></i></button>`
                 : '';
+            const healthDot = opts.pinnable
+                ? `<span class="health-dot ${health}" title="${escAttr(HEALTH_TITLE[health])}"></span>`
+                : '';
+            const infoLine = health === 'ok'
+                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${escAttr(item.sender || 'N/A')}`
+                : `<span class="health-msg ${health}"><i class="fa-solid fa-triangle-exclamation"></i> ${escAttr(item.sender || HEALTH_TITLE[health])}</span>`;
+            const codeBox = validCode
+                ? `<div class="otp-code-box ${revealed ? '' : 'masked'}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${revealed ? escAttr(item.code) : maskText(item.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>'}</div>`
+                : `<div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">${escAttr(item.code || 'Code not found')}</div>`;
+            const expiryRow = withTimer
+                ? `<div class="otp-expiry"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${ringOffset.toFixed(2)}"/></svg> Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></div>`
+                : '';
             const card = `
-                <div class="otp-card ${isNew ? 'is-new' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''}" ${withTimer ? `data-expires="${item.expiresAt}"` : ''}>
+                <div class="otp-card ${isNew ? 'is-new' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
                     ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
+                        ${healthDot}
                         <span>${escAttr(item.email)}</span>
                         ${pinBtn}
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
-                    ${validCode ? `
-                        <div class="otp-code-box" onclick="copyOTP('${escAttr(item.code)}')" title="Click to copy">
-                            ${escAttr(item.code)}
-                        </div>
-                        ${withTimer ? `<div class="otp-expiry"><i class="fa-solid fa-hourglass-half"></i> Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></div>` : ''}
-                    ` : `
-                        <div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">
-                            ${item.code || 'Code not found'}
-                        </div>
-                    `}
-                    <div class="otp-time">
-                        <i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${escAttr(item.sender || 'N/A')}
-                    </div>
+                    ${codeBox}
+                    ${expiryRow}
+                    <div class="otp-time">${infoLine}</div>
                 </div>`;
             if (!opts.deletable) return card;
             return `
@@ -950,6 +1100,7 @@
 
         // Home: shudhu jeigulo-te code ache (max 2 ta)
         function renderHome() {
+            updateHealthBadge();
             if (allItems.length === 0) {
                 otpContainer.innerHTML = `
                     <div class="empty-state">
@@ -1013,7 +1164,7 @@
             if (openWrap) openWrap = null;
             document.getElementById('allCount').innerText = allItems.length;
             if (!hasLoaded) {
-                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>Loading...</div>`;
+                allContainer.innerHTML = skeletonHTML(3);
                 return;
             }
             if (allItems.length === 0) {
@@ -1113,10 +1264,25 @@
             } catch (e) {}
         }
 
+        async function copyQuiet(text) {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                }
+            } catch (e) {}
+            return fallbackCopy(text);
+        }
+
         function alertNewCode(email) {
             try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) {}
             beep();
-            showToast('New code: ' + email);
+            const it = allItems.find(x => x.email === email);
+            if (autoCopyOn && it && isValidItem(it) && document.visibilityState === 'visible') {
+                copyQuiet(it.code).then(ok => showToast(ok ? 'New code copied: ' + email : 'New code: ' + email));
+            } else {
+                showToast('New code: ' + email);
+            }
         }
 
         // ======================= ekta account-er item merge kora =======================
@@ -1654,6 +1820,68 @@
             }
         });
 
+        // ---------- Auto-copy toggle ----------
+        let autoCopyOn = true;
+        try { autoCopyOn = localStorage.getItem('otpDash.autoCopy') !== '0'; } catch (e) {}
+        const autoCopyBtn = document.getElementById('autoCopyBtn');
+        function renderAutoCopyBtn() {
+            autoCopyBtn.classList.toggle('on', autoCopyOn);
+            autoCopyBtn.querySelector('b').textContent = autoCopyOn ? 'ON' : 'OFF';
+        }
+        autoCopyBtn.addEventListener('click', () => {
+            autoCopyOn = !autoCopyOn;
+            try { localStorage.setItem('otpDash.autoCopy', autoCopyOn ? '1' : '0'); } catch (e) {}
+            renderAutoCopyBtn();
+            showToast('Auto-copy ' + (autoCopyOn ? 'ON' : 'OFF'));
+        });
+        renderAutoCopyBtn();
+
+        // ---------- Keyboard shortcuts (desktop) ----------
+        function typingInField(t) {
+            return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+        }
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            if (e.key === 'Escape') {
+                if (deleteModalOpen()) { closeDeleteModal(); return; }
+                if (accountsModalOpen()) {
+                    if (document.activeElement === accSearchInput && accSearchInput.value) {
+                        accSearchInput.value = '';
+                        accSearchWrap.classList.remove('has-text');
+                        renderAll();
+                    } else {
+                        closeAccountsModal();
+                    }
+                    return;
+                }
+                if (settingsPopup.classList.contains('active')) {
+                    settingsPopup.classList.remove('active');
+                    resetSettingsPopup();
+                }
+                return;
+            }
+            if (!dashboardIsOpen() || deleteModalOpen()) return;
+            if (e.key === '/' && !typingInField(e.target)) {
+                e.preventDefault();
+                if (!accountsModalOpen()) openAccountsModal();
+                accSearchInput.focus();
+                return;
+            }
+            if (typingInField(e.target) || accountsModalOpen()) return;
+            const k = e.key.toLowerCase();
+            if (k === 'r') {
+                e.preventDefault();
+                fetchOTPs();
+            } else if (k === 'w') {
+                e.preventDefault();
+                waiting ? stopWaiting(false) : startWaiting();
+            } else if (k === 'c') {
+                const first = allItems.find(i => isValidItem(i) && i.expiresAt > Date.now());
+                if (first) { e.preventDefault(); copyOTP(first.code); }
+                else showToast('No active code to copy');
+            }
+        });
+
         // ---------- Auto-lock: kichu na korle nije logout ----------
         const AUTO_LOCK_MINUTES = 5;           // koto minute kichu na korle auto logout
         const AUTO_LOCK_WARN_SECONDS = 30;     // logout-er koto sekend age hushiyar
@@ -1723,6 +1951,7 @@
             allItems = [];
             newCardEmails = [];
             hasLoaded = false;
+            updateHealthBadge();
             stopPush();
             stopWaiting(false);
             closeAccountsModal();
