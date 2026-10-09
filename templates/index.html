@@ -499,11 +499,11 @@
         .otp-card.is-used .otp-email > span:not(.used-badge),
         .otp-card.is-used .otp-expiry,
         .otp-card.is-used .otp-time { opacity: 0.5; }
-        .otp-card.is-used .otp-code-box {
+        .otp-card.is-used > .otp-code-box {
             opacity: 0.45; filter: blur(2.5px);
             transition: filter 0.2s ease, opacity 0.2s ease;
         }
-        .otp-card.is-used .otp-code-box:hover { opacity: 0.85; filter: blur(0); }   /* dhorle abar poriskar */
+        .otp-card.is-used > .otp-code-box:hover { opacity: 0.85; filter: blur(0); }   /* dhorle abar poriskar */
         .used-badge {
             margin-left: auto; flex: none;
             display: inline-flex; align-items: center; gap: 5px;
@@ -515,6 +515,25 @@
         .used-badge:hover { background: rgba(16, 185, 129, 0.22); }
         .otp-card.just-used { animation: usedPop 0.45s ease; }
         @keyframes usedPop { 0% { transform: scale(1); } 40% { transform: scale(0.97); } 100% { transform: scale(1); } }
+
+        /* ---- smart: verify note / magic link / other recent codes ---- */
+        .verify-note {
+            display: flex; gap: 6px; align-items: flex-start; font-size: 11px; line-height: 1.4;
+            color: #fbbf24; background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.25);
+            border-radius: 8px; padding: 5px 8px; margin-bottom: 8px; word-break: break-word;
+        }
+        .verify-note i { margin-top: 2px; }
+        .verify-note.link { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.08); border-color: rgba(6, 182, 212, 0.25); }
+        .otp-code-box.link-box { font-size: 15px; letter-spacing: normal; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .extra-codes { margin: 2px 0 8px; border-top: 1px dashed rgba(255, 255, 255, 0.1); padding-top: 6px; }
+        .extra-title { font-size: 10px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-muted); margin-bottom: 5px; }
+        .extra-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+        .extra-meta { flex: 1; min-width: 0; font-size: 11px; color: var(--text-muted); line-height: 1.35; }
+        .extra-svc { display: block; color: var(--text-main); font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .otp-code-box.mini { flex: none; min-width: 100px; font-size: 15px; padding: 6px 10px; margin: 0; letter-spacing: 2px; }
+        .otp-code-box.mini.masked { letter-spacing: 3px; }
+        .extra-row.is-used { opacity: 0.5; }
+        .extra-row.is-used .otp-code-box { filter: blur(2px); }
 
         /* ---- countdown ring ---- */
         .otp-expiry { display: flex; align-items: center; gap: 6px; }
@@ -992,11 +1011,24 @@
 
         // Home-e code tar nijer meyad porjonto dekhabe (server email theke pore, na thakle 2 min). expiresAt = kokhon home theke soribe.
         // (Total Gmail list-e shesh code always thake)
+        function withExpiry(c, email) {
+            const ttl = c.ttl_seconds ?? 120;
+            const age = c.age_seconds ?? 0;
+            return { ...c, email, expiresAt: Date.now() + (ttl - age) * 1000, ttlMs: ttl * 1000 };
+        }
+        // Account-er upore-er field = shobcheye notun code; `codes` = recent code/link-er list (server pathay)
         function normalizeExpiry(item) {
             if (!isValidItem(item)) return item;
-            const ttl = item.ttl_seconds ?? 120;
-            const age = item.age_seconds ?? 0;
-            return { ...item, expiresAt: Date.now() + (ttl - age) * 1000, ttlMs: ttl * 1000 };
+            const list = Array.isArray(item.codes) && item.codes.length ? item.codes : [item];
+            return { ...withExpiry(item, item.email), codes: list.map(c => withExpiry(c, item.email)) };
+        }
+        // Home-er jonno: shobcheye notun *ekhono-valid* code upore, baki valid-gulo extras
+        function activeView(item) {
+            if (!isValidItem(item)) return item;
+            const now = Date.now();
+            const live = (item.codes || []).filter(c => c.expiresAt > now);
+            if (!live.length) return { ...item, expiresAt: 0 };
+            return { ...item, ...live[0], email: item.email, codes: item.codes, extras: live.slice(1) };
         }
 
         function tickExpiry() {
@@ -1013,6 +1045,12 @@
                 if (ring) {
                     ring.style.strokeDashoffset = RING_C * (1 - Math.max(0, Math.min(1, left / ttlMs)));
                 }
+            });
+            document.querySelectorAll('#otpContainer .extra-row[data-expires]').forEach(row => {
+                const left = Number(row.dataset.expires) - Date.now();
+                if (left <= 0) { homeExpired = true; return; }
+                const el = row.querySelector('.extra-left');
+                if (el) el.textContent = fmtLeft(Math.ceil(left / 1000));
             });
             if (homeExpired) renderHome();   // code-er nijer meyad shesh -> home theke sore jabe
         }
@@ -1090,9 +1128,11 @@
             // card-ta sathe sathe "used" dekhai; ektu pore home-er ordering thik kori (notun code age)
             document.querySelectorAll('.otp-code-box[data-used-key]').forEach(box => {
                 if (box.dataset.usedKey !== key) return;
-                const card = box.closest('.otp-card');
+                const mini = box.classList.contains('mini');
+                const card = mini ? box.closest('.extra-row') : box.closest('.otp-card');
                 if (!card) return;
                 card.classList.toggle('is-used', used);
+                if (mini) return;                                  // extra code: shudhu oi row jhapsha
                 if (used) {
                     card.classList.add('just-used');
                     card.querySelector('.new-dot')?.remove();
@@ -1110,6 +1150,15 @@
         function onCodeTap(box) {
             const code = box.dataset.code;
             if (!code) return;
+            if (box.classList.contains('link-box')) {              // magic link: copy na, notun tab-e khule
+                const url = box.dataset.url || '';
+                if (/^https:\/\//i.test(url)) {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                    const k = box.dataset.usedKey;
+                    if (k && !usedMap[k]) setUsed(k, true);
+                }
+                return;
+            }
             if (box.classList.contains('masked')) {
                 revealedAt.set(box.dataset.key, Date.now());
                 setBoxRevealed(box, true);
@@ -1166,6 +1215,21 @@
                 </div>`).join('');
         }
 
+        function extraRowHTML(c, timer) {
+            const left = Math.max(0, Math.ceil((c.expiresAt - Date.now()) / 1000));
+            const link = c.kind === 'link';
+            const attrs = `data-code="${escAttr(c.code)}" data-key="${escAttr(codeKey(c))}" data-used-key="${escAttr(usedKey(c))}"`;
+            const rev = !link && isRevealed(c);
+            const box = link
+                ? `<div class="otp-code-box mini link-box" ${attrs} data-url="${escAttr(c.url || '')}" onclick="onCodeTap(this)" title="Open link in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open</div>`
+                : `<div class="otp-code-box mini ${rev ? '' : 'masked'}" ${attrs} onclick="onCodeTap(this)" title="${rev ? 'Click to copy' : 'Tap to reveal & copy'}">${rev ? escAttr(c.code) : maskText(c.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>'}</div>`;
+            const warn = !link && c.confidence === 'low'
+                ? ` <i class="fa-solid fa-circle-exclamation" style="color:#fbbf24" title="Please verify &middot; ${escAttr(c.subject || '')}"></i>` : '';
+            return `<div class="extra-row ${isUsed(c) ? 'is-used' : ''}" ${timer ? `data-expires="${c.expiresAt}"` : ''}>
+                <div class="extra-meta"><span class="extra-svc">${escAttr(c.service || c.sender || '')}${warn}</span>${escAttr(c.time || '')}${timer ? ` &middot; <span class="extra-left">${fmtLeft(left)}</span> left` : ''}</div>
+                ${box}</div>`;
+        }
+
         function cardHTML(item, opts) {
             const validCode = isValidItem(item);
             const isNew = !!opts.isNew;
@@ -1186,11 +1250,21 @@
                 ? `<span class="health-dot ${health}" title="${escAttr(HEALTH_TITLE[health])}"></span>`
                 : '';
             const infoLine = health === 'ok'
-                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${escAttr(item.sender || 'N/A')}`
+                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | ${item.service ? 'Service' : 'Sender'}: ${escAttr(item.service || item.sender || 'N/A')}`
                 : `<span class="health-msg ${health}"><i class="fa-solid fa-triangle-exclamation"></i> ${escAttr(item.sender || HEALTH_TITLE[health])}</span>`;
-            const codeBox = validCode
+            const isLink = validCode && item.kind === 'link';
+            const linkBox = `<div class="otp-code-box link-box" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" data-url="${escAttr(item.url || '')}" onclick="onCodeTap(this)" title="Open link in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open verify link</div>`;
+            const codeBox = isLink ? linkBox : validCode
                 ? `<div class="otp-code-box ${revealed ? '' : 'masked'}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${revealed ? escAttr(item.code) : maskText(item.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>'}</div>`
                 : `<div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">${escAttr(item.code || 'Code not found')}</div>`;
+            const verifyNote = !validCode ? '' : isLink
+                ? `<div class="verify-note link"><i class="fa-solid fa-link"></i><span>Link from <b>${escAttr(item.service || item.sender || 'sender')}</b> &middot; ${escAttr(item.subject || '')}<br>Open it only if you just requested it.</span></div>`
+                : (item.confidence === 'low'
+                    ? `<div class="verify-note"><i class="fa-solid fa-circle-exclamation"></i><span>Please verify this code &middot; Subject: ${escAttr(item.subject || '')}</span></div>`
+                    : '');
+            const extras = validCode ? (item.extras ?? (item.codes || []).slice(1).filter(c => c.expiresAt > Date.now())) : [];
+            const extraHTML = extras.length
+                ? `<div class="extra-codes"><div class="extra-title">Other recent codes</div>${extras.map(c => extraRowHTML(c, withTimer)).join('')}</div>` : '';
             const expiryRow = withTimer
                 ? `<div class="otp-expiry"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${ringOffset.toFixed(2)}"/></svg> Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></div>`
                 : '';
@@ -1208,7 +1282,9 @@
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
                     ${codeBox}
+                    ${verifyNote}
                     ${expiryRow}
+                    ${extraHTML}
                     <div class="otp-time">${infoLine}</div>
                 </div>`;
             if (!opts.deletable) return card;
@@ -1231,7 +1307,7 @@
                 return;
             }
             const now = Date.now();
-            const active = allItems.filter(i => isValidItem(i) && i.expiresAt > now);
+            const active = allItems.map(activeView).filter(i => isValidItem(i) && i.expiresAt > now);
             if (active.length === 0) {
                 otpContainer.innerHTML = `
                     <div class="empty-state">
@@ -1451,10 +1527,10 @@
             try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) {}
             beep();
             const it = allItems.find(x => x.email === email);
-            if (autoCopyOn && it && isValidItem(it) && document.visibilityState === 'visible') {
+            if (autoCopyOn && it && isValidItem(it) && it.kind !== 'link' && document.visibilityState === 'visible') {
                 copyQuiet(it.code).then(ok => showToast(ok ? 'New code copied: ' + email : 'New code: ' + email));
             } else {
-                showToast('New code: ' + email);
+                showToast((it && it.kind === 'link' ? 'New link: ' : 'New code: ') + email);
             }
         }
 
