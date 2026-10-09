@@ -67,6 +67,7 @@ db = None
 accounts_collection = None
 passkeys_collection = None
 security_collection = None
+prefs_collection = None
 
 if MONGO_URI:
     try:
@@ -75,6 +76,7 @@ if MONGO_URI:
         accounts_collection = db['accounts']
         passkeys_collection = db['passkeys']
         security_collection = db['security']   # login lock-er state (shob worker-e eki)
+        prefs_collection = db['prefs']         # pin-er moto preference (shob device-e eki)
         print("MongoDB Connected Successfully!")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
@@ -1008,6 +1010,75 @@ def stream():
     return Response(gen(), mimetype='text/event-stream',
                     headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
+# ======================= Pin (shob device-e eki) =======================
+# Pin-er list MongoDB-te thake ({_id: "pins", emails: [...]}), tai phone ar computer-e eki dekhay.
+# Poro-poro toggle hoy ($addToSet / $pull), puro list overwrite hoy na -- dui device ekshathe
+# alada pin dilew keu karo pin muche felbe na.
+PINS_ID = "pins"
+
+def _norm_email(v):
+    return str(v or "").strip().lower()
+
+def _read_pins():
+    doc = prefs_collection.find_one({"_id": PINS_ID}) or {}
+    return [e for e in doc.get("emails", []) if isinstance(e, str)]
+
+@app.route('/api/pins', methods=['GET'])
+def get_pins():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if prefs_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    try:
+        return jsonify({"pins": _read_pins()})
+    except Exception as e:
+        print(f"Pins read error: {e}")
+        return jsonify({"error": "Could not load pins"}), 500
+
+@app.route('/api/pins/toggle', methods=['POST'])
+def toggle_pin_api():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if prefs_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    data = request.json or {}
+    em = _norm_email(data.get('email'))
+    if not em or len(em) > 320:
+        return jsonify({"error": "Email required"}), 400
+    pinned = bool(data.get('pinned'))
+    try:
+        if pinned:
+            prefs_collection.update_one({"_id": PINS_ID}, {"$addToSet": {"emails": em}}, upsert=True)
+        else:
+            prefs_collection.update_one({"_id": PINS_ID}, {"$pull": {"emails": em}})
+        return jsonify({"pins": _read_pins()})
+    except Exception as e:
+        print(f"Pins write error: {e}")
+        return jsonify({"error": "Could not save pin"}), 500
+
+@app.route('/api/pins/merge', methods=['POST'])
+def merge_pins_api():
+    """Ek-bar: purono browser-er local pin gulo server-e tule dey (kichu muche na)."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if prefs_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    raw = (request.json or {}).get('emails')
+    known = {_norm_email(a.get('email')) for a in load_accounts()}
+    emails = []
+    if isinstance(raw, list):
+        for x in raw[:200]:
+            em = _norm_email(x)
+            if em and em in known and em not in emails:     # shudhu ashol account-er pin
+                emails.append(em)
+    try:
+        if emails:
+            prefs_collection.update_one({"_id": PINS_ID}, {"$addToSet": {"emails": {"$each": emails}}}, upsert=True)
+        return jsonify({"pins": _read_pins()})
+    except Exception as e:
+        print(f"Pins merge error: {e}")
+        return jsonify({"error": "Could not save pins"}), 500
+
 @app.route('/api/accounts-count')
 def accounts_count():
     if not session.get('logged_in'):
@@ -1049,6 +1120,11 @@ def delete_account():
     result = accounts_collection.delete_one({"email": email_input})
     if result.deleted_count == 0:
         return jsonify({"error": "Account not found"}), 404
+    if prefs_collection is not None:
+        try:
+            prefs_collection.update_one({"_id": PINS_ID}, {"$pull": {"emails": _norm_email(email_input)}})
+        except Exception as e:
+            print(f"Pin cleanup error: {e}")
     return jsonify({"message": "Account removed"})
 
 @app.route('/api/add-account', methods=['POST'])
