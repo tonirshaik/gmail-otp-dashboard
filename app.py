@@ -7,6 +7,7 @@ import json
 import threading
 import hmac
 import math
+import socket
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime, parseaddr
 from email.header import decode_header, make_header
@@ -509,10 +510,34 @@ def scan_folder(mail, acct_email, folder, limit):
             return info
     return None
 
+def _imap_login(account):
+    """Connect + login. Network-er temporary shomossa hole ekbar retry kore.
+    Password vul hole retry kore lav nai, tai sathe sathe error dey."""
+    last = None
+    for _ in range(2):
+        try:
+            mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
+            mail.login(account['email'], account['password'])
+            return mail
+        except (OSError, imaplib.IMAP4.abort) as e:      # timeout / connection drop
+            last = e
+            time.sleep(0.5)
+        # imaplib.IMAP4.error (login reject) ekhane catch hoy na -> shoja bahire jabe
+    raise last
+
+def _error_reason(e):
+    """Card-e dekhanor jonno chhoto karon."""
+    msg = str(e).upper()
+    if isinstance(e, (socket.timeout, TimeoutError)) or "TIMED OUT" in msg:
+        return "Timeout - Refresh again"
+    if any(k in msg for k in ("AUTHENTICATIONFAILED", "INVALID CREDENTIALS", "APPLICATION-SPECIFIC",
+                              "WEBLOGIN", "ALERT", "LOGIN FAILED")):
+        return "Login failed - check App Password"
+    return "Connection Error"
+
 def check_gmail(account, mail_data):
     try:
-        mail = imaplib.IMAP4_SSL("imap.gmail.com", timeout=10)
-        mail.login(account['email'], account['password'])
+        mail = _imap_login(account)
 
         inbox_res, spam_res = None, None
 
@@ -573,7 +598,7 @@ def check_gmail(account, mail_data):
         print(f"Error reading {account['email']}: {e}")
         mail_data.append({
             "email": account['email'],
-            "sender": "Connection Error",
+            "sender": _error_reason(e),
             "subject": "Failed to login/fetch",
             "code": "Error",
             "time": "N/A",
