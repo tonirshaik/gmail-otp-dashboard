@@ -535,6 +535,39 @@
         .health-badge.warn { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
         .health-badge.bad { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
 
+        /* ---- Refresh + Wait: ek line-e pashapashi ---- */
+        .btn-row { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-row .btn {
+            flex: 1 1 0; min-width: 0; margin-bottom: 0;
+            padding: 12px 8px; font-size: 13px; line-height: 1.25; text-align: center;
+        }
+
+        /* ---- accounts icon button (gear-er pashe) ---- */
+        .top-actions { display: flex; align-items: center; gap: 10px; }
+        .accounts-btn {
+            position: relative; font-size: 16px; color: #67e8f9;
+            background: rgba(34, 211, 238, 0.08); border-color: rgba(34, 211, 238, 0.25);
+        }
+        .accounts-btn:hover { transform: none; background: rgba(34, 211, 238, 0.18); border-color: var(--accent-cyan); }
+        .accounts-btn:active { transform: scale(0.94); }
+        .count-badge {
+            position: absolute; top: -6px; right: -6px;
+            min-width: 19px; height: 19px; padding: 0 5px; border-radius: 999px;
+            background: var(--gradient-btn); color: #fff;
+            font-size: 11px; font-weight: 700; line-height: 1;
+            display: flex; align-items: center; justify-content: center;
+            border: 2px solid var(--bg-color);
+        }
+        .health-flag {
+            position: absolute; bottom: -5px; right: -5px;
+            width: 17px; height: 17px; border-radius: 50%;
+            font-size: 10px; font-weight: 800; line-height: 1; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            border: 2px solid var(--bg-color);
+        }
+        .health-flag.warn { background: #f59e0b; }
+        .health-flag.bad { background: #ef4444; }
+
         /* ---- auto-copy toggle + keyboard hint ---- */
         .mini-toggle {
             display: block; margin: 8px auto 12px; background: none;
@@ -577,9 +610,16 @@
                     <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard
                 </div>
                 
-                <button class="settings-btn" id="settingsToggle" title="Add Account Settings">
-                    <i class="fa-solid fa-gear"></i>
-                </button>
+                <div class="top-actions">
+                    <button type="button" class="settings-btn accounts-btn" id="accountCountBar" title="All Gmail accounts" aria-label="View all Gmail accounts">
+                        <i class="fa-solid fa-envelope"></i>
+                        <span class="count-badge" id="accountCount">0</span>
+                        <span id="healthBadge" class="health-flag hidden"></span>
+                    </button>
+                    <button class="settings-btn" id="settingsToggle" title="Add Account Settings">
+                        <i class="fa-solid fa-gear"></i>
+                    </button>
+                </div>
 
                 <div class="settings-popup" id="settingsPopup">
                     <div class="settings-auth" id="settingsAuth">
@@ -622,20 +662,16 @@
                 </div>
             </div>
 
-            <div id="accountCountBar" role="button" tabindex="0" title="View all Gmail accounts" style="cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; margin: 0 0 14px; padding: 8px 12px; border-radius: 10px; background: rgba(34,211,238,0.08); border: 1px solid rgba(34,211,238,0.25); color: #67e8f9; font-size: 14px; font-weight: 600;">
-                <i class="fa-solid fa-envelope"></i>
-                <span>Total Gmail Added: <span id="accountCount">0</span></span>
-                <span id="healthBadge" class="health-badge hidden"></span>
-                <i class="fa-solid fa-chevron-right" style="font-size:11px; opacity:0.7;"></i>
-            </div>
             <div id="statusMsg" class="msg-status"></div>
 
-            <button type="button" class="btn btn-refresh" id="refreshBtn" style="margin-bottom: 10px;">
-                <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
-            </button>
-            <button type="button" class="btn btn-wait" id="waitBtn">
-                <i class="fa-solid fa-hourglass-start"></i> Wait for new code
-            </button>
+            <div class="btn-row">
+                <button type="button" class="btn btn-refresh" id="refreshBtn">
+                    <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
+                </button>
+                <button type="button" class="btn btn-wait" id="waitBtn">
+                    <i class="fa-solid fa-hourglass-start"></i> Wait for new code
+                </button>
+            </div>
             <div id="autoStatus" style="text-align:center; font-size:12px; opacity:0.65; margin-top:8px;">
                 <i class="fa-regular fa-clock"></i> Last updated: --
             </div>
@@ -866,6 +902,7 @@
                 if (res.ok) {
                     const data = await res.json();
                     document.getElementById('accountCount').innerText = data.count;
+                    document.getElementById('accountCountBar').title = 'All Gmail accounts (' + data.count + ')';
                 }
             } catch (err) {}
         }
@@ -1036,9 +1073,9 @@
             const bad = allItems.filter(i => healthOf(i) === 'bad').length;
             const warn = allItems.filter(i => healthOf(i) === 'warn').length;
             const n = bad + warn;
-            if (!n) { el.className = 'health-badge hidden'; return; }
-            el.className = 'health-badge ' + (bad ? 'bad' : 'warn');
-            el.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i> ${n}`;
+            if (!n) { el.className = 'health-flag hidden'; return; }
+            el.className = 'health-flag ' + (bad ? 'bad' : 'warn');
+            el.textContent = '!';
             el.title = n + ' account(s) need attention';
         }
 
@@ -1322,7 +1359,7 @@
                 return;
             }
             waitBtn.classList.add('active');
-            waitBtn.innerHTML = `<i class="fa-solid fa-spinner rotating"></i> Waiting for code... ${fmtLeft(left)} &middot; tap to cancel`;
+            waitBtn.innerHTML = `<i class="fa-solid fa-spinner rotating"></i> Waiting ${fmtLeft(left)} &middot; cancel`;
         }
 
         function startWaiting() {
@@ -1421,6 +1458,7 @@
             es.addEventListener('otp', (ev) => {
                 try { applyItem(JSON.parse(ev.data), true); } catch (e) {}
             });
+            es.addEventListener('expired', () => autoLock('Session expired. Please login again.'));
             es.onerror = () => {
                 pushConnected = false;
                 updateLive();
@@ -1900,7 +1938,7 @@
 
         loginSection.addEventListener('pointerdown', () => { lockNotice.style.display = 'none'; });
 
-        async function autoLock() {
+        async function autoLock(reason) {
             if (locking) return;
             locking = true;
             try {
@@ -1912,7 +1950,7 @@
                 allContainer.innerHTML = '';
                 await logout();
                 document.getElementById('lockNoticeText').innerText =
-                    `Locked after ${AUTO_LOCK_MINUTES} minutes of inactivity. Please login again.`;
+                    reason || `Locked after ${AUTO_LOCK_MINUTES} minutes of inactivity. Please login again.`;
                 lockNotice.style.display = 'block';
                 loginError.style.display = 'none';
             } finally {
@@ -1921,6 +1959,20 @@
                 lockWarned = false;
             }
         }
+
+        // Keep-alive: user kaj korle ~1 min-e server-ke jani, jate server-er idle timeout-o reset hoy.
+        // User kichu na korle ping jay na -> server-o ekshomoy session shesh kore dey.
+        const PING_EVERY_MS = 60 * 1000;
+        let lastPingAt = Date.now();
+        setInterval(async () => {
+            if (!dashboardIsOpen() || locking) return;
+            if (lockLastActive <= lastPingAt) return;      // ager ping-er por kichu kora hoyni
+            lastPingAt = Date.now();
+            try {
+                const res = await fetch('/api/ping', { method: 'POST' });
+                if (res.status === 401) autoLock('Session expired. Please login again.');
+            } catch (e) {}
+        }, PING_EVERY_MS);
 
         function checkAutoLock() {
             if (!dashboardIsOpen()) {           // login screen-e thakle timer cholbe na
