@@ -9,6 +9,7 @@ import hmac
 import hashlib
 import math
 import socket
+import unicodedata
 import select
 import queue
 from datetime import datetime, timezone, timedelta
@@ -198,7 +199,22 @@ def wrong_password_response(bucket, msg):
 # ache kina, address/order/price er moto jinisher kache ache kina.
 
 _ZW = dict.fromkeys(map(ord, "\u200b\u200c\u200d\u200e\u200f\u2060\ufeff\u00ad"), None)
-_BN = {ord(c): str(i) for i, c in enumerate("০১২৩৪৫৬৭৮৯")}
+# Bangla, Hindi, Arabic, Thai, Tamil ... shob lipir digit -> 0-9
+_DIGIT_BASES = (0x0660, 0x06F0, 0x07C0, 0x0966, 0x09E6, 0x0A66, 0x0AE6, 0x0B66, 0x0BE6, 0x0C66,
+                0x0CE6, 0x0D66, 0x0DE6, 0x0E50, 0x0ED0, 0x0F20, 0x1040, 0x1090, 0x17E0, 0x1810, 0xFF10)
+_BN = {base + i: str(i) for base in _DIGIT_BASES for i in range(10)}
+
+_CJK_PUNCT = {ord(c): c + " " for c in "，。、；：！？｡､"}
+
+def _normalize(text):
+    """Invisible char bad, fullwidth (１２３ / ：) -> normal, onno lipir digit -> 0-9,
+    ar non-English lekha (验证码123456) r sathe digit lege thakle majhe space dey."""
+    t = text.translate(_ZW).translate(_CJK_PUNCT)          # ， 。 ： -> ", " ". " ": " (porer digit alada thakbe)
+    t = unicodedata.normalize("NFKC", t).translate(_BN)
+    return re.sub(r"(?<=[^\x00-\x7f])(?=[0-9])|(?<=[0-9])(?=[^\x00-\x7f])", " ", t)
+
+# Ek-ek character-er line (HTML-er prottek digit alada box/cell) -> ek line-e jora lage
+_SINGLE_CHAR_LINES = re.compile(r"(?m)^[A-Za-z0-9](?:\n[A-Za-z0-9]){3,9}$")
 
 _STRONG_KW = re.compile(r"""(?ix)
     \botp\b | \bpass\s?code\b | \bpin\b | ওটিপি | পিন |
@@ -206,9 +222,28 @@ _STRONG_KW = re.compile(r"""(?ix)
     (?:verification|verify|confirmation|security|authentication|authorization|authenticator|
        access|login|log[-\s]?in|sign[-\s]?in|activation|registration|reset|recovery|
        temporary|temp|2fa|two[-\s]?factor|mfa)\s*(?:code|pin|passcode|password|key|token) |
-    (?:ভেরিফিকেশন|ভেরিফাই|যাচাই|নিরাপত্তা|সিকিউরিটি|লগইন)\s*কোড | ভেরিফিকেশন
+    (?:ভেরিফিকেশন|ভেরিফাই|যাচাই|নিরাপত্তা|সিকিউরিটি|লগইন)\s*কোড | ভেরিফিকেশন |
+    (?:validation|single[-\s]?use|launch|magic|secret|unlock|guard|device|app|sms|text|mobile|email|e-mail|
+       account|sign[-\s]?up|signup|one[-\s]?time|use[-\s]?once|temporary)[-\s]?(?:code|pin|passcode|password) |
+    (?:ওটিপি|ওয়ান[-\s]?টাইম\s*পাসওয়ার্ড) |
+    c[oó]digo\s+de\s+\w+ | clave\s+(?:de\s+)?(?:un\s+solo\s+uso|verificaci[oó]n|acceso|seguridad) |
+    code\s+de\s+(?:v[ée]rification|s[ée]curit[ée]|confirmation|connexion|validation) |
+    mot\s+de\s+passe\s+(?:unique|[àa]\s+usage\s+unique) | einmalpasswort |
+    (?:best[äa]tigungs|sicherheits|verifizierungs|einmal|anmelde|login|sms|tan)[-\s]?code |
+    codice\s+(?:di\s+)?(?:verifica|sicurezza|conferma|accesso|monouso) |
+    (?:doğrulama|güvenlik|onay|giriş|tek\s+kullanımlık)\s+(?:kodu|şifresi|şifre) |
+    kode\s+(?:verifikasi|otp|keamanan|konfirmasi|masuk|sekali\s+pakai|pin) |
+    mã\s+(?:xác\s+(?:minh|thực)|otp|bảo\s+mật|pin) |
+    код\s+(?:подтверждения|безопасности|верификации|входа|авторизации|активации|проверки) |
+    одноразовый\s+(?:код|пароль) |
+    (?:验证|驗證|校验|校驗|动态|動態|认证|認證|确认|確認|安全|登录|登錄)[码碼] |
+    (?:確認|認証|認證|ワンタイム|セキュリティ|ログイン)\s*(?:コード|番号|パスワード) |
+    인증\s*(?:번호|코드) | (?:확인|보안|일회용)\s*(?:코드|번호|비밀번호) |
+    ओटीपी | (?:सत्यापन|वेरिफिकेशन|वेरिफाई|सुरक्षा)\s*कोड | वन[-\s]?टाइम\s*पासवर्ड |
+    رمز\s*(?:التحقق|التأكيد|الأمان|الدخول|المرور|التفعيل) |
+    كلمة\s*(?:المرور|السر)\s*لمرة\s*واحدة
 """)
-_WEAK_KW = re.compile(r"(?i)\bcode\b|\btoken\b|কোড|\bcódigo\b|\bcodice\b|\bkod\b")
+_WEAK_KW = re.compile(r"(?i)\bcode\b|\btoken\b|কোড|\bcódigo\b|\bcodice\b|\bkod\b|\bcodigo\b|\bкод\b|\bkode\b|\bkodu\b|\bmã\b|验证|驗證|コード|코드|कोड|رمز")
 
 _NEG = re.compile(
     r"(?i)\b(?:order|invoice|tracking|receipt|transaction|txn|amount|price|total|balance|zip|postal|"
@@ -230,8 +265,10 @@ _IMPER = re.compile(r"(?i)\b(?:enter|type|input|use|submit|provide)\b[^\n]{0,40}
 
 _LB = r"(?<![\w#$@.,/+=&?-])"
 _CAND = [
+    ("spaced_alnum", re.compile(_LB + r"([A-Za-z0-9](?:[ \t][A-Za-z0-9]){3,9})(?![\w@.]|[ \t][A-Za-z0-9])")),
     ("spaced",  re.compile(_LB + r"(\d(?:[ \t]\d){3,7})(?![\w@.]|[ \t]\d)")),
-    ("grouped", re.compile(_LB + r"(\d{3,4}[ -]\d{3,4})(?![\w@]|[.,:/-]\d|[ -]\d)")),
+    ("grouped", re.compile(_LB + r"(\d{2,4}(?:[ -]\d{2,4}){1,3})(?![\w@]|[.,:/-]\d|[ -]\d)")),
+    ("grouped_alnum", re.compile(_LB + r"((?=[A-Za-z0-9-]*[A-Za-z])(?=[A-Za-z0-9-]*\d|[A-Z]{4,5}-[A-Z]{4,5})[A-Za-z0-9]{3,6}(?:-[A-Za-z0-9]{3,6}){1,3})(?![\w@]|-)")),
     ("dashed",  re.compile(_LB + r"([A-Za-z]{1,3}-(?=[A-Za-z0-9]*\d)[A-Za-z0-9]{4,10})(?![\w@]|-)")),
     ("digits",  re.compile(_LB + r"(\d{4,10})(?![\w@]|[.,:/-]\d)")),
     ("alnum",   re.compile(_LB + r"((?=[A-Za-z0-9]*\d)(?=[A-Za-z0-9]*[A-Za-z])[A-Za-z0-9]{4,12})(?![\w@]|[.,:/-]\w)")),
@@ -243,10 +280,46 @@ _CSS_CTX = re.compile(
     r"(?i)(?:font(?:-size|-family|-weight)?|padding|margin|width|height|line-height|border|background|color|letter-spacing)\s*:")
 
 _LETTERS = re.compile(
-    r"(?i:\b(?:otp|pass\s?code|pin|code|verification\s+code|security\s+code)\b)\s*(?:is\b)?\s*[:=\-–]?\s*\b([A-Z]{4,10})\b")
+    r"(?i:\b(?:otp|pass\s?code|pin|code|verification\s+code|security\s+code)\b)\s*(?:is\b)?\s*[:=\-–]?\s*\b([A-Za-z]{4,10})\b")
+_COMMON_WORDS = set("""valid invalid expired incorrect required sent ready available below above attached active correct wrong
+used needed missing pending confirmed verified approved denied rejected blocked locked disabled enabled changed updated shown
+displayed provided generated included please enter following another different unique secure private personal temporary usable
+unused about after again also been before being could each every first from have here into just like made make many more most
+must never only other over same should some still such than that their them then there these they this those through under
+until very what when where which while will with would your email phone number account password login verify verification
+security confirm confirmation google apple microsoft facebook instagram telegram tiktok whatsapp twitter github amazon paypal
+linkedin sorry thanks thank hello regards cheers welcome access request requested code codes token unavailable allowed
+complete completed failed success successful check click paste copy type typed write written""".split())
+
 _LETTER_STOP = {"CODE", "EMAIL", "YOUR", "THIS", "THAT", "WITH", "FROM", "HERE", "LOGIN", "VERIFY",
                 "VALID", "EXPIRES", "GOOGLE", "GITHUB", "ACCOUNT", "PLEASE", "ENTER", "COPY", "PASTE",
-                "SIGN", "NOTE", "HELLO", "DEAR", "THANK", "THANKS", "TEAM", "EXPIRE", "MINUTES"}
+                "SIGN", "NOTE", "HELLO", "DEAR", "THANK", "THANKS", "TEAM", "EXPIRE", "MINUTES", "NUMBER", "BELOW", "ABOVE", "SENT", "ONLY", "USING", "AGAIN", "NEVER",
+                "SHARE", "VALID", "WITHIN", "ABOUT", "WHICH", "THEN", "WILL", "HAVE", "BEEN", "THEY"}
+
+
+_LABEL_PREFIXES = {"G", "FB", "F", "IG", "TG", "WA", "TT", "X", "M", "MS", "GH", "AP", "LI"}
+
+def _clean_output(kind, raw):
+    """Candidate -> dashboard-e dekhanor code."""
+    if kind in ("spaced", "spaced_alnum"):
+        return re.sub(r"\s+", "", raw)
+    if kind == "grouped":                                  # 482-913 / 482 913 -> 482913
+        return re.sub(r"\D", "", raw)
+    if kind == "dashed":                                   # G-482913 / FB-84921 -> 482913
+        pre, _, rest = raw.partition("-")
+        if pre.upper() in _LABEL_PREFIXES and rest.isdigit():
+            return rest
+    return raw
+
+
+def _cand_ok(kind, raw):
+    if kind == "grouped":
+        n = len(re.sub(r"\D", "", raw))
+        if n < 4 or n > 10:
+            return False
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", raw):          # tarikh (2026-10-09)
+            return False
+    return True
 
 
 def _find_keywords(t):
@@ -261,6 +334,15 @@ def _find_keywords(t):
     return kws
 
 
+# Thikana-r sonkha (1600 Amphitheatre Parkway / CA 94043) kokhono code na
+_STREET_AFTER = re.compile(
+    r"^\s+(?:[A-Z][\w.'-]*\s+){1,3}(?:Street|St|Avenue|Ave|Road|Rd|Parkway|Pkwy|Way|Blvd|Boulevard|Lane|Ln|Drive|Dr|"
+    r"Court|Ct|Plaza|Square|Sq|Highway|Hwy|Suite|Floor)\b")
+_US_STATES = ("AL AK AZ AR CA CO CT DE FL GA IL IA KS KY LA MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH PA RI SC "
+              "SD TN TX UT VT VA WA WV WI WY DC").split()
+_ZIP_BEFORE = re.compile(r"\b(?:" + "|".join(_US_STATES) + r")\s+$")
+
+
 def _score_candidate(t, kws, s, e, kind, text, has_intent):
     if kind in ("alnum", "dashed") and _UNIT.match(text):
         return -99
@@ -273,6 +355,12 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
     before_line = t[line_start:s]
     after_line = t[e:line_end]
     own_line = re.fullmatch(r"[\W_]*" + re.escape(text) + r"[\W_]*", t[line_start:line_end]) is not None
+
+    if kind == "digits":
+        if _STREET_AFTER.match(after_line):
+            return -99
+        if len(text) == 5 and _ZIP_BEFORE.search(before_line):
+            return -99
 
     # ager text ta jodi promo/order/zip er moto hoy, ta code na
     if _PROMO_BEFORE.search(before_line[-40:]):
@@ -315,7 +403,7 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
         score += 2
     if own_line:
         score += 2
-    if kind in ("spaced", "grouped"):
+    if kind in ("spaced", "spaced_alnum", "grouped", "grouped_alnum"):
         score += 2
     if not before_line.strip() and t[:line_start].rstrip().endswith(":"):
         score += 2                       # "Code:" ager line-e, code porer line-e
@@ -349,12 +437,13 @@ def extract_otp_scored(text):
     if not text:
         return "Code not found", 0
 
-    t = text.translate(_ZW).translate(_BN)
+    t = _normalize(text)
     t = re.sub(r"https?://\S+|www\.\S+", " ", t)      # link-er bhitorer token bad
     t = re.sub(r"\S+@\S+\.\S+", " ", t)               # email address bad
     t = re.sub(r"[ \t\r\f\v]+", " ", t)
     t = re.sub(r" *\n *", "\n", t)
     t = re.sub(r"\n{2,}", "\n", t)
+    t = _SINGLE_CHAR_LINES.sub(lambda m: m.group(0).replace("\n", " "), t)
 
     kws = _find_keywords(t)
     if not kws and not _INTENT.search(t):
@@ -365,18 +454,17 @@ def extract_otp_scored(text):
     for kind, rx in _CAND:
         for m in rx.finditer(t):
             cands.append((m.start(1), m.end(1), kind, m.group(1)))
-    wide = [(s, e) for s, e, k, _ in cands if k in ("spaced", "grouped", "dashed")]
+    cands = [c for c in cands if _cand_ok(c[2], c[3])]
+    wide = [(s, e) for s, e, k, _ in cands if k in ("spaced", "spaced_alnum", "grouped", "grouped_alnum", "dashed")]
     cands = [c for c in cands
-             if c[2] in ("spaced", "grouped", "dashed")
+             if c[2] in ("spaced", "spaced_alnum", "grouped", "grouped_alnum", "dashed")
              or not any(ws <= c[0] and c[1] <= we for ws, we in wide)]
 
     best = None   # (score, -start, output)
     accepted = []  # (score, output) -- rival code ache kina dekhar jonno
     for s, e, kind, raw in cands:
         sc = _score_candidate(t, kws, s, e, kind, raw, has_intent)
-        out = re.sub(r"\s+", "", raw) if kind in ("spaced", "grouped") else raw
-        if kind == "grouped":
-            out = out.replace(" ", "")
+        out = _clean_output(kind, raw)
         if sc >= 6:
             accepted.append((sc, out))
         if sc >= 6 and (best is None or (sc, -s) > (best[0], best[1])):
@@ -386,14 +474,21 @@ def extract_otp_scored(text):
     for m in _LETTERS.finditer(t):
         word = m.group(1)
         s = m.start(1)
-        if word in _LETTER_STOP:
+        low = word.islower() or word.istitle()
+        if word.upper() in _LETTER_STOP:
             continue
+        if low:
+            gap = m.group(0)[:m.start(1) - m.start()]
+            if (len(word) < 5 or word.lower() in _COMMON_WORDS or gap.count("\n") > 1
+                    or not re.search(r"(?i)\bis\b|[:=]", gap)):
+                continue
         if _PROMO_BEFORE.search(t[max(0, m.start() - 40):s]):
             continue
         if _MARKETING.search(t[max(0, s - 80):s + 80]):
             continue
-        if best is None or (8, -s) > (best[0], best[1]):
-            best = (8, -s, word)
+        lsc = 6 if low else 8                       # lowercase-only: kom nishchit -> card-e Verify sotorko-chinho
+        if best is None or (lsc, -s) > (best[0], best[1]):
+            best = (lsc, -s, word)
 
     if not best:
         return "Code not found", 0
@@ -439,14 +534,26 @@ def _unit_seconds(unit):
         return 60
     return 3600          # hour / hr / ঘণ্টা / ঘন্টা
 
+_NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
+              "ten": 10, "eleven": 11, "twelve": 12, "fifteen": 15, "twenty": 20, "thirty": 30, "forty": 40,
+              "sixty": 60, "ninety": 90}
+
+def _words_to_digits(t):
+    t = re.sub(r"(?i)\bhalf an hour\b", "30 minutes", t)
+    t = re.sub(r"(?i)\b(?:an|a)\s+(hour|minute)\b", r"1 \1", t)
+    return re.sub(r"(?i)\b(" + "|".join(_NUM_WORDS) + r")\b(?=[\s-]*(?:seconds?|secs?|minutes?|mins?|hours?|hrs?)\b)",
+                  lambda m: str(_NUM_WORDS[m.group(1).lower()]), t)
+
+
 def extract_ttl(text):
     """Email-er text theke code-er meyad (sekende) ber kore. Na pele None.
     Ekadhik meyad paile shobcheye chhotota (nirapod dik)."""
     if not text:
         return None
-    t = text.translate(_ZW).translate(_BN)
+    t = _normalize(text)
     t = re.sub(r"https?://\S+|www\.\S+", " ", t)
     t = re.sub(r"\s+", " ", t)
+    t = _words_to_digits(t)
     found = []
     for rx in _TTL_PATTERNS:
         for m in rx.finditer(t):
@@ -468,6 +575,18 @@ def html_to_text(html_body):
     return t
 
 
+def _decode_part(part):
+    payload = part.get_payload(decode=True)
+    if not payload:
+        return ""
+    for cs in (part.get_content_charset(), "utf-8", "latin-1"):
+        try:
+            return payload.decode(cs or "utf-8", errors="ignore")
+        except (LookupError, TypeError):
+            continue
+    return ""
+
+
 def get_email_texts(msg):
     """Email theke text/plain ar html-text, dutoi ber kore (jeta-te code pawa jay)."""
     plain, html_body = "", ""
@@ -477,12 +596,10 @@ def get_email_texts(msg):
         if ctype not in ("text/plain", "text/html"):
             continue
         try:
-            payload = part.get_payload(decode=True)
-            if not payload:
-                continue
-            charset = part.get_content_charset() or "utf-8"
-            decoded = payload.decode(charset, errors="ignore")
+            decoded = _decode_part(part)
         except Exception:
+            continue
+        if not decoded:
             continue
         if ctype == "text/plain" and not plain:
             plain = decoded
@@ -580,11 +697,10 @@ def get_email_links(msg):
         if ctype not in ("text/plain", "text/html"):
             continue
         try:
-            payload = part.get_payload(decode=True)
-            if not payload:
-                continue
-            body = payload.decode(part.get_content_charset() or "utf-8", errors="ignore")
+            body = _decode_part(part)
         except Exception:
+            continue
+        if not body:
             continue
         if ctype == "text/html":
             for m in _A_TAG.finditer(body):
