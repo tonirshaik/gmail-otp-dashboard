@@ -814,9 +814,50 @@ def start_push():
     threading.Thread(target=_push_supervisor, daemon=True).start()
     print("[PUSH] live push chalu. Start Command: gunicorn app:app --worker-class gthread --workers 1 --threads 16 --timeout 120")
 
+# ======================= Idle timeout (server-side) =======================
+# Kono kaj na korle IDLE_TIMEOUT sekend por session shesh. Browser-er auto-lock (5 min) er sathe mil rekhe.
+# "Kaj kora" mane: login howa ba kono authenticated request (browser kaj korle prottek ~1 min-e /api/ping pathay).
+# Background stream (/api/stream) kaj hishebe gona hoy na, nahole ekta khola tab kokhono shesh hobe na.
+IDLE_TIMEOUT = int(os.environ.get("IDLE_TIMEOUT_SECONDS", "300"))
+_last_user_activity = time.time()                 # SSE stream idle hole bondho korar jonno (ekjon-er app)
+_IDLE_SKIP = ('/api/push-status',)                # login lage na, check-er dorkar nai
+_IDLE_PUBLIC = ('/api/login', '/api/logout',      # session shesh hole-o ei gulo cholte hobe, nahole abar login kora jabe na
+                '/api/passkey/auth/options', '/api/passkey/auth/verify')
+_IDLE_BACKGROUND = ('/api/stream',)               # background connection, "kaj kora" na
+
+def _mark_active():
+    global _last_user_activity
+    now = time.time()
+    session['last_active'] = now
+    _last_user_activity = now
+
+@app.before_request
+def enforce_idle_timeout():
+    path = request.path
+    if not path.startswith('/api/') or path in _IDLE_SKIP:
+        return None
+    if not session.get('logged_in'):
+        return None
+    last = session.get('last_active')
+    if last is not None and time.time() - last > IDLE_TIMEOUT:
+        session.clear()                           # login + settings unlock dutoi gelo
+        if path in _IDLE_PUBLIC:
+            return None
+        return jsonify({"error": "Session expired (inactive). Please login again.", "expired": True}), 401
+    if path not in _IDLE_BACKGROUND:
+        _mark_active()                            # purono session-e last_active na thakleo ekhane boshe jabe
+    return None
+
 @app.route('/')
 def home():
     return render_template('index.html')
+
+@app.route('/api/ping', methods=['POST'])
+def ping():
+    """Browser-e kaj hole session jiye rakhe (idle timeout reset)."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    return jsonify({"ok": True})
 
 @app.route('/api/login', methods=['POST'])
 def login():
@@ -830,6 +871,7 @@ def login():
     if password and pw_equal(password, MASTER_PASSWORD):
         clear_fails('login')
         session['logged_in'] = True
+        _mark_active()
         return jsonify({"success": True})
     return wrong_password_response('login', "Wrong password!")
 
@@ -885,6 +927,9 @@ def stream():
             yield "retry: 3000\n\n"
             yield "event: hello\ndata: {}\n\n"
             while time.time() - started < STREAM_MAX_SECONDS:
+                if time.time() - _last_user_activity > IDLE_TIMEOUT:
+                    yield "event: expired\ndata: {}\n\n"      # kew kaj kortese na -> stream bondho
+                    break
                 try:
                     msg = q.get(timeout=15)
                     yield f"event: otp\ndata: {msg}\n\n"
@@ -1108,6 +1153,7 @@ def passkey_auth_verify():
         {"$set": {"sign_count": v.new_sign_count}},
     )
     session['logged_in'] = True
+    _mark_active()
     if purpose == 'settings':
         session['settings_unlocked'] = True
     elif purpose == 'delete':
