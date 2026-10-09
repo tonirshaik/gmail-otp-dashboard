@@ -732,19 +732,43 @@
             }, 4000);
         }
 
-        function copyOTP(code) {
-            if (!code || code === 'Code not found' || code === 'No emails found') return;
-            navigator.clipboard.writeText(code).then(() => {
-                showToast(`Copied: ${code}`);
-            });
+        function lightVibrate() {
+            try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) {}   // halka ekta tap
         }
 
+        function fallbackCopy(text) {
+            // clipboard API na thakle / block hole purono poddhoti
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.cssText = 'position:fixed;top:-1000px;opacity:0;';
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+            return ok;
+        }
+
+        function copyOTP(code) {
+            if (!code || code === 'Code not found' || code === 'No emails found') return;
+            const done = () => { showToast(`Copied: ${code}`); lightVibrate(); };
+            const fail = () => { if (fallbackCopy(code)) done(); else showToast('Could not copy'); };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(done).catch(fail);
+            } else {
+                fail();
+            }
+        }
+
+        let toastTimer = null;
         function showToast(message) {
             const toast = document.getElementById('toast');
             const toastMsg = document.getElementById('toastMsg');
             toastMsg.innerText = message;
             toast.classList.add('show');
-            setTimeout(() => { toast.classList.remove('show'); }, 2000);
+            clearTimeout(toastTimer);   // poroborti toast age bondho na hoy
+            toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 2000);
         }
 
         loginForm.addEventListener('submit', async (e) => {
