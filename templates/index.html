@@ -960,6 +960,7 @@
 
                 const data = await res.json();
                 renderOTPs(data);
+                syncPins();
                 ensurePush();
                 const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 document.getElementById('autoStatus').innerHTML =
@@ -1251,19 +1252,69 @@
 
         // ---------- Pin (priyo account) ----------
         const PIN_KEY = 'otpDash.pinnedEmails';
+        const PIN_MIGRATED = 'otpDash.pinsMigrated';
         function loadPins() {
             try { const a = JSON.parse(localStorage.getItem(PIN_KEY) || '[]'); return Array.isArray(a) ? a : []; }
             catch (e) { return []; }
         }
-        let pinnedEmails = loadPins();
+        let pinnedEmails = loadPins();      // server theke ashe; localStorage shudhu offline cache
         function savePins() { try { localStorage.setItem(PIN_KEY, JSON.stringify(pinnedEmails)); } catch (e) {} }
         function isPinned(email) { return pinnedEmails.includes(String(email).toLowerCase()); }
-        function togglePin(email) {
+
+        function setPinsFromServer(list) {
+            const next = (Array.isArray(list) ? list : []).map(x => String(x).toLowerCase()).sort();
+            const same = next.length === pinnedEmails.length && next.every((x, i) => x === [...pinnedEmails].sort()[i]);
+            pinnedEmails = next;
+            savePins();
+            if (!same && hasLoaded && accountsModalOpen()) renderAll();
+        }
+
+        // Pin server-e (Mongo) thake -> phone/computer-e eki. 401 hole login-e ferot jay na (fetchOTPs oita dekhe).
+        async function syncPins() {
+            try {
+                const res = await fetch('/api/pins');
+                if (!res.ok) return;
+                let list = (await res.json()).pins || [];
+                // Ek-bar: ei browser-er purono local pin server-e tule dei
+                let migrated = false;
+                try { migrated = localStorage.getItem(PIN_MIGRATED) === '1'; } catch (e) {}
+                if (!migrated) {
+                    const local = loadPins();
+                    if (local.length) {
+                        const r2 = await fetch('/api/pins/merge', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ emails: local })
+                        });
+                        if (!r2.ok) return;                       // porer bar abar chesta korbe
+                        list = (await r2.json()).pins || list;
+                    }
+                    try { localStorage.setItem(PIN_MIGRATED, '1'); } catch (e) {}
+                }
+                setPinsFromServer(list);
+            } catch (e) {}                                        // offline: local cache-i thakbe
+        }
+
+        async function togglePin(email) {
             const k = String(email).toLowerCase();
-            if (pinnedEmails.includes(k)) pinnedEmails = pinnedEmails.filter(x => x !== k);
-            else pinnedEmails.push(k);
+            const wasPinned = pinnedEmails.includes(k);
+            // sathe sathe dekhai (optimistic); server fail korle ferot
+            if (wasPinned) pinnedEmails = pinnedEmails.filter(x => x !== k); else pinnedEmails.push(k);
             savePins();
             renderAll();
+            try {
+                const res = await fetch('/api/pins/toggle', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: k, pinned: !wasPinned })
+                });
+                if (!res.ok) throw new Error('save failed');
+                setPinsFromServer((await res.json()).pins);       // onno device-er poriborton-o chole ashe
+            } catch (e) {
+                if (wasPinned) { if (!pinnedEmails.includes(k)) pinnedEmails.push(k); }
+                else pinnedEmails = pinnedEmails.filter(x => x !== k);
+                savePins();
+                renderAll();
+                showToast('Could not save pin. Try again.');
+            }
         }
 
         // ---------- Search ----------
