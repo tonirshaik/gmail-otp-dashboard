@@ -493,6 +493,29 @@
         .otp-code-box.masked { letter-spacing: 6px; color: #7dd3fc; }
         .reveal-eye { font-size: 14px; opacity: 0.7; margin-left: 6px; letter-spacing: normal; }
 
+        /* ---- used code (copy kora hoye gele jhapsha + badge) ---- */
+        .otp-card.is-used { border-color: rgba(255, 255, 255, 0.08); box-shadow: none; }
+        .otp-card.is-used::before { background: rgba(255, 255, 255, 0.18); }
+        .otp-card.is-used .otp-email > span:not(.used-badge),
+        .otp-card.is-used .otp-expiry,
+        .otp-card.is-used .otp-time { opacity: 0.5; }
+        .otp-card.is-used .otp-code-box {
+            opacity: 0.45; filter: blur(2.5px);
+            transition: filter 0.2s ease, opacity 0.2s ease;
+        }
+        .otp-card.is-used .otp-code-box:hover { opacity: 0.85; filter: blur(0); }   /* dhorle abar poriskar */
+        .used-badge {
+            margin-left: auto; flex: none;
+            display: inline-flex; align-items: center; gap: 5px;
+            font: inherit; font-size: 11px; font-weight: 700;
+            color: var(--accent-green); background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 999px;
+            padding: 2px 9px; cursor: pointer; opacity: 1 !important;
+        }
+        .used-badge:hover { background: rgba(16, 185, 129, 0.22); }
+        .otp-card.just-used { animation: usedPop 0.45s ease; }
+        @keyframes usedPop { 0% { transform: scale(1); } 40% { transform: scale(0.97); } 100% { transform: scale(1); } }
+
         /* ---- countdown ring ---- */
         .otp-expiry { display: flex; align-items: center; gap: 6px; }
         .ring { transform: rotate(-90deg); flex: none; }
@@ -848,9 +871,9 @@
             return ok;
         }
 
-        function copyOTP(code) {
+        function copyOTP(code, onSuccess) {
             if (!code || code === 'Code not found' || code === 'No emails found') return;
-            const done = () => { showToast(`Copied: ${code}`); lightVibrate(); };
+            const done = () => { showToast(`Copied: ${code}`); lightVibrate(); if (onSuccess) onSuccess(); };
             const fail = () => { if (fallbackCopy(code)) done(); else showToast('Could not copy'); };
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(code).then(done).catch(fail);
@@ -966,7 +989,7 @@
             return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
 
-        // Home-e code 2 minute dekhabe. expiresAt = kokhon home theke soribe.
+        // Home-e code tar nijer meyad porjonto dekhabe (server email theke pore, na thakle 2 min). expiresAt = kokhon home theke soribe.
         // (Total Gmail list-e shesh code always thake)
         function normalizeExpiry(item) {
             if (!isValidItem(item)) return item;
@@ -983,14 +1006,14 @@
                 const sec = Math.ceil(left / 1000);
                 const el = card.querySelector('.otp-expiry-time');
                 if (el) el.textContent = fmtLeft(sec);
-                card.classList.toggle('expiring', sec <= 20);
+                const ttlMs = Number(card.dataset.ttl) || 120000;
+                card.classList.toggle('expiring', left <= Math.min(20000, ttlMs * 0.25));   // chhoto meyade shobshomoy lal na hoy
                 const ring = card.querySelector('.ring-fg');
                 if (ring) {
-                    const ttlMs = Number(card.dataset.ttl) || 120000;
                     ring.style.strokeDashoffset = RING_C * (1 - Math.max(0, Math.min(1, left / ttlMs)));
                 }
             });
-            if (homeExpired) renderHome();   // 2 minute shesh -> home theke sore jabe
+            if (homeExpired) renderHome();   // code-er nijer meyad shesh -> home theke sore jabe
         }
         setInterval(tickExpiry, 1000);
 
@@ -1005,6 +1028,9 @@
         }
 
         function fmtLeft(sec) {
+            if (sec >= 3600) {
+                return Math.floor(sec / 3600) + ':' + String(Math.floor((sec % 3600) / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+            }
             return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
         }
 
@@ -1039,6 +1065,47 @@
             }
         }
 
+        // ---------- Used code (copy korle "used" hoye jay) ----------
+        // Key = email + email-er timestamp. Code-er maan kothao save hoy na (shudhu kon mail-er code).
+        const USED_KEY = 'otpDash.used';
+        const USED_KEEP_MS = 48 * 3600 * 1000;
+        function loadUsed() {
+            try {
+                const o = JSON.parse(localStorage.getItem(USED_KEY) || '{}');
+                const now = Date.now(), out = {};
+                if (o && typeof o === 'object') Object.keys(o).forEach(k => { if (now - o[k] < USED_KEEP_MS) out[k] = o[k]; });
+                return out;
+            } catch (e) { return {}; }
+        }
+        let usedMap = loadUsed();
+        function saveUsed() { try { localStorage.setItem(USED_KEY, JSON.stringify(usedMap)); } catch (e) {} }
+        function usedKey(item) { return String(item.email).toLowerCase() + '|' + (item.timestamp || 0); }
+        function isUsed(item) { return isValidItem(item) && !!usedMap[usedKey(item)]; }
+
+        let reorderTimer = null;
+        function setUsed(key, used) {
+            if (used) usedMap[key] = Date.now(); else delete usedMap[key];
+            saveUsed();
+            // card-ta sathe sathe "used" dekhai; ektu pore home-er ordering thik kori (notun code age)
+            document.querySelectorAll('.otp-code-box[data-used-key]').forEach(box => {
+                if (box.dataset.usedKey !== key) return;
+                const card = box.closest('.otp-card');
+                if (!card) return;
+                card.classList.toggle('is-used', used);
+                if (used) {
+                    card.classList.add('just-used');
+                    card.querySelector('.new-dot')?.remove();
+                    if (!card.querySelector('.used-badge')) {      // badge sathe sathe dekhai
+                        const holder = card.querySelector('.otp-email > span:not(.health-dot)');
+                        if (holder) holder.insertAdjacentHTML('afterend',
+                            `<button type="button" class="used-badge" data-used-key="${escAttr(key)}" title="Tap to mark as unused"><i class="fa-solid fa-check"></i> Used</button>`);
+                    }
+                }
+            });
+            clearTimeout(reorderTimer);
+            reorderTimer = setTimeout(() => { renderHome(); if (accountsModalOpen()) renderAll(); }, used ? 900 : 0);
+        }
+
         function onCodeTap(box) {
             const code = box.dataset.code;
             if (!code) return;
@@ -1046,8 +1113,18 @@
                 revealedAt.set(box.dataset.key, Date.now());
                 setBoxRevealed(box, true);
             }
-            copyOTP(code);
+            const uk = box.dataset.usedKey;
+            copyOTP(code, uk ? () => { if (!usedMap[uk]) setUsed(uk, true); } : null);
         }
+
+        // "Used" badge-e tap korle abar unused (vul kore copy hole)
+        document.addEventListener('click', (e) => {
+            const b = e.target.closest('.used-badge');
+            if (!b) return;
+            e.stopPropagation();
+            setUsed(b.dataset.usedKey, false);
+            showToast('Marked as unused');
+        });
 
         // dekhano code REVEAL_MS por nije abar lukiye jabe
         setInterval(() => {
@@ -1097,6 +1174,8 @@
             const leftSec = Math.ceil(leftMs / 1000);
             const ringOffset = RING_C * (1 - Math.max(0, Math.min(1, leftMs / ttlMs)));
             const revealed = validCode && isRevealed(item);
+            const used = validCode && isUsed(item);
+            const uKey = validCode ? usedKey(item) : '';
             const health = healthOf(item);
             const pinned = isPinned(item.email);
             const pinBtn = opts.pinnable
@@ -1109,17 +1188,21 @@
                 ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | Sender: ${escAttr(item.sender || 'N/A')}`
                 : `<span class="health-msg ${health}"><i class="fa-solid fa-triangle-exclamation"></i> ${escAttr(item.sender || HEALTH_TITLE[health])}</span>`;
             const codeBox = validCode
-                ? `<div class="otp-code-box ${revealed ? '' : 'masked'}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${revealed ? escAttr(item.code) : maskText(item.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>'}</div>`
+                ? `<div class="otp-code-box ${revealed ? '' : 'masked'}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${revealed ? escAttr(item.code) : maskText(item.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>'}</div>`
                 : `<div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">${escAttr(item.code || 'Code not found')}</div>`;
             const expiryRow = withTimer
                 ? `<div class="otp-expiry"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${ringOffset.toFixed(2)}"/></svg> Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></div>`
                 : '';
+            const usedBadge = used
+                ? `<button type="button" class="used-badge" data-used-key="${escAttr(uKey)}" title="Tap to mark as unused"><i class="fa-solid fa-check"></i> Used</button>`
+                : '';
             const card = `
-                <div class="otp-card ${isNew ? 'is-new' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
-                    ${isNew ? '<div class="new-dot"></div>' : ''}
+                <div class="otp-card ${isNew && !used ? 'is-new' : ''} ${used ? 'is-used' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
+                    ${isNew && !used ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
                         ${healthDot}
                         <span>${escAttr(item.email)}</span>
+                        ${usedBadge}
                         ${pinBtn}
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
@@ -1156,6 +1239,8 @@
                     </div>`;
                 return;
             }
+            // Use hoye jaoa code pichone; notun/unused code age (ager timestamp-order thake)
+            active.sort((a, b) => (isUsed(a) ? 1 : 0) - (isUsed(b) ? 1 : 0));
             const shown = active.slice(0, HOME_MAX);
             let html = shown.map(item => cardHTML(item, { isNew: newCardEmails.includes(item.email), deletable: false, showExpiry: true })).join('');
             if (active.length > HOME_MAX) {
