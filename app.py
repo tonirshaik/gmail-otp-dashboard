@@ -521,7 +521,6 @@ EMAIL_CACHE_MAX = 3000
 
 # Home-e code koto sekende porjonto dekhabe (client eta use kore). Total Gmail list-e shesh code always thake.
 CONF_HIGH_SCORE = 7       # er niche score hole (ba rival code thakle) card-e Verify sotorko-chinho dekhay
-MAX_CODES_PER_ACCOUNT = 3   # ekta account-e sorboccho koyta recent code/link dekhabe
 OTP_TTL_SECONDS = 120   # 2 minutes -- shudhu tokhon, jokhon email-e meyad lekha nai
 
 # ======================= Service-er nam (GitHub, Google ...) =======================
@@ -679,16 +678,15 @@ def fetch_email_info(mail, uid):
             }
     return None
 
-def scan_folder(mail, acct_email, folder, limit, want=MAX_CODES_PER_ACCOUNT):
-    """Folder-er shesh `limit`-ta email dekhe, code/link thakle (notun theke puran) list dey."""
+def scan_folder(mail, acct_email, folder, limit):
+    """Folder-er shesh `limit`-ta email dekhe, shobcheye notun code/link-wala email-ta dey."""
     status, _ = mail.select(folder, readonly=True)   # readonly: email 'read' hoye jabe na
     if status != 'OK':
-        return []
+        return None
     status, data = mail.uid('search', None, 'ALL')
     if status != 'OK' or not data or not data[0]:
-        return []
+        return None
 
-    found = []
     uids = data[0].split()[-limit:]
     for uid in reversed(uids):
         key = (acct_email, folder, uid)
@@ -701,10 +699,8 @@ def scan_folder(mail, acct_email, folder, limit, want=MAX_CODES_PER_ACCOUNT):
                 EMAIL_CACHE.clear()
             EMAIL_CACHE[key] = info
         if info["code"] or info.get("link"):
-            found.append(info)
-            if len(found) >= want:
-                break
-    return found
+            return info
+    return None
 
 def make_entry(info):
     """Email info -> client-er jonno ekta code/link entry."""
@@ -754,39 +750,38 @@ def check_gmail(account, mail_data):
     try:
         mail = _imap_login(account)
 
-        inbox_list, spam_list = [], []
+        inbox_res, spam_res = None, None
 
         # 1. Inbox
         try:
-            inbox_list = scan_folder(mail, account['email'], "inbox", INBOX_SCAN_LIMIT)
+            inbox_res = scan_folder(mail, account['email'], "inbox", INBOX_SCAN_LIMIT)
         except Exception as e:
             print(f"[INBOX ERROR] {account['email']}: {e}")
 
         # 2. Spam (inbox-e code thakleo dekhbo, jate spam-e notun code ashle miss na hoy)
         for folder in ["[Gmail]/Spam", "Spam"]:
             try:
-                spam_list = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
+                spam_res = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
             except Exception:
-                spam_list = []
-            if spam_list:
+                spam_res = None
+            if spam_res:
                 break
 
-        # 3. Duto folder mishiye notun theke puran, same code/link bad, sorboccho MAX_CODES_PER_ACCOUNT
-        merged = sorted(inbox_list + spam_list, key=lambda x: x["timestamp"], reverse=True)
-        entries, seen = [], set()
-        for info in merged:
-            e = make_entry(info)
-            if e["code"] in seen:
-                continue
-            seen.add(e["code"])
-            entries.append(e)
-            if len(entries) >= MAX_CODES_PER_ACCOUNT:
-                break
+        # 3. Duto-r moddhe jeta shobcheye notun (timestamp boro) seta
+        result, label = None, "INBOX"
+        if inbox_res and spam_res:
+            if spam_res["timestamp"] > inbox_res["timestamp"]:
+                result, label = spam_res, "SPAM"
+            else:
+                result = inbox_res
+        elif spam_res:
+            result, label = spam_res, "SPAM"
+        else:
+            result = inbox_res
 
-        if entries:
-            print(f"[OK] Found {len(entries)} code(s) for {account['email']}")      # code log-e rakhi na
-            top = entries[0]                      # shobcheye notun -- ager moto upore-er field-e thake
-            mail_data.append({"email": account['email'], **top, "codes": entries})
+        if result:
+            print(f"[{label}] Found OTP for {account['email']}")      # code log-e rakhi na
+            mail_data.append({"email": account['email'], **make_entry(result)})
         else:
             mail_data.append({
                 "email": account['email'],
