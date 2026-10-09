@@ -391,6 +391,32 @@
         }
         .btn-danger { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; }
         .btn-cancel { background: rgba(255,255,255,0.06); color: var(--text-muted); margin-top: 8px; }
+        .btn-wait {
+            background: rgba(139, 92, 246, 0.15);
+            color: #c4b5fd;
+            border: 1px solid rgba(139, 92, 246, 0.35);
+            margin-bottom: 20px;
+        }
+        .btn-wait:hover { background: rgba(139, 92, 246, 0.25); color: #fff; }
+        .btn-wait.active {
+            background: rgba(245, 158, 11, 0.15);
+            color: #fcd34d;
+            border-color: rgba(245, 158, 11, 0.45);
+        }
+        .card-refresh {
+            margin-left: auto;
+            margin-right: 20px;
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            font-size: 13px;
+            padding: 4px 7px;
+            border-radius: 8px;
+        }
+        .card-refresh:hover { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.12); }
+        #liveStatus { text-align: center; font-size: 12px; margin: 4px 0 10px; color: var(--accent-green); display: none; }
+
         /* ---- all accounts popup ---- */
         .accounts-box {
             width: 100%;
@@ -506,12 +532,16 @@
             </div>
             <div id="statusMsg" class="msg-status"></div>
 
-            <button type="button" class="btn btn-refresh" id="refreshBtn">
+            <button type="button" class="btn btn-refresh" id="refreshBtn" style="margin-bottom: 10px;">
                 <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
+            </button>
+            <button type="button" class="btn btn-wait" id="waitBtn">
+                <i class="fa-solid fa-hourglass-start"></i> Wait for new code
             </button>
             <div id="autoStatus" style="text-align:center; font-size:12px; opacity:0.65; margin-top:8px;">
                 <i class="fa-regular fa-clock"></i> Last updated: --
             </div>
+            <div id="liveStatus"></div>
 
             <div class="otp-container" id="otpContainer">
                 <div class="empty-state">
@@ -588,6 +618,10 @@
 
         // আগের কোডগুলো মনে রাখার জন্য
         let previousCodes = [];
+        let waiting = null;            // "Wait for new code" mode
+        let es = null, pushEnabled = null, pushConnected = false, pushRetry = null;
+        let helloCount = 0, lastDisconnectAt = 0;
+        const WAIT_SECONDS = 120;
 
         function resetSettingsPopup() {
             settingsAuth.classList.remove('hidden');
@@ -729,6 +763,7 @@
                 const res = await fetch('/api/fetch-otps');
 
                 if (res.status === 401) {
+                    stopPush(); stopWaiting(false);
                     dashboardSection.classList.add('hidden');
                     loginSection.classList.remove('hidden');
                     return;
@@ -738,6 +773,7 @@
 
                 const data = await res.json();
                 renderOTPs(data);
+                ensurePush();
                 const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 document.getElementById('autoStatus').innerHTML =
                     `<i class="fa-regular fa-clock"></i> Last updated ${t}`;
@@ -812,7 +848,8 @@
                 <div class="otp-card ${isNew ? 'is-new' : ''}" ${withTimer ? `data-expires="${item.expiresAt}"` : ''}>
                     ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
-                        ${escAttr(item.email)}
+                        <span>${escAttr(item.email)}</span>
+                        <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
                     ${validCode ? `
                         <div class="otp-code-box" onclick="copyOTP('${escAttr(item.code)}')" title="Click to copy">
@@ -920,6 +957,190 @@
 
             renderHome();
             if (accountsModalOpen()) renderAll();
+            if (waiting && newCardEmails.length) stopWaiting(true, newCardEmails[0]);
+        }
+
+        // ======================= alert (sound + vibration) =======================
+        let audioCtx = null;
+        function initAudio() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch (e) {}
+        }
+        document.addEventListener('click', initAudio);       // browser sound chalate user-er ekta click lage
+
+        function beep() {
+            try {
+                if (!audioCtx) return;
+                [[880, 0], [1175, 0.22]].forEach(([freq, delay]) => {
+                    const t0 = audioCtx.currentTime + delay;
+                    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                    o.type = 'sine'; o.frequency.value = freq; g.gain.value = 0.08;
+                    o.connect(g); g.connect(audioCtx.destination);
+                    o.start(t0); o.stop(t0 + 0.18);
+                });
+            } catch (e) {}
+        }
+
+        function alertNewCode(email) {
+            try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) {}
+            beep();
+            showToast('New code: ' + email);
+        }
+
+        // ======================= ekta account-er item merge kora =======================
+        function applyItem(raw, fromPush) {
+            const item = normalizeExpiry(raw);
+            const i = allItems.findIndex(x => x.email === item.email);
+            const prev = i >= 0 ? allItems[i] : null;
+            // temporary error diye thik code muche felbo na
+            if (item.code === 'Error' && prev && isValidItem(prev)) return;
+
+            const isNewCode = isValidItem(item) && item.expiresAt > Date.now() && (!prev || prev.code !== item.code);
+            if (i >= 0) allItems[i] = item; else allItems.push(item);
+            allItems.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+            const pi = previousCodes.findIndex(x => x.email === item.email);
+            if (pi >= 0) previousCodes[pi].code = item.code;
+            else previousCodes.push({ email: item.email, code: item.code });
+
+            if (isNewCode && !newCardEmails.includes(item.email)) newCardEmails.push(item.email);
+
+            renderHome();
+            if (accountsModalOpen()) renderAll();
+
+            if (isNewCode) {
+                if (waiting) stopWaiting(true, item.email);
+                else if (fromPush) alertNewCode(item.email);
+            }
+        }
+
+        // ======================= Wait for new code =======================
+        const waitBtn = document.getElementById('waitBtn');
+
+        function setWaitBtn(left) {
+            if (!waiting) {
+                waitBtn.classList.remove('active');
+                waitBtn.innerHTML = '<i class="fa-solid fa-hourglass-start"></i> Wait for new code';
+                return;
+            }
+            waitBtn.classList.add('active');
+            waitBtn.innerHTML = `<i class="fa-solid fa-spinner rotating"></i> Waiting for code... ${fmtLeft(left)} &middot; tap to cancel`;
+        }
+
+        function startWaiting() {
+            initAudio();
+            waiting = { endsAt: Date.now() + WAIT_SECONDS * 1000, tick: null, poll: null };
+            setWaitBtn(WAIT_SECONDS);
+            waiting.tick = setInterval(() => {
+                if (!waiting) return;
+                const left = Math.ceil((waiting.endsAt - Date.now()) / 1000);
+                if (left <= 0) { stopWaiting(false); showToast('No new code arrived'); return; }
+                setWaitBtn(left);
+            }, 1000);
+            // Live push chalu thakle kom (20s) poll, nahole 5s-e poll
+            const loop = async () => {
+                if (!waiting) return;
+                await fetchOTPs(true);
+                if (waiting) waiting.poll = setTimeout(loop, pushConnected ? 20000 : 5000);
+            };
+            waiting.poll = setTimeout(loop, pushConnected ? 20000 : 5000);
+        }
+
+        function stopWaiting(found, email) {
+            if (!waiting) return;
+            clearInterval(waiting.tick);
+            clearTimeout(waiting.poll);
+            waiting = null;
+            setWaitBtn(0);
+            if (found) alertNewCode(email);
+        }
+
+        waitBtn.addEventListener('click', () => { waiting ? stopWaiting(false) : startWaiting(); });
+
+        // ======================= Ekta account refresh =======================
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.card-refresh');
+            if (!btn || btn.dataset.busy === '1') return;
+            const email = btn.dataset.email;
+            btn.dataset.busy = '1';
+            const icon = btn.querySelector('i');
+            if (icon) icon.classList.add('rotating');
+            try {
+                const res = await fetch('/api/refresh-one', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                if (res.status === 401) {
+                    stopPush(); stopWaiting(false);
+                    dashboardSection.classList.add('hidden');
+                    loginSection.classList.remove('hidden');
+                    return;
+                }
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed');
+                applyItem(data, false);
+                if (data.code === 'Error') showToast(data.sender || 'Error');
+                else if (!isValidItem(data)) showToast('No code found for ' + email);
+            } catch (err) {
+                showToast('Could not refresh this account');
+            } finally {
+                btn.dataset.busy = '0';
+                if (icon) icon.classList.remove('rotating');
+            }
+        });
+
+        // ======================= Live push (SSE) =======================
+        function updateLive() {
+            const el = document.getElementById('liveStatus');
+            if (pushConnected) {
+                el.style.display = 'block';
+                el.innerHTML = '<i class="fa-solid fa-circle" style="font-size:7px; vertical-align:middle;"></i> Live &middot; new codes appear automatically';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        async function ensurePush() {
+            if (es || pushRetry) return;
+            if (pushEnabled === null) {
+                try {
+                    const r = await fetch('/api/push-status');
+                    const d = await r.json();
+                    pushEnabled = !!d.enabled;
+                } catch (e) { return; }
+            }
+            if (!pushEnabled || !dashboardIsOpen()) return;
+
+            es = new EventSource('/api/stream');
+            es.addEventListener('hello', () => {
+                pushConnected = true;
+                updateLive();
+                // beshi somoy connection na thakle ei fake-e asha notun code miss hote pare -> ekbar sync
+                if (helloCount++ > 0 && lastDisconnectAt && Date.now() - lastDisconnectAt > 20000) fetchOTPs(true);
+                lastDisconnectAt = 0;
+            });
+            es.addEventListener('otp', (ev) => {
+                try { applyItem(JSON.parse(ev.data), true); } catch (e) {}
+            });
+            es.onerror = () => {
+                pushConnected = false;
+                updateLive();
+                if (!lastDisconnectAt) lastDisconnectAt = Date.now();
+                if (es && es.readyState === EventSource.CLOSED) {      // browser ar nije reconnect korbe na
+                    es.close(); es = null;
+                    pushRetry = setTimeout(() => { pushRetry = null; ensurePush(); }, 15000);
+                }
+            };
+        }
+
+        function stopPush() {
+            if (es) { es.close(); es = null; }
+            clearTimeout(pushRetry); pushRetry = null;
+            pushConnected = false; helloCount = 0; lastDisconnectAt = 0;
+            updateLive();
         }
 
         addAccountForm.addEventListener('submit', async (e) => {
@@ -1304,6 +1525,8 @@
             allItems = [];
             newCardEmails = [];
             hasLoaded = false;
+            stopPush();
+            stopWaiting(false);
             closeAccountsModal();
             autoPaused = false;
             lastActivity = Date.now();
