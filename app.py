@@ -8,6 +8,8 @@ import threading
 import hmac
 import math
 import socket
+import select
+import queue
 from datetime import datetime, timezone, timedelta
 from email.utils import parsedate_to_datetime, parseaddr
 from email.header import decode_header, make_header
@@ -569,7 +571,7 @@ def check_gmail(account, mail_data):
             result = inbox_res
 
         if result:
-            print(f"[{label}] Found OTP: {result['code']} from {account['email']}")
+            print(f"[{label}] Found OTP for {account['email']}")      # code log-e rakhi na
             mail_data.append({
                 "email": account['email'],
                 "sender": result["sender"],
@@ -605,6 +607,8 @@ def check_gmail(account, mail_data):
             "timestamp": 0
         })
 
+REFRESH_DEADLINE = 25      # sekend. Gunicorn-er default 30s timeout-er age e shesh korte hobe
+
 def get_latest_otps():
     accounts = load_accounts()
     all_codes = []
@@ -619,15 +623,196 @@ def get_latest_otps():
                 all_codes.extend(local_data)
 
     for acc in accounts:
-        t = threading.Thread(target=worker, args=(acc,))
+        t = threading.Thread(target=worker, args=(acc,), daemon=True)
         threads.append(t)
         t.start()
 
+    deadline = time.time() + REFRESH_DEADLINE
     for t in threads:
-        t.join()
+        t.join(max(0, deadline - time.time()))
 
-    all_codes.sort(key=lambda x: x['timestamp'], reverse=True)
-    return all_codes
+    with lock:
+        results = list(all_codes)
+
+    # Deadline-er moddhe jara sesh kore ni tader "Timeout" card dekhai
+    done = {r["email"] for r in results}
+    for acc in accounts:
+        if acc["email"] not in done:
+            results.append({
+                "email": acc["email"],
+                "sender": "Timeout - Refresh again",
+                "subject": "Took too long",
+                "code": "Error",
+                "time": "N/A",
+                "timestamp": 0,
+            })
+
+    results.sort(key=lambda x: x['timestamp'], reverse=True)
+    return results
+
+# ======================= Live push (IMAP IDLE + SSE) =======================
+# ENABLE_PUSH=1 dile chalu hoy. Gmail-er INBOX "IDLE" mode-e dhore rakhe; notun mail ashle
+# server sathe sathe browser-e (SSE) jani dey, refresh chapte hoy na.
+# ZARURI: Render Start Command-e gthread worker lagbe, ar worker 1 ta:
+#   gunicorn app:app --worker-class gthread --workers 1 --threads 16 --timeout 120
+# (--preload dewa jabe na). Sync worker-e ENABLE_PUSH=1 dile app atke jete pare.
+ENABLE_PUSH = os.environ.get("ENABLE_PUSH", "0").strip().lower() in ("1", "true", "yes", "on")
+IDLE_MAX_WAIT = 300          # 5 minute por por IDLE notun kore shuru (Gmail connection bachay)
+MAX_SUBSCRIBERS = 8          # ekshathe koyta browser stream dhorbe
+STREAM_MAX_SECONDS = 600     # 10 min por stream bondho; browser nije abar connect kore (login abar check hoy)
+
+_subs = set()
+_subs_lock = threading.Lock()
+
+def broadcast_item(item):
+    msg = json.dumps(item, ensure_ascii=False)
+    with _subs_lock:
+        for q in list(_subs):
+            try:
+                q.put_nowait(msg)
+            except queue.Full:
+                pass
+
+def publish_scan(acc):
+    """Account-ta abar scan kore notun result shobaike pathay."""
+    out = []
+    check_gmail(acc, out)
+    if out and out[0].get("code") != "Error":      # temporary error diye thik code muche felbo na
+        broadcast_item(out[0])
+
+def _sock_read(sock, timeout):
+    """Data thakle bytes, timeout hole None. Connection bondho hole error."""
+    pending = getattr(sock, "pending", None)
+    if not (pending and pending() > 0):
+        ready, _, _ = select.select([sock], [], [], timeout)
+        if not ready:
+            return None
+    data = sock.recv(4096)
+    if not data:
+        raise ConnectionError("IMAP connection closed")
+    return data
+
+class _Lines:
+    """Socket theke line-by-line pori (imaplib-er file buffer bypass kore)."""
+    def __init__(self, sock):
+        self.sock = sock
+        self.buf = b""
+
+    def readline(self, timeout):
+        end = time.time() + timeout
+        while b"\r\n" not in self.buf:
+            left = end - time.time()
+            if left <= 0:
+                return None
+            chunk = _sock_read(self.sock, left)
+            if chunk is None:
+                return None
+            self.buf += chunk
+        line, self.buf = self.buf.split(b"\r\n", 1)
+        return line
+
+def _idle_cycle(lines, sock, tag, max_wait):
+    """Ekbar IDLE: notun mail (EXISTS) ashle True, max_wait pore False."""
+    sock.sendall(tag + b" IDLE\r\n")
+    while True:                                     # server-er "+ idling" opekkha
+        line = lines.readline(15)
+        if line is None:
+            raise TimeoutError("IDLE not accepted")
+        if line.startswith(b"+"):
+            break
+        if line.startswith(tag):
+            raise RuntimeError("IDLE refused")
+    new_mail = False
+    end = time.time() + max_wait
+    while True:
+        left = end - time.time()
+        if left <= 0:
+            break
+        line = lines.readline(left)
+        if line is None:
+            break
+        if line.endswith(b"EXISTS"):
+            new_mail = True
+            break
+    sock.sendall(b"DONE\r\n")
+    while True:                                     # server-er "OK IDLE terminated"
+        line = lines.readline(15)
+        if line is None:
+            raise TimeoutError("IDLE did not terminate")
+        if line.startswith(tag):
+            break
+        if line.endswith(b"EXISTS"):
+            new_mail = True
+    return new_mail
+
+def watch_account(acc, stop_event, holder):
+    backoff = 5
+    n = 0
+    while not stop_event.is_set():
+        mail = None
+        try:
+            mail = _imap_login(acc)
+            holder["mail"] = mail
+            typ, _ = mail.select("inbox", readonly=True)
+            if typ != "OK":
+                raise RuntimeError("cannot select inbox")
+            sock = mail.sock
+            lines = _Lines(sock)
+            backoff = 5
+            print(f"[PUSH] watching {acc['email']}")
+            while not stop_event.is_set():
+                n += 1
+                if _idle_cycle(lines, sock, ("I%d" % n).encode(), IDLE_MAX_WAIT) and not stop_event.is_set():
+                    time.sleep(1)                   # mail puropuri index hoye jak
+                    publish_scan(acc)
+        except Exception as e:
+            if stop_event.is_set():
+                break
+            reason = _error_reason(e)
+            print(f"[PUSH] {acc['email']}: {reason} ({type(e).__name__})")
+            # Password vul hole 30 min pore abar; nahole dhire dhire barano
+            backoff = 1800 if reason.startswith("Login failed") else min(backoff * 2, 300)
+        finally:
+            try:
+                if mail is not None:
+                    mail.shutdown()
+            except Exception:
+                pass
+        stop_event.wait(backoff)
+
+_watchers = {}      # email -> {"thread", "stop", "password", "holder"}
+
+def _stop_watcher(w):
+    w["stop"].set()
+    try:
+        m = w["holder"].get("mail")
+        if m is not None:
+            m.shutdown()                            # IDLE-e atke thakle connection kete dey
+    except Exception:
+        pass
+
+def _push_supervisor():
+    """Prottek 30 sekende account list milay: notun hole watcher shuru, delete/password-badol hole bondho."""
+    while True:
+        try:
+            accs = {x["email"]: x for x in load_accounts()}
+            for email, w in list(_watchers.items()):
+                if email not in accs or accs[email]["password"] != w["password"] or not w["thread"].is_alive():
+                    _stop_watcher(w)
+                    _watchers.pop(email, None)
+            for email, acc in accs.items():
+                if email not in _watchers:
+                    ev, holder = threading.Event(), {}
+                    t = threading.Thread(target=watch_account, args=(acc, ev, holder), daemon=True)
+                    _watchers[email] = {"thread": t, "stop": ev, "password": acc["password"], "holder": holder}
+                    t.start()
+        except Exception as e:
+            print(f"[PUSH] supervisor error: {e}")
+        time.sleep(30)
+
+def start_push():
+    threading.Thread(target=_push_supervisor, daemon=True).start()
+    print("[PUSH] live push chalu. Start Command: gunicorn app:app --worker-class gthread --workers 1 --threads 16 --timeout 120")
 
 @app.route('/')
 def home():
@@ -661,6 +846,56 @@ def fetch_otps():
 
     all_otps = get_latest_otps()
     return jsonify(all_otps)
+
+@app.route('/api/refresh-one', methods=['POST'])
+def refresh_one():
+    """Shudhu ekta Gmail account abar check kore."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    email_in = str((request.json or {}).get('email', '')).strip().lower()
+    acc = next((x for x in load_accounts() if str(x.get('email', '')).lower() == email_in), None)
+    if not acc:
+        return jsonify({"error": "Account not found"}), 404
+    out = []
+    check_gmail(acc, out)
+    if not out:
+        return jsonify({"error": "No result"}), 500
+    return jsonify(out[0])
+
+@app.route('/api/push-status')
+def push_status():
+    return jsonify({"enabled": ENABLE_PUSH})
+
+@app.route('/api/stream')
+def stream():
+    """Server-Sent Events: notun code ashle sathe sathe browser-e pathay."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not ENABLE_PUSH:
+        return jsonify({"error": "Push disabled"}), 503
+    q = queue.Queue(maxsize=100)
+    with _subs_lock:
+        if len(_subs) >= MAX_SUBSCRIBERS:
+            return jsonify({"error": "Too many live connections"}), 503
+        _subs.add(q)
+
+    def gen():
+        started = time.time()
+        try:
+            yield "retry: 3000\n\n"
+            yield "event: hello\ndata: {}\n\n"
+            while time.time() - started < STREAM_MAX_SECONDS:
+                try:
+                    msg = q.get(timeout=15)
+                    yield f"event: otp\ndata: {msg}\n\n"
+                except queue.Empty:
+                    yield ": ping\n\n"             # connection jiye rakhe
+        finally:
+            with _subs_lock:
+                _subs.discard(q)
+
+    return Response(gen(), mimetype='text/event-stream',
+                    headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 @app.route('/api/accounts-count')
 def accounts_count():
@@ -713,18 +948,32 @@ def add_account():
         return jsonify({"error": "Settings locked. Unlock first."}), 403
 
     data = request.json or {}
-    email_input = data.get('email')
-    password_input = data.get('password')
+    email_input = str(data.get('email') or '').strip().lower()
+    password_input = re.sub(r"\s+", "", str(data.get('password') or ''))   # App Password-er majher space bad
 
     if not email_input or not password_input:
         return jsonify({"error": "Email and App Password required"}), 400
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email_input):
+        return jsonify({"error": "Enter a valid email address"}), 400
 
     if accounts_collection is None:
-        return jsonify({"error": "Database Not Connected!"}), 200
+        return jsonify({"error": "Database Not Connected!"}), 500
 
-    existing = accounts_collection.find_one({"email": email_input})
-    if existing:
+    if accounts_collection.find_one({"email": email_input}):
         return jsonify({"error": "Account already exists!"}), 400
+
+    # Save korar age Gmail-e login kore dekhi, jate vul password save na hoy
+    try:
+        test_mail = _imap_login({"email": email_input, "password": password_input})
+        try:
+            test_mail.logout()
+        except Exception:
+            pass
+    except Exception as e:
+        reason = _error_reason(e)
+        if reason.startswith("Login failed"):
+            return jsonify({"error": "Login failed. Check the email and App Password (2-Step Verification must be on)."}), 400
+        return jsonify({"error": f"Could not verify with Gmail ({reason}). Please try again."}), 400
 
     accounts_collection.insert_one({
         "email": email_input,
@@ -732,7 +981,7 @@ def add_account():
         "created_at": datetime.now()
     })
 
-    return jsonify({"message": "Account added permanently to Database!"})
+    return jsonify({"message": "Account verified and added!"})
 
 # ---------------- Settings unlock (server-side) ----------------
 @app.route('/api/settings-unlock', methods=['POST'])
@@ -864,6 +1113,10 @@ def passkey_auth_verify():
     elif purpose == 'delete':
         session['delete_auth_at'] = time.time()
     return jsonify({"success": True})
+
+
+if ENABLE_PUSH:
+    start_push()
 
 
 if __name__ == '__main__':
