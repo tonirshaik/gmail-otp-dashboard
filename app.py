@@ -6,6 +6,7 @@ import time
 import json
 import threading
 import hmac
+import hashlib
 import math
 import socket
 import select
@@ -340,8 +341,13 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
 
 
 def extract_otp(text):
+    return extract_otp_scored(text)[0]
+
+
+def extract_otp_scored(text):
+    """(code, score) ferot dey. Code na pele ("Code not found", 0). Score jototuku boro, toto nishchit."""
     if not text:
-        return "Code not found"
+        return "Code not found", 0
 
     t = text.translate(_ZW).translate(_BN)
     t = re.sub(r"https?://\S+|www\.\S+", " ", t)      # link-er bhitorer token bad
@@ -352,7 +358,7 @@ def extract_otp(text):
 
     kws = _find_keywords(t)
     if not kws and not _INTENT.search(t):
-        return "Code not found"
+        return "Code not found", 0
     has_intent = bool(_INTENT.search(t))
 
     cands = []
@@ -365,11 +371,14 @@ def extract_otp(text):
              or not any(ws <= c[0] and c[1] <= we for ws, we in wide)]
 
     best = None   # (score, -start, output)
+    accepted = []  # (score, output) -- rival code ache kina dekhar jonno
     for s, e, kind, raw in cands:
         sc = _score_candidate(t, kws, s, e, kind, raw, has_intent)
         out = re.sub(r"\s+", "", raw) if kind in ("spaced", "grouped") else raw
         if kind == "grouped":
             out = out.replace(" ", "")
+        if sc >= 6:
+            accepted.append((sc, out))
         if sc >= 6 and (best is None or (sc, -s) > (best[0], best[1])):
             best = (sc, -s, out)
 
@@ -386,7 +395,13 @@ def extract_otp(text):
         if best is None or (8, -s) > (best[0], best[1]):
             best = (8, -s, word)
 
-    return best[2] if best else "Code not found"
+    if not best:
+        return "Code not found", 0
+    score = best[0]
+    # ekoi email-e ar ekta alada code kache-kachi score pele (jemon "code" ar "backup code") nishchit kom
+    if any(o != best[2] and sc >= score - 2 for sc, o in accepted):
+        score -= 5
+    return best[2], score
 
 
 # ======================= Code-er asol meyad (email theke pora) =======================
@@ -505,7 +520,107 @@ SPAM_SCAN_LIMIT = 3
 EMAIL_CACHE_MAX = 3000
 
 # Home-e code koto sekende porjonto dekhabe (client eta use kore). Total Gmail list-e shesh code always thake.
+CONF_HIGH_SCORE = 7       # er niche score hole (ba rival code thakle) card-e Verify sotorko-chinho dekhay
+MAX_CODES_PER_ACCOUNT = 3   # ekta account-e sorboccho koyta recent code/link dekhabe
 OTP_TTL_SECONDS = 120   # 2 minutes -- shudhu tokhon, jokhon email-e meyad lekha nai
+
+# ======================= Service-er nam (GitHub, Google ...) =======================
+_GENERIC_NAME = re.compile(
+    r"(?i)\b(?:no[-\s]?reply|noreply|do[-\s]?not[-\s]?reply|notifications?|security|support|team|accounts?|"
+    r"alerts?|verification|verify|mailer|info|hello|service|services|login|auth|otp|codes?)\b")
+_SLD = {"co", "com", "org", "net", "gov", "edu", "ac", "or", "ne"}
+_BRAND = {"github": "GitHub", "linkedin": "LinkedIn", "paypal": "PayPal", "openai": "OpenAI", "youtube": "YouTube",
+          "whatsapp": "WhatsApp", "tiktok": "TikTok", "facebookmail": "Facebook", "accountprotection": "Microsoft",
+          "microsoftonline": "Microsoft", "amazonses": "Amazon", "bkash": "bKash", "nagad": "Nagad"}
+
+def _domain_label(addr):
+    host = (addr or "").split("@")[-1].lower().strip("<> ")
+    parts = [x for x in host.split(".") if x]
+    if len(parts) < 2:
+        return ""
+    i = -3 if (len(parts) >= 3 and parts[-2] in _SLD and len(parts[-1]) == 2) else -2
+    return parts[i]
+
+def service_name(display_name, addr):
+    """Sender theke chhoto, poriskar service-er nam (noreply@... na)."""
+    name = re.split(r"(?i)\s+via\s+", str(display_name or ""))[0]
+    name = re.sub(r"[\"'<>@]", " ", name)
+    name = _GENERIC_NAME.sub(" ", name)
+    name = re.sub(r"[\s|:;,\-–—]+", " ", name).strip()
+    if name and "." not in name and 2 <= len(name) <= 30:
+        return name
+    label = _domain_label(addr)
+    if label and label not in ("gmail", "googlemail", "outlook", "hotmail", "yahoo"):
+        return _BRAND.get(label, label.capitalize())
+    return str(display_name or addr or "").strip()[:30]
+
+# ======================= Magic link (code-er bodole "Verify" button) =======================
+LINK_TTL_SECONDS = 600       # link-er meyad email-e na thakle 10 minute dhori
+_A_TAG = re.compile(r"""(?is)<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""")
+_BARE_URL = re.compile(r"""https?://[^\s<>"')\]]+""")
+_LINK_TEXT_OK = re.compile(
+    r"(?i)verify|confirm|sign[-\s]?in|log[-\s]?in|activate|approve|magic|it'?s me|complete (?:sign|log|reg)|"
+    r"authenticate|ভেরিফাই|যাচাই|কনফার্ম|লগইন")
+_LINK_URL_OK = re.compile(r"(?i)verif|confirm|magic|activate|sign-?in|log-?in|passwordless|[?&/]token=|[?&]otp=")
+_LINK_GENERIC_TEXT = re.compile(r"(?i)^\s*(?:click here|here|continue|get started|open|go|proceed)\W*$")
+_LINK_BAD_TEXT = re.compile(
+    r"(?i)unsubscribe|privacy|terms|policy|help|support|preferences|manage|browser|forgot|not me|wasn'?t me|"
+    r"report|didn'?t request|did not request|opt[-\s]?out|secure your account|change password")
+_LINK_BAD_URL = re.compile(r"(?i)unsubscribe|opt-?out|preferences|privacy|terms|policy|/help|/support")
+
+def _clean_anchor(inner):
+    t = re.sub(r"(?s)<[^>]+>", " ", inner)
+    return re.sub(r"\s+", " ", html_lib.unescape(t)).strip()
+
+def get_email_links(msg):
+    """HTML/plain email theke [(url, anchor-text)] -- shudhu https."""
+    out = []
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    for part in parts:
+        ctype = part.get_content_type()
+        if ctype not in ("text/plain", "text/html"):
+            continue
+        try:
+            payload = part.get_payload(decode=True)
+            if not payload:
+                continue
+            body = payload.decode(part.get_content_charset() or "utf-8", errors="ignore")
+        except Exception:
+            continue
+        if ctype == "text/html":
+            for m in _A_TAG.finditer(body):
+                out.append((html_lib.unescape(m.group(1)).strip(), _clean_anchor(m.group(2))))
+        else:
+            for m in _BARE_URL.finditer(body):
+                out.append((m.group(0).rstrip(".,;"), ""))
+    return [(u, t) for u, t in out if u.lower().startswith("https://") and len(u) <= 2000]
+
+def pick_magic_link(links, subject, text):
+    """Verify/sign-in jatiyo email-er shobcheye bhalo link. Nai hole None."""
+    if _MARKETING.search(subject or ""):
+        return None
+    body = text
+    for _, anchor in links:                       # button-er lekha nijei "Verify" -- take intent hishebe gona hobe na
+        if anchor:
+            body = body.replace(anchor, " ")
+    blob = subject + "\n" + body
+    if not (_INTENT.search(blob) or _STRONG_KW.search(blob)):
+        return None
+    best, best_score = None, 0
+    for url, anchor in links:
+        if _LINK_BAD_TEXT.search(anchor) or _LINK_BAD_URL.search(url):
+            continue
+        sc = 0
+        if _LINK_TEXT_OK.search(anchor):
+            sc += 3
+        if _LINK_URL_OK.search(url):
+            sc += 2
+        if _LINK_GENERIC_TEXT.match(anchor):
+            sc += 1
+        if sc >= 3 and sc > best_score:
+            best, best_score = url, sc
+    return best
+
 
 def fetch_email_info(mail, uid):
     """Ekta email download kore OTP, sender, subject, time ber kore."""
@@ -531,39 +646,49 @@ def fetch_email_info(mail, uid):
                 except:
                     pass
 
-            otp = "Code not found"
+            otp, score = "Code not found", 0
             ttl = None
             bodies = get_email_texts(msg) or [""]
             for body in bodies:
                 full = subject + "\n" + body
-                otp = extract_otp(full)
+                otp, score = extract_otp_scored(full)
                 if otp != "Code not found":
                     ttl = extract_ttl(full)          # jei text-e code pelam, shekhane meyad khuji
                     break
-            if otp != "Code not found" and ttl is None:
+            link = None
+            if otp == "Code not found":              # code nai -> "Verify" button-er magic link ache kina
+                try:
+                    link = pick_magic_link(get_email_links(msg), subject, "\n".join(bodies))
+                except Exception:
+                    link = None
+            if (otp != "Code not found" or link) and ttl is None:
                 for body in bodies:                  # oi text-e na thakle onno text-e (plain/html) dekhi
                     ttl = extract_ttl(subject + "\n" + body)
                     if ttl:
                         break
             return {
                 "sender": sender,
+                "service": service_name(name, addr),
                 "subject": subject,
                 "code": None if otp == "Code not found" else otp,
+                "confidence": "high" if score >= CONF_HIGH_SCORE else "low",
+                "link": link,
                 "time": msg_dt.strftime("%I:%M %p"),
                 "timestamp": epoch,
                 "ttl_seconds": ttl,                  # None hole default meyad
             }
     return None
 
-def scan_folder(mail, acct_email, folder, limit):
-    """Folder-er shesh `limit`-ta email dekhe, OTP thakle result dey."""
+def scan_folder(mail, acct_email, folder, limit, want=MAX_CODES_PER_ACCOUNT):
+    """Folder-er shesh `limit`-ta email dekhe, code/link thakle (notun theke puran) list dey."""
     status, _ = mail.select(folder, readonly=True)   # readonly: email 'read' hoye jabe na
     if status != 'OK':
-        return None
+        return []
     status, data = mail.uid('search', None, 'ALL')
     if status != 'OK' or not data or not data[0]:
-        return None
+        return []
 
+    found = []
     uids = data[0].split()[-limit:]
     for uid in reversed(uids):
         key = (acct_email, folder, uid)
@@ -575,9 +700,30 @@ def scan_folder(mail, acct_email, folder, limit):
             if len(EMAIL_CACHE) > EMAIL_CACHE_MAX:
                 EMAIL_CACHE.clear()
             EMAIL_CACHE[key] = info
-        if info["code"]:
-            return info
-    return None
+        if info["code"] or info.get("link"):
+            found.append(info)
+            if len(found) >= want:
+                break
+    return found
+
+def make_entry(info):
+    """Email info -> client-er jonno ekta code/link entry."""
+    is_link = bool(info.get("link")) and not info.get("code")
+    ttl = info.get("ttl_seconds") or (LINK_TTL_SECONDS if is_link else OTP_TTL_SECONDS)
+    return {
+        "code": ("link-" + hashlib.sha1(info["link"].encode()).hexdigest()[:8]) if is_link else info["code"],
+        "kind": "link" if is_link else "code",
+        "url": info["link"] if is_link else None,
+        "sender": info["sender"],
+        "service": info.get("service") or info["sender"],
+        "subject": info["subject"],
+        "confidence": "high" if is_link else info.get("confidence", "high"),   # link-er nijosso note ache
+        "time": info["time"],
+        "timestamp": info["timestamp"],
+        "age_seconds": max(0, int(time.time() - info["timestamp"])),
+        "ttl_seconds": ttl,
+        "ttl_from_email": bool(info.get("ttl_seconds")),
+    }
 
 def _imap_login(account):
     """Connect + login. Network-er temporary shomossa hole ekbar retry kore.
@@ -608,48 +754,39 @@ def check_gmail(account, mail_data):
     try:
         mail = _imap_login(account)
 
-        inbox_res, spam_res = None, None
+        inbox_list, spam_list = [], []
 
         # 1. Inbox
         try:
-            inbox_res = scan_folder(mail, account['email'], "inbox", INBOX_SCAN_LIMIT)
+            inbox_list = scan_folder(mail, account['email'], "inbox", INBOX_SCAN_LIMIT)
         except Exception as e:
             print(f"[INBOX ERROR] {account['email']}: {e}")
 
         # 2. Spam (inbox-e code thakleo dekhbo, jate spam-e notun code ashle miss na hoy)
         for folder in ["[Gmail]/Spam", "Spam"]:
             try:
-                spam_res = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
+                spam_list = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
             except Exception:
-                spam_res = None
-            if spam_res:
+                spam_list = []
+            if spam_list:
                 break
 
-        # 3. Duto-r moddhe jeta shobcheye notun (timestamp boro) seta
-        result, label = None, "INBOX"
-        if inbox_res and spam_res:
-            if spam_res["timestamp"] > inbox_res["timestamp"]:
-                result, label = spam_res, "SPAM"
-            else:
-                result = inbox_res
-        elif spam_res:
-            result, label = spam_res, "SPAM"
-        else:
-            result = inbox_res
+        # 3. Duto folder mishiye notun theke puran, same code/link bad, sorboccho MAX_CODES_PER_ACCOUNT
+        merged = sorted(inbox_list + spam_list, key=lambda x: x["timestamp"], reverse=True)
+        entries, seen = [], set()
+        for info in merged:
+            e = make_entry(info)
+            if e["code"] in seen:
+                continue
+            seen.add(e["code"])
+            entries.append(e)
+            if len(entries) >= MAX_CODES_PER_ACCOUNT:
+                break
 
-        if result:
-            print(f"[{label}] Found OTP for {account['email']}")      # code log-e rakhi na
-            mail_data.append({
-                "email": account['email'],
-                "sender": result["sender"],
-                "subject": result["subject"],
-                "code": result["code"],
-                "time": result["time"],
-                "timestamp": result["timestamp"],
-                "age_seconds": max(0, int(time.time() - result["timestamp"])),
-                "ttl_seconds": result.get("ttl_seconds") or OTP_TTL_SECONDS,
-                "ttl_from_email": bool(result.get("ttl_seconds")),
-            })
+        if entries:
+            print(f"[OK] Found {len(entries)} code(s) for {account['email']}")      # code log-e rakhi na
+            top = entries[0]                      # shobcheye notun -- ager moto upore-er field-e thake
+            mail_data.append({"email": account['email'], **top, "codes": entries})
         else:
             mail_data.append({
                 "email": account['email'],
