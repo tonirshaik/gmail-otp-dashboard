@@ -1418,6 +1418,22 @@ def add_account():
 
     return jsonify({"message": "Account verified and added!"})
 
+# ---------------- All-accounts unlock (envelope button) ----------------
+# Settings password-ei lage (eki lockout bucket). Prottekbar popup khulte password/fingerprint lagbe.
+@app.route('/api/accounts-unlock', methods=['POST'])
+def accounts_unlock():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    secs = lock_remaining('settings')
+    if secs:
+        return locked_response(secs)
+    data = request.json or {}
+    pw = str(data.get('password', '')).strip()
+    if pw_equal(pw, SETTINGS_PASSWORD):
+        clear_fails('settings')
+        return jsonify({"success": True})
+    return wrong_password_response('settings', "Incorrect password")
+
 # ---------------- Settings unlock (server-side) ----------------
 @app.route('/api/settings-unlock', methods=['POST'])
 def settings_unlock():
@@ -1518,7 +1534,7 @@ def passkey_auth_verify():
     challenge = session.pop('auth_challenge', None)
     if not challenge or passkeys_collection is None:
         return jsonify({"error": "Expired. Try again."}), 400
-    if purpose in ('settings', 'delete') and not session.get('logged_in'):
+    if purpose in ('settings', 'delete', 'accounts') and not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
     stored = passkeys_collection.find_one({"credential_id": credential.get('id')})
