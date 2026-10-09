@@ -448,6 +448,46 @@
         #allContainer::-webkit-scrollbar { width: 5px; }
         #allContainer::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
         #accountCountBar:active { transform: scale(0.98); }
+
+        /* ---- search + pin ---- */
+        .acc-search { position: relative; margin-bottom: 12px; }
+        .acc-search i.fa-magnifying-glass {
+            position: absolute; left: 13px; top: 50%; transform: translateY(-50%);
+            color: var(--text-muted); font-size: 13px; pointer-events: none;
+        }
+        .acc-search input {
+            width: 100%;
+            padding: 11px 36px 11px 36px;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--card-border);
+            border-radius: 12px;
+            color: #fff;
+            font-size: 13px;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+        .acc-search input:focus { border-color: var(--accent-cyan); }
+        .acc-search .search-clear {
+            position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+            background: none; border: none; color: var(--text-muted);
+            cursor: pointer; font-size: 13px; padding: 6px 8px; display: none;
+        }
+        .acc-search.has-text .search-clear { display: block; }
+        .acc-section {
+            font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+            color: var(--text-muted); margin: 4px 2px 8px; display: flex; align-items: center; gap: 6px;
+        }
+        .acc-section.pinned-label { color: #fbbf24; }
+        .card-pin {
+            background: none; border: none; color: var(--text-muted);
+            cursor: pointer; font-size: 13px; padding: 4px 7px; border-radius: 8px;
+            margin-left: auto;
+        }
+        .card-pin + .card-refresh { margin-left: 0; }
+        .card-pin:hover { color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
+        .card-pin.pinned { color: #fbbf24; }
+        .otp-card.is-pinned { border-color: rgba(251, 191, 36, 0.35); }
+        .otp-card.is-pinned::before { background: linear-gradient(135deg, #f59e0b, #fbbf24); }
     </style>
 </head>
 <body>
@@ -563,6 +603,11 @@
             <div class="accounts-head">
                 <span><i class="fa-solid fa-envelope"></i> All Gmail Accounts (<span id="allCount">0</span>)</span>
                 <button type="button" class="accounts-close" id="accountsCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="acc-search" id="accSearchWrap">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="accSearchInput" placeholder="Search Gmail by name..." autocomplete="off" spellcheck="false">
+                <button type="button" class="search-clear" id="accSearchClear" title="Clear"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div id="allContainer"></div>
         </div>
@@ -844,11 +889,16 @@
             const isNew = !!opts.isNew;
             const withTimer = validCode && !!opts.showExpiry;
             const leftSec = withTimer ? Math.max(0, Math.ceil((item.expiresAt - Date.now()) / 1000)) : 0;
+            const pinned = isPinned(item.email);
+            const pinBtn = opts.pinnable
+                ? `<button type="button" class="card-pin ${pinned ? 'pinned' : ''}" data-email="${escAttr(item.email)}" title="${pinned ? 'Unpin' : 'Pin to top'}"><i class="fa-${pinned ? 'solid' : 'regular'} fa-star"></i></button>`
+                : '';
             const card = `
-                <div class="otp-card ${isNew ? 'is-new' : ''}" ${withTimer ? `data-expires="${item.expiresAt}"` : ''}>
+                <div class="otp-card ${isNew ? 'is-new' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''}" ${withTimer ? `data-expires="${item.expiresAt}"` : ''}>
                     ${isNew ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
                         <span>${escAttr(item.email)}</span>
+                        ${pinBtn}
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
                     ${validCode ? `
@@ -901,8 +951,41 @@
             otpContainer.innerHTML = html;
         }
 
-        // Popup: shob Gmail account (delete kora jay)
+        // ---------- Pin (priyo account) ----------
+        const PIN_KEY = 'otpDash.pinnedEmails';
+        function loadPins() {
+            try { const a = JSON.parse(localStorage.getItem(PIN_KEY) || '[]'); return Array.isArray(a) ? a : []; }
+            catch (e) { return []; }
+        }
+        let pinnedEmails = loadPins();
+        function savePins() { try { localStorage.setItem(PIN_KEY, JSON.stringify(pinnedEmails)); } catch (e) {} }
+        function isPinned(email) { return pinnedEmails.includes(String(email).toLowerCase()); }
+        function togglePin(email) {
+            const k = String(email).toLowerCase();
+            if (pinnedEmails.includes(k)) pinnedEmails = pinnedEmails.filter(x => x !== k);
+            else pinnedEmails.push(k);
+            savePins();
+            renderAll();
+        }
+
+        // ---------- Search ----------
+        const accSearchInput = document.getElementById('accSearchInput');
+        const accSearchWrap = document.getElementById('accSearchWrap');
+        function searchQuery() { return accSearchInput.value.trim().toLowerCase(); }
+        accSearchInput.addEventListener('input', () => {
+            accSearchWrap.classList.toggle('has-text', accSearchInput.value.length > 0);
+            renderAll();
+        });
+        document.getElementById('accSearchClear').addEventListener('click', () => {
+            accSearchInput.value = '';
+            accSearchWrap.classList.remove('has-text');
+            renderAll();
+            accSearchInput.focus();
+        });
+
+        // Popup: shob Gmail account (delete kora jay). Pin kora gulo upore, search e filter.
         function renderAll() {
+            if (openWrap) openWrap = null;
             document.getElementById('allCount').innerText = allItems.length;
             if (!hasLoaded) {
                 allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-spinner rotating" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>Loading...</div>`;
@@ -912,7 +995,25 @@
                 allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>No Gmail accounts added yet.</div>`;
                 return;
             }
-            allContainer.innerHTML = allItems.map(item => cardHTML(item, { isNew: false, deletable: true })).join('');
+            const q = searchQuery();
+            const list = q ? allItems.filter(i => String(i.email).toLowerCase().includes(q)) : allItems;
+            if (list.length === 0) {
+                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-magnifying-glass" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>No Gmail matches "${escAttr(accSearchInput.value.trim())}".</div>`;
+                return;
+            }
+            const pinned = list.filter(i => isPinned(i.email));
+            const others = list.filter(i => !isPinned(i.email));
+            const opts = { isNew: false, deletable: true, pinnable: true };
+            let html = '';
+            if (pinned.length) {
+                html += `<div class="acc-section pinned-label"><i class="fa-solid fa-star"></i> Pinned (${pinned.length})</div>`;
+                html += pinned.map(item => cardHTML(item, opts)).join('');
+            }
+            if (others.length) {
+                if (pinned.length) html += `<div class="acc-section"><i class="fa-solid fa-envelope"></i> All accounts (${others.length})</div>`;
+                html += others.map(item => cardHTML(item, opts)).join('');
+            }
+            allContainer.innerHTML = html;
         }
 
         function accountsModalOpen() { return !accountsModal.classList.contains('hidden'); }
@@ -927,6 +1028,10 @@
         function closeAccountsModal() {
             if (openWrap) setSwipe(openWrap, false);
             accountsModal.classList.add('hidden');
+            if (accSearchInput) {
+                accSearchInput.value = '';
+                accSearchWrap.classList.remove('has-text');
+            }
         }
 
         document.getElementById('accountCountBar').addEventListener('click', openAccountsModal);
@@ -1346,6 +1451,12 @@
             const wrap = e.target.closest('.otp-swipe');
             if (!wrap) return;
             if (wrap.dataset.dragged === '1') { e.stopPropagation(); e.preventDefault(); return; }
+            const pinBtn = e.target.closest('.card-pin');
+            if (pinBtn && !wrap.classList.contains('open')) {
+                e.stopPropagation(); e.preventDefault();
+                togglePin(pinBtn.dataset.email);
+                return;
+            }
             const delBtn = e.target.closest('.swipe-delete');
             if (delBtn) {
                 openDeleteModal(delBtn.dataset.email);
@@ -1401,6 +1512,8 @@
             previousCodes = previousCodes.filter(p => p.email !== email);
             allItems = allItems.filter(i => i.email !== email);
             newCardEmails = newCardEmails.filter(e => e !== email);
+            pinnedEmails = pinnedEmails.filter(x => x !== String(email).toLowerCase());
+            savePins();
             if (openWrap === wrap) openWrap = null;
             renderHome();
             document.getElementById('allCount').innerText = allItems.length;
