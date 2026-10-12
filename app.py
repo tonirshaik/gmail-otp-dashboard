@@ -915,8 +915,11 @@ def check_gmail(account, mail_data):
 
 REFRESH_DEADLINE = 25      # sekend. Gunicorn-er default 30s timeout-er age e shesh korte hobe
 
-def get_latest_otps():
+def get_latest_otps(only=None):
+    """only = email-er set hole shudhu sei account gulo check kore (jemon pin kora gulo)."""
     accounts = load_accounts()
+    if only is not None:
+        accounts = [a for a in accounts if str(a.get('email', '')).lower() in only]
     all_codes = []
     threads = []
     lock = threading.Lock()
@@ -1192,7 +1195,16 @@ def fetch_otps():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
-    all_otps = get_latest_otps()
+    only = None
+    if request.args.get('pinned') == '1':          # login-er por shudhu pin kora account
+        try:
+            only = {_norm_email(e) for e in _read_pins()} if prefs_collection is not None else set()
+        except Exception as e:
+            print(f"Pins read error: {e}")
+            only = set()
+        if not only:
+            return jsonify([])
+    all_otps = get_latest_otps(only)
     return jsonify(all_otps)
 
 @app.route('/api/refresh-one', methods=['POST'])
@@ -1316,6 +1328,20 @@ def merge_pins_api():
     except Exception as e:
         print(f"Pins merge error: {e}")
         return jsonify({"error": "Could not save pins"}), 500
+
+@app.route('/api/accounts-list')
+def accounts_list():
+    """Shudhu Gmail address-er list (Gmail check chhara). Check na kora account popup-e dekhate."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if accounts_collection is None:
+        return jsonify({"emails": []})
+    try:
+        docs = accounts_collection.find({}, {'_id': 0, 'email': 1})
+        return jsonify({"emails": [d['email'] for d in docs if d.get('email')]})
+    except Exception as e:
+        print(f"Accounts list error: {e}")
+        return jsonify({"emails": []})
 
 @app.route('/api/accounts-count')
 def accounts_count():
