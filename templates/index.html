@@ -751,6 +751,12 @@
             display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
         }
         .svc-avatar i { font-size: 15px; }
+        .svc-avatar { position: relative; overflow: hidden; }
+        .svc-avatar img {
+            position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain;
+            padding: 5px; background: #fff; opacity: 0; transition: opacity 0.2s ease;
+        }
+        .svc-avatar.img-ok img { opacity: 1; }
         .svc-text { min-width: 0; }
         .svc-name { font-weight: 600; font-size: 14px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         .svc-sub { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -1530,7 +1536,12 @@
             if (key) return `<span class="svc-avatar" style="--c:${BRAND_ICONS[key][1]}" aria-hidden="true"><i class="${BRAND_ICONS[key][0]}"></i></span>`;
             const base = real ? low : String(item.email || '?').toLowerCase();
             const letter = (real ? name : String(item.email || '?')).charAt(0).toUpperCase() || '?';
-            return `<span class="svc-avatar" style="--c:hsl(${hueOf(base)} 52% 42%)" aria-hidden="true">${escAttr(letter)}</span>`;
+            const dom = real && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(item.domain || '') ? item.domain.toLowerCase() : '';
+            // site-er asol favicon; na ashle (ba load na hole) akkhor-ta-i thake
+            const img = dom
+                ? `<img src="https://icons.duckduckgo.com/ip3/${dom}.ico" alt="" loading="lazy" referrerpolicy="no-referrer" onload="this.parentNode.classList.add('img-ok')" onerror="this.remove()">`
+                : '';
+            return `<span class="svc-avatar" style="--c:hsl(${hueOf(base)} 52% 42%)" aria-hidden="true">${escAttr(letter)}${img}</span>`;
         }
         function svcRowHTML(item) {
             const name = String(item.service || item.sender || 'Unknown').trim();
