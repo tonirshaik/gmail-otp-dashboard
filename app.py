@@ -631,6 +631,10 @@ def decode_hdr(value, default=""):
 # Shudhu notun email ashle seta-i download hobe.
 EMAIL_CACHE = {}
 
+# Prottek account-er shesh sothik check-er result (shudhu memory-te, restart-e mushe jay).
+# /api/cached-otps eta diye login-er por Gmail-e na giye shesh code dekhay.
+LAST_RESULTS = {}
+
 # Koyta shesh email dekhe code khujbe (kom dile download kom hobe)
 INBOX_SCAN_LIMIT = 5
 SPAM_SCAN_LIMIT = 3
@@ -907,6 +911,12 @@ def check_gmail(account, mail_data):
                 "time": "N/A",
                 "timestamp": 0
             })
+
+        # Shesh sothik result server-er memory-te rakhi -- login-er por Gmail check na kore dekhate.
+        try:
+            LAST_RESULTS[str(account['email']).lower()] = dict(mail_data[-1])
+        except Exception:
+            pass
 
         try:
             mail.logout()
@@ -1326,6 +1336,23 @@ def merge_pins_api():
     except Exception as e:
         print(f"Pins merge error: {e}")
         return jsonify({"error": "Could not save pins"}), 500
+
+@app.route('/api/cached-otps')
+def cached_otps():
+    """Shesh jana result (Gmail-e connect na kore). Je account ekbaro check hoyni tar entry thakbe na."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    now = time.time()
+    out = []
+    for acc in load_accounts():
+        item = LAST_RESULTS.get(str(acc.get('email', '')).lower())
+        if not item:
+            continue
+        item = dict(item)
+        if item.get('timestamp'):
+            item['age_seconds'] = max(0, int(now - item['timestamp']))   # boyosh abar hisab kori
+        out.append(item)
+    return jsonify(out)
 
 @app.route('/api/accounts-list')
 def accounts_list():
