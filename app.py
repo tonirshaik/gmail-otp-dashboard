@@ -1327,6 +1327,20 @@ def merge_pins_api():
         print(f"Pins merge error: {e}")
         return jsonify({"error": "Could not save pins"}), 500
 
+@app.route('/api/accounts-list')
+def accounts_list():
+    """Shudhu Gmail address-er list (password ba Gmail check chhara). Refresh-er age popup-e account dekhate."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if accounts_collection is None:
+        return jsonify({"emails": []})
+    try:
+        docs = accounts_collection.find({}, {'_id': 0, 'email': 1})
+        return jsonify({"emails": [d['email'] for d in docs if d.get('email')]})
+    except Exception as e:
+        print(f"Accounts list error: {e}")
+        return jsonify({"emails": []})
+
 @app.route('/api/accounts-count')
 def accounts_count():
     if not session.get('logged_in'):
