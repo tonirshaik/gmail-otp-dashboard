@@ -284,7 +284,6 @@
             gap: 6px;
         }
 
-        .otp-subject { font-size: 13px; color: var(--text-muted); margin-bottom: 8px; }
 
         .otp-code-box {
             text-align: center;
@@ -592,9 +591,6 @@
         .health-msg { font-size: 11px; }
         .health-msg.warn { color: #fcd34d; }
         .health-msg.bad { color: #fca5a5; }
-        .health-badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; display: inline-flex; align-items: center; gap: 4px; }
-        .health-badge.warn { background: rgba(245, 158, 11, 0.15); color: #fcd34d; border: 1px solid rgba(245, 158, 11, 0.4); }
-        .health-badge.bad { background: rgba(239, 68, 68, 0.15); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.4); }
 
         /* ---- Refresh + Wait: ek line-e pashapashi ---- */
         .btn-row { display: flex; gap: 10px; margin-bottom: 20px; }
@@ -2021,67 +2017,9 @@
         document.getElementById('deleteCancelBtn').addEventListener('click', closeDeleteModal);
         deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) closeDeleteModal(); });
 
-        // ---------- Auto refresh ----------
-        const AUTO_REFRESH_ENABLED = false;  // true korle auto-refresh abar chalu hobe
-        const AUTO_REFRESH_SECONDS = 30;   // koto sekende ekbar check hobe
-        const AUTO_IDLE_MINUTES = 2;       // koto minute kichu na korle auto-refresh thambe
-        let lastActivity = Date.now();
-        let autoPaused = false;
-
         function dashboardIsOpen() {
             return !dashboardSection.classList.contains('hidden');
         }
-
-        function setAutoStatus(html) {
-            document.getElementById('autoStatus').innerHTML = html;
-        }
-
-        function autoRefreshAllowed() {
-            return dashboardIsOpen() && document.visibilityState === 'visible'
-                && !deleteModalOpen() && !openWrap && !autoPaused;
-        }
-
-        // Shudhu click / tap / key / scroll ke "kaj kora" dhora hoy.
-        // Mouse bhul kore nare gele bondho hoye thaka auto-refresh abar chalu hobe na.
-        function markActivity() {
-            if (autoPaused) return;
-            lastActivity = Date.now();
-        }
-        ['pointerdown', 'keydown', 'touchstart', 'scroll'].forEach(ev =>
-            document.addEventListener(ev, markActivity, { passive: true }));
-
-        function resumeAutoRefresh() {
-            autoPaused = false;
-            lastActivity = Date.now();
-            setAutoStatus('<i class="fa-solid fa-bolt"></i> Auto-refresh ON');
-            fetchOTPs(true);
-        }
-
-        setInterval(() => {
-            if (!AUTO_REFRESH_ENABLED) return;
-            if (!dashboardIsOpen()) {
-                // logout / session shesh hole abar notun kore shuru
-                autoPaused = false;
-                lastActivity = Date.now();
-                return;
-            }
-            if (document.visibilityState !== 'visible') return;
-            if (!autoPaused && Date.now() - lastActivity > AUTO_IDLE_MINUTES * 60 * 1000) {
-                autoPaused = true;
-                setAutoStatus('<i class="fa-solid fa-pause"></i> Auto-refresh paused &middot; ' +
-                    '<button type="button" onclick="resumeAutoRefresh()" ' +
-                    'style="background:none;border:none;color:#22d3ee;font-weight:700;font-size:12px;cursor:pointer;text-decoration:underline;">Resume</button>');
-                return;
-            }
-            if (autoRefreshAllowed()) fetchOTPs(true);
-        }, AUTO_REFRESH_SECONDS * 1000);
-
-        // tab-e fire asle sathe sathe ekbar update
-        document.addEventListener('visibilitychange', () => {
-            if (AUTO_REFRESH_ENABLED && document.visibilityState === 'visible' && autoRefreshAllowed()) {
-                fetchOTPs(true);
-            }
-        });
 
         // ---------- Auto-copy toggle ----------
         let autoCopyOn = true;
@@ -2232,8 +2170,6 @@
             stopPush();
             stopWaiting(false);
             closeAccountsModal();
-            autoPaused = false;
-            lastActivity = Date.now();
         }
     </script>
 </body>
