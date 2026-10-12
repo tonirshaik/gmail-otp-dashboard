@@ -4,7 +4,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gmail OTP Dashboard</title>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#0b0f19">
+    <script>
+    /* Theme: Auto / Light / Dark -- paint-er age boshe jate flash na hoy */
+    (function () {
+        var KEY = 'otpDash.theme';
+        function pref() { try { var v = localStorage.getItem(KEY); return (v === 'light' || v === 'dark') ? v : 'auto'; } catch (e) { return 'auto'; } }
+        var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: light)') : null;
+        function apply() {
+            var p = pref(), eff = p === 'auto' ? (mq && mq.matches ? 'light' : 'dark') : p;
+            var d = document.documentElement;
+            d.setAttribute('data-theme', eff); d.setAttribute('data-theme-pref', p);
+            var m = document.querySelector('meta[name=theme-color]');
+            if (m) m.setAttribute('content', eff === 'light' ? '#eef1f8' : '#0b0f19');
+        }
+        window.__applyTheme = apply; apply();
+        if (mq) { var h = function () { if (pref() === 'auto') apply(); }; if (mq.addEventListener) mq.addEventListener('change', h); else mq.addListener(h); }
+    })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
     <style>
@@ -634,6 +652,206 @@
         .mini-toggle.on { color: var(--accent-green); border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.08); }
         .kbd-hint { text-align: center; font-size: 11px; color: var(--text-muted); opacity: 0.6; margin-top: 12px; }
         @media (hover: none), (pointer: coarse) { .kbd-hint { display: none; } }
+
+        /* =====================================================================
+           UI refresh: theme, code cells, service row, desktop layout, filters,
+           command palette, motion
+           ===================================================================== */
+        :root {
+            color-scheme: dark;
+            --popup-bg: #111827; --surface: rgba(15, 23, 42, 0.6);
+            --ctl-bg: rgba(255, 255, 255, 0.05); --ctl-border: rgba(255, 255, 255, 0.1);
+            --input-bg: rgba(0, 0, 0, 0.4); --input-text: #fff;
+            --cell-bg: rgba(56, 189, 248, 0.10); --cell-border: rgba(56, 189, 248, 0.32); --cell-text: #7dd3fc;
+            --scroll-thumb: rgba(255, 255, 255, 0.15); --warn-text: #fcd34d;
+            --ring-ok: var(--accent-cyan); --ring-warn: #f59e0b; --ring-bad: var(--accent-red);
+            --mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        }
+        :root[data-theme="light"] {
+            color-scheme: light;
+            --bg-color: #eef1f8; --card-bg: rgba(255, 255, 255, 0.82); --card-border: rgba(15, 23, 42, 0.10);
+            --text-main: #0f172a; --text-muted: #5b6679;
+            --accent-blue: #2563eb; --accent-cyan: #0e7490; --accent-green: #047857; --accent-red: #dc2626;
+            --shadow-glow: 0 0 0 rgba(0, 0, 0, 0);
+            --popup-bg: #ffffff; --surface: rgba(255, 255, 255, 0.92);
+            --ctl-bg: rgba(15, 23, 42, 0.05); --ctl-border: rgba(15, 23, 42, 0.12);
+            --input-bg: rgba(15, 23, 42, 0.04); --input-text: #0f172a;
+            --cell-bg: #e0f2fe; --cell-border: #7dd3fc; --cell-text: #075985;
+            --scroll-thumb: rgba(15, 23, 42, 0.22); --warn-text: #92400e; --ring-warn: #d97706;
+        }
+
+        /* surfaces that were hard-coded dark -> now follow the theme (dark values unchanged) */
+        .settings-popup, .modal-box, .accounts-box { background: var(--popup-bg); }
+        .input-group input, .acc-search input { background: var(--input-bg); color: var(--input-text); }
+        .otp-card, .skeleton-card { background: var(--surface); }
+        .settings-btn, .btn-cancel { background: var(--ctl-bg); }
+        .otp-container::-webkit-scrollbar-thumb, #allContainer::-webkit-scrollbar-thumb { background: var(--scroll-thumb); }
+
+        :root[data-theme="light"] .container { box-shadow: 0 18px 44px rgba(15, 23, 42, 0.12); }
+        :root[data-theme="light"] .settings-popup,
+        :root[data-theme="light"] .modal-box,
+        :root[data-theme="light"] .accounts-box,
+        :root[data-theme="light"] .palette-box { box-shadow: 0 14px 36px rgba(15, 23, 42, 0.18); }
+        :root[data-theme="light"] .modal-overlay { background: rgba(15, 23, 42, 0.45); }
+        :root[data-theme="light"] .header-title {
+            background: linear-gradient(135deg, #2563eb, #7c3aed, #0e7490);
+            -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        :root[data-theme="light"] .accounts-btn, :root[data-theme="light"] .accounts-head { color: #0e7490; }
+        :root[data-theme="light"] .btn-refresh:hover,
+        :root[data-theme="light"] .btn-wait:hover,
+        :root[data-theme="light"] .btn-logout:hover { color: var(--text-main); }
+        :root[data-theme="light"] .btn-wait { color: #6d28d9; }
+        :root[data-theme="light"] .btn-wait.active { color: #b45309; }
+        :root[data-theme="light"] .acc-section.pinned-label { color: #b45309; }
+        :root[data-theme="light"] .card-pin.pinned { color: #d97706; }
+        :root[data-theme="light"] .verify-note { color: #92400e; }
+        :root[data-theme="light"] .verify-note.link { color: var(--accent-cyan); }
+        :root[data-theme="light"] .health-msg.warn { color: #b45309; }
+        :root[data-theme="light"] .health-msg.bad { color: #b91c1c; }
+        :root[data-theme="light"] .otp-code-box { color: #0369a1; background: rgba(2, 132, 199, 0.08); border-color: rgba(2, 132, 199, 0.3); }
+        :root[data-theme="light"] .otp-code-box.expired-box { color: var(--text-muted); background: var(--ctl-bg); border-color: var(--ctl-border); }
+        :root[data-theme="light"] .otp-card.is-expired,
+        :root[data-theme="light"] .otp-card.is-used { border-color: var(--ctl-border); }
+        :root[data-theme="light"] .otp-card.is-expired::before,
+        :root[data-theme="light"] .otp-card.is-used::before { background: rgba(15, 23, 42, 0.18); }
+        :root[data-theme="light"] .ring-bg { stroke: rgba(15, 23, 42, 0.12); }
+        :root[data-theme="light"] .sk {
+            background: linear-gradient(90deg, rgba(15, 23, 42, 0.06) 25%, rgba(15, 23, 42, 0.12) 50%, rgba(15, 23, 42, 0.06) 75%);
+            background-size: 200% 100%;
+        }
+
+        /* ---- code: one cell per character ---- */
+        .otp-code-box.has-cells {
+            display: flex; align-items: center; justify-content: center; gap: 8px;
+            background: transparent; border-color: transparent; padding: 6px 0; margin-bottom: 6px; letter-spacing: normal;
+        }
+        .otp-code-box.has-cells:hover { background: transparent; border-color: transparent; transform: none; }
+        .cells { display: flex; gap: clamp(3px, 1.1vw, 6px); min-width: 0; }
+        .ch {
+            display: inline-flex; align-items: center; justify-content: center;
+            min-width: 1.2em; padding: 0.32em 0.1em;
+            background: var(--cell-bg); border: 1px solid var(--cell-border); border-radius: 8px;
+            color: var(--cell-text); font: 700 clamp(17px, 5.4vw, 28px)/1 var(--mono);
+            font-variant-numeric: tabular-nums;
+            transition: border-color 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+        }
+        .cells.sm .ch { font-size: clamp(14px, 4.2vw, 21px); min-width: 1.1em; }
+        .cells.g3 .ch:nth-child(4) { margin-left: clamp(4px, 1.6vw, 10px); }
+        .cells.g4 .ch:nth-child(5) { margin-left: clamp(4px, 1.6vw, 10px); }
+        .otp-code-box.has-cells:hover .ch { border-color: var(--accent-cyan); }
+        .otp-code-box.masked .ch { opacity: 0.8; }
+        .otp-code-box.has-cells .reveal-eye { flex: none; color: var(--text-muted); }
+        .otp-code-box.copied .ch { background: var(--accent-green); border-color: var(--accent-green); color: #fff; opacity: 1; }
+
+        /* ---- service row ---- */
+        .svc-row { display: flex; align-items: center; gap: 10px; margin: 2px 0 10px; min-width: 0; }
+        .svc-avatar {
+            flex: none; width: 30px; height: 30px; border-radius: 9px; background: var(--c, #475569); color: #fff;
+            display: inline-flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px;
+        }
+        .svc-avatar i { font-size: 15px; }
+        .svc-text { min-width: 0; }
+        .svc-name { font-weight: 600; font-size: 14px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .svc-sub { font-size: 11.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .otp-card.is-used .svc-row, .otp-card.is-expired .svc-row { opacity: 0.55; }
+
+        /* ---- expiry ring: bigger, colour follows time left ---- */
+        .otp-expiry { font-size: 12px; gap: 8px; font-variant-numeric: tabular-nums; }
+        .ring { width: 30px; height: 30px; }
+        .ring-fg { stroke: var(--ring-ok); }
+        .otp-card.ring-warn .ring-fg { stroke: var(--ring-warn); }
+        .otp-card.expiring .ring-fg { stroke: var(--ring-bad); }
+        .otp-expiry-time { font-weight: 700; color: var(--text-main); }
+        .otp-card.expiring .otp-expiry-time { color: var(--accent-red); }
+        @keyframes ringPulse {
+            0%, 100% { transform: rotate(-90deg) scale(1); }
+            50% { transform: rotate(-90deg) scale(1.12); }
+        }
+        .otp-card.expiring .ring { animation: ringPulse 1s ease-in-out infinite; }
+
+        /* ---- a new code slides in once ---- */
+        @keyframes cardIn { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: none; } }
+        .otp-card.enter { animation: cardIn 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+        .btn:active { transform: scale(0.98); }
+
+        /* ---- tool chips (auto-copy / theme / quick find) ---- */
+        .chip-row { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 10px 0 14px; }
+        .chip-row .mini-toggle { display: inline-flex; align-items: center; gap: 6px; margin: 0; }
+        .mini-toggle b { font-weight: 700; }
+        kbd, .kbd {
+            font: 600 10.5px var(--mono); padding: 1px 5px; border: 1px solid var(--ctl-border);
+            border-radius: 5px; color: var(--text-muted); background: var(--ctl-bg);
+        }
+
+        /* ---- filter + sort chips (all accounts) ---- */
+        .filter-row { display: flex; gap: 6px; overflow-x: auto; padding: 2px 0 8px; margin-bottom: 6px; scrollbar-width: none; }
+        .filter-row::-webkit-scrollbar { display: none; }
+        .fchip {
+            flex: none; display: inline-flex; align-items: center; gap: 6px; font: inherit; font-size: 12px; font-weight: 600;
+            background: var(--ctl-bg); border: 1px solid var(--ctl-border); color: var(--text-muted);
+            border-radius: 999px; padding: 5px 11px; cursor: pointer;
+        }
+        .fchip b { font-weight: 700; font-variant-numeric: tabular-nums; opacity: 0.8; }
+        .fchip.on { color: var(--accent-cyan); border-color: var(--accent-cyan); background: rgba(6, 182, 212, 0.12); }
+        .fchip.sort { margin-left: auto; }
+
+        /* ---- command palette ---- */
+        .palette-overlay { align-items: flex-start; padding-top: min(14vh, 120px); z-index: 600; }
+        .palette-box {
+            width: 100%; max-width: 540px; background: var(--popup-bg); border: 1px solid var(--card-border);
+            border-radius: 18px; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.55); overflow: hidden;
+        }
+        .palette-input { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--card-border); color: var(--text-muted); }
+        .palette-input input { flex: 1; min-width: 0; background: none; border: none; outline: none; color: var(--text-main); font-size: 15px; }
+        .palette-list { max-height: min(50vh, 380px); overflow-y: auto; padding: 6px; }
+        .pal-section { font-size: 12px; font-weight: 600; color: var(--text-muted); padding: 8px 10px 4px; }
+        .pal-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; cursor: pointer; }
+        .pal-row.sel { background: rgba(59, 130, 246, 0.16); }
+        .pal-text { min-width: 0; flex: 1; }
+        .pal-main { font-size: 13.5px; font-weight: 600; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pal-sub { font-size: 11.5px; color: var(--text-muted); }
+        .pal-sub.ok { color: var(--accent-green); }
+        .pal-sub.bad { color: var(--accent-red); }
+        .pal-ico {
+            width: 30px; height: 30px; flex: none; border-radius: 9px; background: var(--ctl-bg);
+            display: inline-flex; align-items: center; justify-content: center; color: var(--accent-cyan); font-size: 13px;
+        }
+        .palette-foot { padding: 8px 14px; border-top: 1px solid var(--card-border); font-size: 11.5px; color: var(--text-muted); }
+
+        /* ---- desktop: sidebar + card grid ---- */
+        .dash-grid { display: block; }
+        @media (min-width: 1024px) {
+            body { align-items: flex-start; padding: 48px 28px; }
+            .container:has(#dashboardSection:not(.hidden)) { max-width: 1080px; padding: 32px 36px; }
+            .dash-grid {
+                display: grid; grid-template-columns: 300px minmax(0, 1fr);
+                grid-template-areas: "side main" "foot main"; grid-template-rows: auto 1fr; column-gap: 32px;
+            }
+            .dash-side { grid-area: side; position: sticky; top: 24px; align-self: start; }
+            .dash-main { grid-area: main; }
+            .dash-foot { grid-area: foot; align-self: end; }
+            .btn-row { flex-direction: column; }
+            .otp-container {
+                max-height: none; overflow: visible; padding: 0;
+                display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-content: start;
+            }
+            .otp-container .otp-card, .otp-container .skeleton-card { margin-bottom: 0; }
+            .otp-container > .empty-state, .otp-container > .acc-section { grid-column: 1 / -1; }
+            .accounts-box { max-width: 780px; }
+            #allContainer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: start; }
+            #allContainer .otp-swipe, #allContainer .skeleton-card { margin-bottom: 0; }
+            #allContainer > .acc-section, #allContainer > .empty-state { grid-column: 1 / -1; }
+        }
+
+        /* ---- keyboard focus + reduced motion ---- */
+        :focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+        .input-group input:focus-visible, .acc-search input:focus-visible, .palette-input input:focus-visible { outline: none; }
+        @media (prefers-reduced-motion: reduce) {
+            *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
+            .rotating { animation-duration: 1.4s !important; animation-iteration-count: infinite !important; }
+            .sk { animation: none; }
+        }
     </style>
 </head>
 <body>
@@ -645,7 +863,7 @@
             <div class="header-title" style="justify-content: center; margin-bottom: 20px;">
                 <i class="fa-solid fa-lock"></i> Secure Login
             </div>
-            <div id="lockNotice" class="msg-status" style="color: #fcd34d;"><i class="fa-solid fa-lock"></i> <span id="lockNoticeText"></span></div>
+            <div id="lockNotice" class="msg-status" style="color: var(--warn-text, #fcd34d);"><i class="fa-solid fa-lock"></i> <span id="lockNoticeText"></span></div>
             <div id="loginError" class="msg-status" style="color: var(--accent-red);"></div>
             <form id="loginForm">
                 <div class="input-group">
@@ -721,6 +939,8 @@
 
             <div id="statusMsg" class="msg-status"></div>
 
+            <div class="dash-grid">
+            <div class="dash-side">
             <div class="btn-row">
                 <button type="button" class="btn btn-refresh" id="refreshBtn">
                     <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
@@ -733,10 +953,18 @@
                 <i class="fa-regular fa-clock"></i> Last updated: --
             </div>
             <div id="liveStatus"></div>
-            <button type="button" id="autoCopyBtn" class="mini-toggle on" title="Copy new codes automatically when they arrive live">
-                <i class="fa-regular fa-copy"></i> Auto-copy new code: <b>ON</b>
-            </button>
+            <div class="chip-row">
+                <button type="button" id="autoCopyBtn" class="mini-toggle on" title="Copy new codes automatically when they arrive live">
+                    <i class="fa-regular fa-copy"></i> Auto-copy: <b>ON</b>
+                </button>
+                <button type="button" id="themeBtn" class="mini-toggle"></button>
+                <button type="button" id="findBtn" class="mini-toggle" title="Find an account or run a command">
+                    <i class="fa-solid fa-magnifying-glass"></i> Quick find <kbd>Ctrl K</kbd>
+                </button>
+            </div>
+            </div><!-- /dash-side -->
 
+            <div class="dash-main">
             <div class="otp-container" id="otpContainer">
                 <div class="empty-state">
                     <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
@@ -744,10 +972,14 @@
                 </div>
             </div>
 
-            <div class="kbd-hint">R refresh &middot; W wait &middot; C copy &middot; / search &middot; Esc close</div>
-            <button type="button" class="btn btn-logout" onclick="logout()">
-                <i class="fa-solid fa-right-from-bracket"></i> Logout
-            </button>
+            </div><!-- /dash-main -->
+            <div class="dash-foot">
+                <div class="kbd-hint">R refresh &middot; W wait &middot; C copy &middot; / search &middot; Ctrl K quick find &middot; Esc close</div>
+                <button type="button" class="btn btn-logout" onclick="logout()">
+                    <i class="fa-solid fa-right-from-bracket"></i> Logout
+                </button>
+            </div>
+            </div><!-- /dash-grid -->
         </div>
 
     </div>
@@ -763,6 +995,14 @@
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="accSearchInput" placeholder="Search Gmail by name..." autocomplete="off" spellcheck="false">
                 <button type="button" class="search-clear" id="accSearchClear" title="Clear"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="filter-row" id="filterRow" role="group" aria-label="Filter accounts">
+                <button type="button" class="fchip on" data-filter="all" aria-pressed="true">All <b>0</b></button>
+                <button type="button" class="fchip" data-filter="active" aria-pressed="false">Active <b>0</b></button>
+                <button type="button" class="fchip" data-filter="unused" aria-pressed="false">Unused <b>0</b></button>
+                <button type="button" class="fchip" data-filter="errors" aria-pressed="false">Errors <b>0</b></button>
+                <button type="button" class="fchip" data-filter="pinned" aria-pressed="false">Pinned <b>0</b></button>
+                <button type="button" class="fchip sort" id="sortBtn" title="Change sort order"><i class="fa-solid fa-arrow-down-wide-short"></i> <span>Newest</span></button>
             </div>
             <div id="allContainer"></div>
         </div>
@@ -791,7 +1031,20 @@
         </div>
     </div>
 
-    <div id="toast" class="toast">
+    <!-- Quick find / command palette (Ctrl+K) -->
+    <div id="palette" class="modal-overlay palette-overlay hidden" role="dialog" aria-modal="true" aria-label="Quick find">
+        <div class="palette-box">
+            <div class="palette-input">
+                <i class="fa-solid fa-magnifying-glass"></i>
+                <input type="text" id="paletteInput" placeholder="Find an account or run a command" autocomplete="off" spellcheck="false" aria-controls="paletteList">
+                <kbd>Esc</kbd>
+            </div>
+            <div id="paletteList" class="palette-list" role="listbox"></div>
+            <div class="palette-foot">Up / Down to move &middot; Enter to run &middot; Esc to close</div>
+        </div>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite">
         <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copied!</span>
     </div>
 
@@ -1062,20 +1315,27 @@
             return { ...item, expiresAt: Date.now() + (ttl - age) * 1000, ttlMs: ttl * 1000 };
         }
 
+        function updateCardTimer(card) {
+            const left = Number(card.dataset.expires) - Date.now();
+            if (left <= 0) return false;
+            const el = card.querySelector('.otp-expiry-time');
+            if (el) el.textContent = fmtLeft(Math.ceil(left / 1000));
+            const ttlMs = Number(card.dataset.ttl) || 120000;
+            const frac = Math.max(0, Math.min(1, left / ttlMs));
+            const expiring = left <= Math.min(20000, ttlMs * 0.25);     // chhoto meyade shobshomoy lal na hoy
+            card.classList.toggle('expiring', expiring);
+            card.classList.toggle('ring-warn', !expiring && frac <= 0.5);
+            const ring = card.querySelector('.ring-fg');
+            if (ring) ring.style.strokeDashoffset = RING_C * (1 - frac);
+            return true;
+        }
+        function syncTimers() {
+            document.querySelectorAll('#otpContainer .otp-card[data-expires]').forEach(updateCardTimer);
+        }
         function tickExpiry() {
             let homeExpired = false;
             document.querySelectorAll('#otpContainer .otp-card[data-expires]').forEach(card => {
-                const left = Number(card.dataset.expires) - Date.now();
-                if (left <= 0) { homeExpired = true; return; }
-                const sec = Math.ceil(left / 1000);
-                const el = card.querySelector('.otp-expiry-time');
-                if (el) el.textContent = fmtLeft(sec);
-                const ttlMs = Number(card.dataset.ttl) || 120000;
-                card.classList.toggle('expiring', left <= Math.min(20000, ttlMs * 0.25));   // chhoto meyade shobshomoy lal na hoy
-                const ring = card.querySelector('.ring-fg');
-                if (ring) {
-                    ring.style.strokeDashoffset = RING_C * (1 - Math.max(0, Math.min(1, left / ttlMs)));
-                }
+                if (!updateCardTimer(card)) homeExpired = true;
             });
             if (homeExpired) renderHome();   // code-er nijer meyad shesh -> home theke sore jabe
         }
@@ -1130,13 +1390,9 @@
 
         function setBoxRevealed(box, revealed) {
             box.classList.toggle('masked', !revealed);
-            if (revealed) {
-                box.textContent = box.dataset.code;
-                box.title = 'Click to copy';
-            } else {
-                box.innerHTML = maskText(box.dataset.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>';
-                box.title = 'Tap to reveal & copy';
-            }
+            box.innerHTML = codeCellsHTML(box.dataset.code, !revealed);
+            box.title = revealed ? 'Click to copy' : 'Tap to reveal & copy';
+            box.setAttribute('aria-label', codeAria(box.dataset.code, revealed));
         }
 
         // ---------- Used code (copy korle "used" hoye jay) ----------
@@ -1197,7 +1453,7 @@
                 setBoxRevealed(box, true);
             }
             const uk = box.dataset.usedKey;
-            copyOTP(code, uk ? () => { if (!usedMap[uk]) setUsed(uk, true); } : null);
+            copyOTP(code, () => { flashCopied(box); if (uk && !usedMap[uk]) setUsed(uk, true); });
         }
 
         // "Used" badge-e tap korle abar unused (vul kore copy hole)
@@ -1213,7 +1469,7 @@
         setInterval(() => {
             if (!MASK_CODES) return;
             const now = Date.now();
-            document.querySelectorAll('.otp-code-box[data-key]:not(.masked)').forEach(box => {
+            document.querySelectorAll('.otp-code-box[data-key]:not(.masked):not(.link-box)').forEach(box => {
                 const ts = revealedAt.get(box.dataset.key);
                 if (!ts || now - ts >= REVEAL_MS) setBoxRevealed(box, false);
             });
@@ -1224,7 +1480,7 @@
         document.addEventListener('visibilitychange', () => {
             if (!MASK_CODES || document.visibilityState !== 'hidden') return;
             revealedAt.clear();
-            document.querySelectorAll('.otp-code-box[data-key]:not(.masked)').forEach(box => setBoxRevealed(box, false));
+            document.querySelectorAll('.otp-code-box[data-key]:not(.masked):not(.link-box)').forEach(box => setBoxRevealed(box, false));
         });
 
         function updateHealthBadge() {
@@ -1246,6 +1502,54 @@
                     <div class="sk sk-box"></div>
                     <div class="sk sk-line w40"></div>
                 </div>`).join('');
+        }
+
+        // ---------- UI refresh helpers (service avatar, code cells, enter animation) ----------
+        const entered = new Set();            // je code card ekbar animate hoyeche, abar hobe na
+        function homeMax() { return window.matchMedia('(min-width: 1024px)').matches ? 6 : HOME_MAX; }
+
+        const BRAND_ICONS = {
+            github: ['fa-brands fa-github', '#6e7681'], google: ['fa-brands fa-google', '#4285f4'],
+            facebook: ['fa-brands fa-facebook-f', '#1877f2'], instagram: ['fa-brands fa-instagram', '#d6249f'],
+            telegram: ['fa-brands fa-telegram', '#26a5e4'], whatsapp: ['fa-brands fa-whatsapp', '#25a85a'],
+            linkedin: ['fa-brands fa-linkedin-in', '#0a66c2'], microsoft: ['fa-brands fa-microsoft', '#2563eb'],
+            apple: ['fa-brands fa-apple', '#6b7280'], amazon: ['fa-brands fa-amazon', '#c2710c'],
+            paypal: ['fa-brands fa-paypal', '#1d4ed8'], discord: ['fa-brands fa-discord', '#5865f2'],
+            tiktok: ['fa-brands fa-tiktok', '#374151'], youtube: ['fa-brands fa-youtube', '#dc2626'],
+            spotify: ['fa-brands fa-spotify', '#16a34a'], twitter: ['fa-brands fa-twitter', '#1d9bf0'],
+            steam: ['fa-brands fa-steam', '#1e3a5f'], dropbox: ['fa-brands fa-dropbox', '#0061ff'],
+            slack: ['fa-brands fa-slack', '#7c3aed'], reddit: ['fa-brands fa-reddit-alien', '#ea580c'],
+            snapchat: ['fa-brands fa-snapchat', '#ca8a04'], twitch: ['fa-brands fa-twitch', '#7c3aed']
+        };
+        function hueOf(str) { let h = 0; for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; }
+        function avatarHTML(item) {
+            const name = String(item.service || item.sender || '').trim();
+            const real = isValidItem(item) && !!name;
+            const low = name.toLowerCase();
+            const key = real ? Object.keys(BRAND_ICONS).find(k => low === k || low.startsWith(k + ' ')) : null;
+            if (key) return `<span class="svc-avatar" style="--c:${BRAND_ICONS[key][1]}" aria-hidden="true"><i class="${BRAND_ICONS[key][0]}"></i></span>`;
+            const base = real ? low : String(item.email || '?').toLowerCase();
+            const letter = (real ? name : String(item.email || '?')).charAt(0).toUpperCase() || '?';
+            return `<span class="svc-avatar" style="--c:hsl(${hueOf(base)} 52% 42%)" aria-hidden="true">${escAttr(letter)}</span>`;
+        }
+        function svcRowHTML(item) {
+            const name = String(item.service || item.sender || 'Unknown').trim();
+            return `<div class="svc-row">${avatarHTML(item)}<div class="svc-text"><div class="svc-name">${escAttr(name)}</div><div class="svc-sub">${escAttr(item.subject || '')}</div></div></div>`;
+        }
+        function codeCellsHTML(code, masked) {
+            const str = String(code || '');
+            const chars = masked ? Array.from({ length: Math.min(str.length, 10) }, () => '•') : Array.from(str);
+            const n = chars.length;
+            const cls = (n > 8 ? ' sm' : '') + (n === 6 ? ' g3' : n === 8 ? ' g4' : '');
+            return `<span class="cells${cls}">` + chars.map(c => `<span class="ch">${escAttr(c)}</span>`).join('') + '</span>'
+                + (masked ? '<i class="fa-regular fa-eye reveal-eye" aria-hidden="true"></i>' : '');
+        }
+        function codeAria(code, revealed) {
+            return revealed ? 'Code ' + String(code).split('').join(' ') + '. Press to copy' : 'Code hidden. Press to reveal and copy';
+        }
+        function flashCopied(box) {
+            box.classList.add('copied');
+            setTimeout(() => box.classList.remove('copied'), 900);
         }
 
         function cardHTML(item, opts) {
@@ -1270,14 +1574,14 @@
             const infoLine = item.placeholder
                 ? `<i class="fa-regular fa-clock"></i> Not checked yet`
                 : health === 'ok'
-                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'}${fmtDate(item.timestamp)} | ${item.service ? 'Service' : 'Sender'}: ${escAttr(item.service || item.sender || 'N/A')}`
+                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'}${fmtDate(item.timestamp)}${validCode ? '' : ' | ' + (item.service ? 'Service' : 'Sender') + ': ' + escAttr(item.service || item.sender || 'N/A')}`
                 : `<span class="health-msg ${health}"><i class="fa-solid fa-triangle-exclamation"></i> ${escAttr(item.sender || HEALTH_TITLE[health])}</span>`;
             const isLink = validCode && item.kind === 'link';
-            const linkBox = `<div class="otp-code-box link-box" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" data-url="${escAttr(item.url || '')}" onclick="onCodeTap(this)" title="Open link in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open verify link</div>`;
+            const linkBox = `<div class="otp-code-box link-box" role="button" tabindex="0" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" data-url="${escAttr(item.url || '')}" onclick="onCodeTap(this)" title="Open link in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open verify link</div>`;
             const showExpired = !!opts.expired && validCode;
             const expiredBox = `<div class="otp-code-box expired-box"><i class="fa-regular fa-clock"></i> Code expired</div>`;
             const codeBox = showExpired ? expiredBox : isLink ? linkBox : validCode
-                ? `<div class="otp-code-box ${revealed ? '' : 'masked'}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${revealed ? escAttr(item.code) : maskText(item.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>'}</div>`
+                ? `<div class="otp-code-box has-cells ${revealed ? '' : 'masked'}" role="button" tabindex="0" aria-label="${escAttr(codeAria(item.code, revealed))}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${codeCellsHTML(item.code, !revealed)}</div>`
                 : `<div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">${escAttr(item.placeholder ? 'Not checked yet - tap refresh' : (item.code || 'Code not found'))}</div>`;
             const verifyNote = (!validCode || showExpired) ? '' : isLink
                 ? `<div class="verify-note link"><i class="fa-solid fa-link"></i><span>Link from <b>${escAttr(item.service || item.sender || 'sender')}</b> &middot; ${escAttr(item.subject || '')}<br>Open it only if you just requested it.</span></div>`
@@ -1291,7 +1595,7 @@
                 ? `<button type="button" class="used-badge" data-used-key="${escAttr(uKey)}" title="Tap to mark as unused"><i class="fa-solid fa-check"></i> Used</button>`
                 : '';
             const card = `
-                <div class="otp-card ${isNew && !used ? 'is-new' : ''} ${used && !showExpired ? 'is-used' : ''} ${showExpired ? 'is-expired' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
+                <div class="otp-card ${isNew && !used ? 'is-new' : ''} ${used && !showExpired ? 'is-used' : ''} ${showExpired ? 'is-expired' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''} ${opts.enter ? 'enter' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
                     ${isNew && !used ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
                         ${healthDot}
@@ -1300,6 +1604,7 @@
                         ${pinBtn}
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
+                    ${validCode ? svcRowHTML(item) : ''}
                     ${codeBox}
                     ${verifyNote}
                     ${expiryRow}
@@ -1349,12 +1654,15 @@
             }
             // Use hoye jaoa code pichone; notun/unused code age (ager timestamp-order thake)
             active.sort((a, b) => (isUsed(a) ? 1 : 0) - (isUsed(b) ? 1 : 0));
-            const shown = active.slice(0, HOME_MAX);
-            let html = shown.map(item => cardHTML(item, { isNew: newCardEmails.includes(item.email), deletable: false, showExpiry: true })).join('');
-            if (active.length > HOME_MAX) {
-                html += `<div class="empty-state" style="padding: 6px 0;">+${active.length - HOME_MAX} more active code(s) &middot; tap "Total Gmail Added" to see all</div>`;
+            const max = homeMax();
+            const shown = active.slice(0, max);
+            let html = shown.map(item => cardHTML(item, { isNew: newCardEmails.includes(item.email), deletable: false, showExpiry: true, enter: !entered.has(codeKey(item)) })).join('');
+            if (active.length > max) {
+                html += `<div class="empty-state" style="padding: 6px 0;">+${active.length - max} more active code(s) &middot; tap the envelope button to see all</div>`;
             }
             otpContainer.innerHTML = html;
+            shown.forEach(i => entered.add(codeKey(i)));
+            syncTimers();
         }
 
         // ---------- Pin (priyo account) ----------
@@ -1456,9 +1764,12 @@
                 return;
             }
             const q = searchQuery();
-            const list = q ? baseItems.filter(i => String(i.email).toLowerCase().includes(q)) : baseItems;
+            renderFilterRow(baseItems);
+            let list = q ? baseItems.filter(i => String(i.email).toLowerCase().includes(q)) : baseItems;
+            list = list.filter(FILTERS[accFilter] || FILTERS.all);
+            if (accSort === 'az') list = [...list].sort((a, b) => String(a.email).localeCompare(String(b.email)));
             if (list.length === 0) {
-                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-magnifying-glass" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>No Gmail matches "${escAttr(accSearchInput.value.trim())}".</div>`;
+                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-magnifying-glass" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>${q ? 'No Gmail matches "' + escAttr(accSearchInput.value.trim()) + '".' : 'No accounts match this filter.'}</div>`;
                 return;
             }
             const pinned = list.filter(i => isPinned(i.email));
@@ -1494,6 +1805,7 @@
         function closeAccountsModal() {
             if (openWrap) setSwipe(openWrap, false);
             accountsModal.classList.add('hidden');
+            resetAccFilters();
             if (accSearchInput) {
                 accSearchInput.value = '';
                 accSearchWrap.classList.remove('has-text');
@@ -1650,13 +1962,7 @@
         waitBtn.addEventListener('click', () => { waiting ? stopWaiting(false) : startWaiting(); });
 
         // ======================= Ekta account refresh =======================
-        document.addEventListener('click', async (e) => {
-            const btn = e.target.closest('.card-refresh');
-            if (!btn || btn.dataset.busy === '1') return;
-            const email = btn.dataset.email;
-            btn.dataset.busy = '1';
-            const icon = btn.querySelector('i');
-            if (icon) icon.classList.add('rotating');
+        async function refreshAccount(email) {
             try {
                 const res = await fetch('/api/refresh-one', {
                     method: 'POST',
@@ -1677,7 +1983,16 @@
                 else showToast('Refreshed');
             } catch (err) {
                 showToast('Could not refresh this account');
-            } finally {
+            }
+        }
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.card-refresh');
+            if (!btn || btn.dataset.busy === '1') return;
+            btn.dataset.busy = '1';
+            const icon = btn.querySelector('i');
+            if (icon) icon.classList.add('rotating');
+            try { await refreshAccount(btn.dataset.email); }
+            finally {
                 btn.dataset.busy = '0';
                 if (icon) icon.classList.remove('rotating');
             }
@@ -2083,8 +2398,14 @@
             return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
         }
         document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                if (dashboardIsOpen()) { paletteOpen() ? closePalette() : openPalette(); }
+                return;
+            }
             if (e.ctrlKey || e.metaKey || e.altKey) return;
             if (e.key === 'Escape') {
+                if (paletteOpen()) { closePalette(); return; }
                 if (deleteModalOpen()) { closeDeleteModal(); return; }
                 if (accountsModalOpen()) {
                     if (document.activeElement === accSearchInput && accSearchInput.value) {
@@ -2213,7 +2534,224 @@
             stopPush();
             stopWaiting(false);
             closeAccountsModal();
+            closePalette();
         }
+
+        // =====================================================================
+        // UI refresh: theme, filters, quick find (Ctrl+K), keyboard on code boxes
+        // =====================================================================
+
+        // ---------- Theme (Auto / Light / Dark) ----------
+        const THEME_KEY = 'otpDash.theme';
+        const THEME_LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
+        const THEME_ICON = { auto: 'fa-circle-half-stroke', light: 'fa-sun', dark: 'fa-moon' };
+        function themePref() {
+            try { const v = localStorage.getItem(THEME_KEY); return (v === 'light' || v === 'dark') ? v : 'auto'; }
+            catch (e) { return 'auto'; }
+        }
+        function renderThemeBtn() {
+            const p = themePref();
+            const b = document.getElementById('themeBtn');
+            b.innerHTML = `<i class="fa-solid ${THEME_ICON[p]}"></i> Theme: <b>${THEME_LABEL[p]}</b>`;
+            b.title = 'Switch theme (Auto / Light / Dark)';
+        }
+        function cycleTheme() {
+            const order = ['auto', 'light', 'dark'];
+            const next = order[(order.indexOf(themePref()) + 1) % order.length];
+            try { if (next === 'auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, next); } catch (e) {}
+            if (window.__applyTheme) window.__applyTheme();
+            renderThemeBtn();
+            showToast('Theme: ' + THEME_LABEL[next]);
+        }
+        document.getElementById('themeBtn').addEventListener('click', cycleTheme);
+        renderThemeBtn();
+
+        // ---------- Filter + sort (All Gmail accounts) ----------
+        let accFilter = 'all', accSort = 'recent';
+        const FILTERS = {
+            all: () => true,
+            active: i => isValidItem(i) && i.expiresAt > Date.now(),
+            unused: i => isValidItem(i) && !isUsed(i),
+            errors: i => !i.placeholder && healthOf(i) !== 'ok',
+            pinned: i => isPinned(i.email)
+        };
+        function renderFilterRow(base) {
+            document.querySelectorAll('#filterRow .fchip[data-filter]').forEach(b => {
+                const f = b.dataset.filter;
+                b.querySelector('b').textContent = base.filter(FILTERS[f]).length;
+                b.classList.toggle('on', f === accFilter);
+                b.setAttribute('aria-pressed', f === accFilter ? 'true' : 'false');
+            });
+            const sp = document.querySelector('#sortBtn span');
+            if (sp) sp.textContent = accSort === 'az' ? 'A-Z' : 'Newest';
+        }
+        function resetAccFilters() { accFilter = 'all'; accSort = 'recent'; }
+        document.getElementById('filterRow').addEventListener('click', (e) => {
+            const c = e.target.closest('.fchip');
+            if (!c) return;
+            if (c.id === 'sortBtn') accSort = accSort === 'az' ? 'recent' : 'az';
+            else accFilter = c.dataset.filter;
+            renderAll();
+        });
+
+        // ---------- Code box: Enter / Space works from the keyboard ----------
+        document.addEventListener('keydown', (e) => {
+            const t = e.target;
+            if ((e.key === 'Enter' || e.key === ' ') && t && t.classList && t.classList.contains('otp-code-box') && t.getAttribute('role') === 'button') {
+                e.preventDefault();
+                onCodeTap(t);
+            }
+        });
+
+        // ---------- Quick find / command palette ----------
+        const palette = document.getElementById('palette');
+        const paletteInput = document.getElementById('paletteInput');
+        const paletteList = document.getElementById('paletteList');
+        let paletteIdx = 0, paletteRows = [], paletteReturnFocus = null;
+
+        function paletteOpen() { return !palette.classList.contains('hidden'); }
+
+        function useItem(item) {
+            const k = usedKey(item);
+            if (item.kind === 'link') {
+                if (/^https:\/\//i.test(item.url || '')) {
+                    window.open(item.url, '_blank', 'noopener,noreferrer');
+                    if (!usedMap[k]) setUsed(k, true);
+                }
+                return;
+            }
+            copyOTP(item.code, () => { if (!usedMap[k]) setUsed(k, true); });
+        }
+
+        function paletteAccounts() {
+            const seen = new Set(), out = [];
+            allItems.forEach(i => { const k = String(i.email).toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(i); } });
+            accountList.forEach(em => { if (!seen.has(em)) { seen.add(em); out.push({ email: em, code: '', placeholder: true }); } });
+            return out;
+        }
+        function accountState(i) {
+            if (i.placeholder) return { text: 'Not checked yet - Enter to check', cls: '' };
+            if (healthOf(i) !== 'ok') return { text: i.sender || 'Connection problem', cls: 'bad' };
+            if (isValidItem(i)) {
+                if (i.expiresAt > Date.now()) {
+                    const what = i.kind === 'link' ? 'Verify link ready' : 'Code ready';
+                    return { text: what + (isUsed(i) ? ' (used)' : '') + ' - Enter to ' + (i.kind === 'link' ? 'open' : 'copy'), cls: 'ok' };
+                }
+                return { text: 'Code expired - Enter to check again', cls: '' };
+            }
+            return { text: 'No code found - Enter to check again', cls: '' };
+        }
+        function paletteActions() {
+            return [
+                { icon: 'fa-rotate-right', label: 'Refresh OTPs', kw: 'refresh reload check', run: () => fetchOTPs() },
+                { icon: 'fa-hourglass-start', label: waiting ? 'Cancel waiting' : 'Wait for new code', kw: 'wait new code', run: () => (waiting ? stopWaiting(false) : startWaiting()) },
+                { icon: 'fa-envelope', label: 'Open all Gmail accounts', kw: 'accounts list gmail', run: () => openAccountsModal() },
+                { icon: THEME_ICON[themePref()], label: 'Switch theme', kw: 'theme dark light auto', run: cycleTheme },
+                { icon: 'fa-copy', label: 'Turn auto-copy ' + (autoCopyOn ? 'off' : 'on'), kw: 'auto copy', run: () => autoCopyBtn.click() },
+                { icon: 'fa-right-from-bracket', label: 'Logout', kw: 'logout lock sign out', run: () => logout() }
+            ];
+        }
+        function paletteBuild(q) {
+            q = q.trim().toLowerCase();
+            const rows = [];
+            paletteAccounts()
+                .filter(i => !q || String(i.email).toLowerCase().includes(q) || String(i.service || '').toLowerCase().includes(q))
+                .slice(0, 8)
+                .forEach(i => rows.push({
+                    type: 'account', item: i, label: i.email, state: accountState(i),
+                    run: () => { if (!i.placeholder && isValidItem(i) && i.expiresAt > Date.now()) useItem(i); else refreshAccount(i.email); }
+                }));
+            paletteActions()
+                .filter(a => !q || (a.label + ' ' + a.kw).toLowerCase().includes(q))
+                .forEach(a => rows.push({ type: 'action', ...a }));
+            return rows;
+        }
+        function paletteSelect(i, scroll) {
+            paletteIdx = i;
+            paletteList.querySelectorAll('.pal-row').forEach(r => {
+                const on = Number(r.dataset.i) === i;
+                r.classList.toggle('sel', on);
+                r.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) {
+                    paletteInput.setAttribute('aria-activedescendant', r.id);
+                    if (scroll) r.scrollIntoView({ block: 'nearest' });
+                }
+            });
+        }
+        function paletteRender() {
+            paletteRows = paletteBuild(paletteInput.value);
+            if (!paletteRows.length) {
+                paletteList.innerHTML = '<div class="empty-state">Nothing matches.</div>';
+                paletteInput.removeAttribute('aria-activedescendant');
+                return;
+            }
+            if (paletteIdx >= paletteRows.length) paletteIdx = paletteRows.length - 1;
+            let html = '', last = '';
+            paletteRows.forEach((r, i) => {
+                if (r.type !== last) { html += `<div class="pal-section">${r.type === 'account' ? 'Accounts' : 'Actions'}</div>`; last = r.type; }
+                if (r.type === 'account') {
+                    html += `<div class="pal-row" role="option" id="pal-${i}" data-i="${i}">${avatarHTML(r.item)}<div class="pal-text"><div class="pal-main">${escAttr(r.label)}</div><div class="pal-sub ${r.state.cls}">${escAttr(r.state.text)}</div></div></div>`;
+                } else {
+                    html += `<div class="pal-row" role="option" id="pal-${i}" data-i="${i}"><span class="pal-ico"><i class="fa-solid ${r.icon}"></i></span><div class="pal-text"><div class="pal-main">${escAttr(r.label)}</div></div></div>`;
+                }
+            });
+            paletteList.innerHTML = html;
+            paletteSelect(paletteIdx, false);
+        }
+        function paletteRun(i) {
+            const r = paletteRows[i];
+            if (!r) return;
+            closePalette();
+            r.run();
+        }
+        function openPalette() {
+            if (!dashboardIsOpen() || paletteOpen()) return;
+            paletteReturnFocus = document.activeElement;
+            paletteInput.value = '';
+            paletteIdx = 0;
+            palette.classList.remove('hidden');
+            paletteRender();
+            paletteInput.focus();
+        }
+        function closePalette() {
+            if (!paletteOpen()) return;
+            palette.classList.add('hidden');
+            paletteInput.value = '';
+            try { if (paletteReturnFocus && paletteReturnFocus.focus) paletteReturnFocus.focus(); } catch (e) {}
+            paletteReturnFocus = null;
+        }
+
+        paletteInput.addEventListener('input', () => { paletteIdx = 0; paletteRender(); });
+        paletteInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (!paletteRows.length) return;
+                const d = e.key === 'ArrowDown' ? 1 : -1;
+                paletteSelect((paletteIdx + d + paletteRows.length) % paletteRows.length, true);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                paletteRun(paletteIdx);
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+            }
+        });
+        paletteList.addEventListener('mousemove', (e) => {
+            const row = e.target.closest('.pal-row');
+            if (row && Number(row.dataset.i) !== paletteIdx) paletteSelect(Number(row.dataset.i), false);
+        });
+        paletteList.addEventListener('click', (e) => {
+            const row = e.target.closest('.pal-row');
+            if (row) paletteRun(Number(row.dataset.i));
+        });
+        palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });
+        document.getElementById('findBtn').addEventListener('click', openPalette);
+
+        // dashboard lukiye gele (logout / session shesh) palette-o bondho
+        new MutationObserver(() => { if (!dashboardIsOpen()) closePalette(); })
+            .observe(dashboardSection, { attributes: true, attributeFilter: ['class'] });
+
+        // desktop <-> mobile breakpoint pare gele home-er card shonkha thik kori
+        window.matchMedia('(min-width: 1024px)').addEventListener('change', () => { if (dashboardIsOpen()) renderHome(); });
     </script>
 </body>
 </html>
