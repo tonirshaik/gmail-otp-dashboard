@@ -944,7 +944,7 @@
                 if (res.ok) {
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
-                    fetchOTPs();
+                    onLoggedIn();
                 } else {
                     let msg = "Wrong Master Password!";
                     try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (e2) {}
@@ -969,6 +969,19 @@
         }
 
         let isFetching = false;
+
+        // Login-er por kono Gmail check hoy na -- shudhu khali home, account count, pin ar live connection.
+        // Code ante Refresh OTPs / Wait for new code chapte hobe.
+        function onLoggedIn() {
+            otpContainer.innerHTML = `
+                <div class="empty-state">
+                    <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
+                    Click "Refresh OTPs" to load emails.
+                </div>`;
+            loadAccountCount();
+            syncPins();
+            ensurePush();
+        }
 
         async function fetchOTPs(silent = false) {
             if (isFetching) return;
@@ -1416,7 +1429,9 @@
             if (openWrap) openWrap = null;
             document.getElementById('allCount').innerText = allItems.length;
             if (!hasLoaded) {
-                allContainer.innerHTML = skeletonHTML(3);
+                allContainer.innerHTML = isFetching
+                    ? skeletonHTML(3)
+                    : `<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>Click "Refresh OTPs" to load emails.</div>`;
                 return;
             }
             if (allItems.length === 0) {
@@ -1456,7 +1471,6 @@
             loadAccountCount();
             renderAll();
             accountsModal.classList.remove('hidden');
-            if (!hasLoaded && !isFetching) fetchOTPs(true);
         }
 
         function closeAccountsModal() {
@@ -1814,7 +1828,7 @@
                 loginError.style.display = 'none';
                 loginSection.classList.add('hidden');
                 dashboardSection.classList.remove('hidden');
-                fetchOTPs();
+                onLoggedIn();
             } catch (err) {
                 loginError.style.display = 'block';
                 loginError.innerText = err.message || 'Fingerprint login failed';
