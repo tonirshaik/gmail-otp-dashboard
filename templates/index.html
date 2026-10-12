@@ -1066,6 +1066,16 @@
             return !!(item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error');
         }
 
+        // email-er tarikh (Dhaka somoy), jemon ", 12 Oct 2026". timestamp na thakle khali.
+        function fmtDate(ts) {
+            if (!ts) return '';
+            try {
+                return ', ' + new Date(ts * 1000).toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Dhaka'
+                });
+            } catch (e) { return ''; }
+        }
+
         function fmtLeft(sec) {
             if (sec >= 3600) {
                 return Math.floor(sec / 3600) + ':' + String(Math.floor((sec % 3600) / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
@@ -1233,7 +1243,7 @@
                 ? `<span class="health-dot ${health}" title="${escAttr(HEALTH_TITLE[health])}"></span>`
                 : '';
             const infoLine = health === 'ok'
-                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'} | ${item.service ? 'Service' : 'Sender'}: ${escAttr(item.service || item.sender || 'N/A')}`
+                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'}${fmtDate(item.timestamp)} |${item.service ? 'Service' : 'Sender'}: ${escAttr(item.service || item.sender || 'N/A')}`
                 : `<span class="health-msg ${health}"><i class="fa-solid fa-triangle-exclamation"></i> ${escAttr(item.sender || HEALTH_TITLE[health])}</span>`;
             const isLink = validCode && item.kind === 'link';
             const linkBox = `<div class="otp-code-box link-box" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" data-url="${escAttr(item.url || '')}" onclick="onCodeTap(this)" title="Open link in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open verify link</div>`;
