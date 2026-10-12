@@ -432,10 +432,22 @@
             border-radius: 8px;
         }
         .card-refresh:hover { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.12); }
-        .card-refresh, .card-pin { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        .card-refresh, .card-pin, .card-wait { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+        /* per-card "wait for new code" button (shudhu ei account-e druto check) */
+        .card-wait {
+            margin-left: auto; background: none; border: none; color: var(--text-muted);
+            cursor: pointer; font-size: 13px; padding: 4px 7px; border-radius: 8px;
+            display: inline-flex; align-items: center; gap: 4px; flex: none;
+        }
+        .card-pin + .card-wait, .card-wait + .card-refresh { margin-left: 0; }
+        .card-wait:hover { color: #c4b5fd; background: rgba(139, 92, 246, 0.14); }
+        .card-wait.active { color: #fcd34d; background: rgba(245, 158, 11, 0.14); }
+        .card-wait .wait-left { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        :root[data-theme="light"] .card-wait:hover { color: #6d28d9; }
+        :root[data-theme="light"] .card-wait.active { color: #b45309; }
         /* phone: button boro kora jate angul-e chapa jay */
         @media (hover: none), (pointer: coarse) {
-            .card-refresh, .card-pin { min-width: 40px; min-height: 40px; font-size: 16px; padding: 8px; }
+            .card-refresh, .card-pin, .card-wait { min-width: 40px; min-height: 40px; font-size: 16px; padding: 8px; }
         }
         /* lomba email hole button jate card-er baire kete na jay: email chhoto hobe (...), button shobsomoy dekha jabe */
         .otp-email { min-width: 0; gap: 4px; }
@@ -448,7 +460,7 @@
         #allContainer .card-refresh { margin-right: 0; }
         @media (max-width: 480px) {
             .otp-email { gap: 2px; font-size: 12.5px; }
-            .otp-email .card-pin, .otp-email .card-refresh { min-width: 34px; min-height: 34px; padding: 6px; }
+            .otp-email .card-pin, .otp-email .card-refresh, .otp-email .card-wait { min-width: 34px; min-height: 34px; padding: 6px; }
             .used-badge { padding: 2px 7px; font-size: 10px; }
         }
         #liveStatus { text-align: center; font-size: 12px; margin: 4px 0 10px; color: var(--accent-green); display: none; }
@@ -1613,6 +1625,7 @@
                         <span>${escAttr(item.email)}</span>
                         ${usedBadge}
                         ${pinBtn}
+                        ${waitBtnHTML(item.email)}
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
                     ${validCode ? svcRowHTML(item) : ''}
@@ -1910,6 +1923,7 @@
             // temporary error diye thik code muche felbo na
             if (item.code === 'Error' && prev && isValidItem(prev)) return;
 
+            const hadAccWait = accWaits.has(String(item.email).toLowerCase());
             const isNewCode = isValidItem(item) && item.expiresAt > Date.now() && (!prev || prev.code !== item.code);
             if (i >= 0) allItems[i] = item; else allItems.push(item);
             allItems.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
@@ -1925,9 +1939,126 @@
 
             if (isNewCode) {
                 if (waiting) stopWaiting(true, item.email);
-                else if (fromPush) alertNewCode(item.email);
+                else if (fromPush && !hadAccWait) alertNewCode(item.email);
             }
+            checkAccWait(raw);
         }
+
+        // ======================= Per-card "wait" (shudhu ekta account druto check) =======================
+        const ACC_WAIT_SECONDS = 120;     // koto sekend opekkha korbe
+        const ACC_WAIT_POLL_MS = 3000;    // prottek check-er majhe biroti
+        const accWaits = new Map();       // email(lowercase) -> { email, endsAt, baseCode, baseTs, hasBase, busy, poll }
+
+        function accWaitLeft(w) { return Math.max(0, Math.ceil((w.endsAt - Date.now()) / 1000)); }
+
+        function waitBtnHTML(email) {
+            const w = accWaits.get(String(email).toLowerCase());
+            const e = escAttr(email);
+            if (!w) return `<button type="button" class="card-wait" data-email="${e}" title="Wait for a new code on this account" aria-label="Wait for new code"><i class="fa-solid fa-hourglass-start"></i></button>`;
+            return `<button type="button" class="card-wait active" data-email="${e}" title="Waiting - tap to cancel" aria-label="Cancel waiting"><i class="fa-solid fa-spinner rotating"></i><span class="wait-left">${accWaitLeft(w)}s</span></button>`;
+        }
+
+        function refreshWaitButtons() {
+            document.querySelectorAll('.card-wait').forEach(btn => {
+                const w = accWaits.get(String(btn.dataset.email).toLowerCase());
+                const html = waitBtnHTML(btn.dataset.email);
+                const tmp = document.createElement('div');
+                tmp.innerHTML = html;
+                const fresh = tmp.firstElementChild;
+                btn.className = fresh.className;
+                btn.title = fresh.title;
+                btn.innerHTML = fresh.innerHTML;
+            });
+        }
+
+        function stopAccWait(email, found) {
+            const k = String(email).toLowerCase();
+            const w = accWaits.get(k);
+            if (!w) return;
+            clearTimeout(w.poll);
+            accWaits.delete(k);
+            refreshWaitButtons();
+            if (found) alertNewCode(w.email);
+        }
+
+        function stopAllAccWaits() {
+            [...accWaits.keys()].forEach(k => stopAccWait(k, false));
+        }
+
+        // applyItem theke dako: notun code ashle (ba baseline thik korte) wait shesh
+        function checkAccWait(raw) {
+            const k = String(raw.email).toLowerCase();
+            const w = accWaits.get(k);
+            if (!w) return;
+            if (raw.code === 'Error') {
+                if (/login failed/i.test(raw.sender || '')) { showToast(raw.sender); stopAccWait(k, false); }
+                return;                                    // temporary error: opekkha cholbe
+            }
+            const valid = isValidItem(raw);
+            const ts = raw.timestamp || 0;
+            if (!w.hasBase) {                              // prothom response = "ager obostha"
+                w.hasBase = true;
+                w.baseCode = valid ? raw.code : '';
+                w.baseTs = ts;
+                return;
+            }
+            if (valid && (ts > w.baseTs || raw.code !== w.baseCode)) stopAccWait(k, true);
+        }
+
+        async function accWaitPoll(k) {
+            const w = accWaits.get(k);
+            if (!w) return;
+            if (accWaitLeft(w) <= 0) { stopAccWait(k, false); showToast('No new code on ' + w.email); return; }
+            if (!w.busy) {
+                w.busy = true;
+                try {
+                    const res = await fetch('/api/refresh-one', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ email: w.email })
+                    });
+                    if (res.status === 401) {
+                        stopPush(); stopWaiting(false); stopAllAccWaits();
+                        dashboardSection.classList.add('hidden');
+                        loginSection.classList.remove('hidden');
+                        return;
+                    }
+                    if (res.status === 404) { stopAccWait(k, false); showToast('Account not found'); return; }
+                    if (res.ok && accWaits.get(k) === w) applyItem(await res.json(), false);
+                } catch (e) { /* network temporary: porer bar abar chesta */ }
+                finally { w.busy = false; }
+            }
+            const cur = accWaits.get(k);
+            if (cur === w) w.poll = setTimeout(() => accWaitPoll(k), ACC_WAIT_POLL_MS);
+        }
+
+        function startAccWait(email) {
+            const k = String(email).toLowerCase();
+            if (accWaits.has(k)) return;
+            initAudio();
+            const cur = allItems.find(x => String(x.email).toLowerCase() === k);
+            const known = !!(cur && isValidItem(cur));
+            const w = {
+                email, endsAt: Date.now() + ACC_WAIT_SECONDS * 1000,
+                hasBase: known, baseCode: known ? cur.code : '', baseTs: known ? (cur.timestamp || 0) : 0,
+                busy: false, poll: null
+            };
+            accWaits.set(k, w);
+            refreshWaitButtons();
+            showToast('Waiting for a new code...');
+            accWaitPoll(k);                                // sathe sathe prothom check
+        }
+
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.card-wait');
+            if (!btn) return;
+            e.stopPropagation();
+            const k = String(btn.dataset.email).toLowerCase();
+            if (accWaits.has(k)) stopAccWait(k, false); else startAccWait(btn.dataset.email);
+        });
+
+        // countdown label + card re-render hole abar active dekhano
+        setInterval(() => { if (accWaits.size) refreshWaitButtons(); }, 1000);
 
         // ======================= Wait for new code =======================
         const waitBtn = document.getElementById('waitBtn');
@@ -2325,6 +2456,7 @@
         function removeCardFromScreen(email) {
             const wrap = [...allContainer.querySelectorAll('.otp-swipe')]
                 .find(w => w.querySelector('.swipe-delete').dataset.email === email);
+            stopAccWait(email, false);
             previousCodes = previousCodes.filter(p => p.email !== email);
             allItems = allItems.filter(i => i.email !== email);
             accountList = accountList.filter(x => x !== String(email).toLowerCase());
@@ -2544,6 +2676,7 @@
             updateHealthBadge();
             stopPush();
             stopWaiting(false);
+            stopAllAccWaits();
             closeAccountsModal();
             closePalette();
         }
