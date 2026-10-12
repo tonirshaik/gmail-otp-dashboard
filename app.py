@@ -70,6 +70,7 @@ accounts_collection = None
 passkeys_collection = None
 security_collection = None
 prefs_collection = None
+last_results_collection = None
 
 if MONGO_URI:
     try:
@@ -79,6 +80,7 @@ if MONGO_URI:
         passkeys_collection = db['passkeys']
         security_collection = db['security']   # login lock-er state (shob worker-e eki)
         prefs_collection = db['prefs']         # pin-er moto preference (shob device-e eki)
+        last_results_collection = db['last_results']   # prottek account-er shesh code (restart-er por-o thake)
         print("MongoDB Connected Successfully!")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
@@ -635,6 +637,46 @@ EMAIL_CACHE = {}
 # /api/cached-otps eta diye login-er por Gmail-e na giye shesh code dekhay.
 LAST_RESULTS = {}
 
+def save_last_result(email_addr, entry):
+    """Shesh sothik code memory-te + MongoDB-te rakhe (prottek account-er ekta-i, notun code ashle porano-ta bodle jay).
+    Notun code na asha porjonto ager code thakbe: "No emails found" / Error / aro purono code diye overwrite hoy na."""
+    key = str(email_addr).lower()
+    item = dict(entry)
+    if item.get("code") in (None, "", "Error", "No emails found"):
+        return
+    ts = item.get("timestamp") or 0
+
+    prev = LAST_RESULTS.get(key)
+    if prev is None and last_results_collection is not None:
+        try:
+            doc = last_results_collection.find_one({"_id": key})
+            prev = (doc or {}).get("data")
+        except Exception as e:
+            print(f"Last result read error: {e}")
+    if prev and (prev.get("timestamp") or 0) > ts:
+        LAST_RESULTS.setdefault(key, prev)
+        return
+
+    LAST_RESULTS[key] = item
+    if last_results_collection is not None:
+        try:
+            last_results_collection.update_one(
+                {"_id": key}, {"$set": {"data": item, "saved_at": time.time()}}, upsert=True)
+        except Exception as e:
+            print(f"Last result save error: {e}")
+
+def load_last_results():
+    """Mongo theke shob shesh result {email: entry}; Mongo na thakle shudhu memory."""
+    out = dict(LAST_RESULTS)
+    if last_results_collection is not None:
+        try:
+            for d in last_results_collection.find({}):
+                if isinstance(d.get("data"), dict):
+                    out[str(d["_id"]).lower()] = d["data"]
+        except Exception as e:
+            print(f"Last result load error: {e}")
+    return out
+
 # Koyta shesh email dekhe code khujbe (kom dile download kom hobe)
 INBOX_SCAN_LIMIT = 5
 SPAM_SCAN_LIMIT = 3
@@ -913,10 +955,7 @@ def check_gmail(account, mail_data):
             })
 
         # Shesh sothik result server-er memory-te rakhi -- login-er por Gmail check na kore dekhate.
-        try:
-            LAST_RESULTS[str(account['email']).lower()] = dict(mail_data[-1])
-        except Exception:
-            pass
+        save_last_result(account['email'], mail_data[-1])
 
         try:
             mail.logout()
@@ -1344,8 +1383,9 @@ def cached_otps():
         return jsonify({"error": "Unauthorized Access"}), 401
     now = time.time()
     out = []
+    saved = load_last_results()
     for acc in load_accounts():
-        item = LAST_RESULTS.get(str(acc.get('email', '')).lower())
+        item = saved.get(str(acc.get('email', '')).lower())
         if not item:
             continue
         item = dict(item)
@@ -1409,6 +1449,12 @@ def delete_account():
     result = accounts_collection.delete_one({"email": email_input})
     if result.deleted_count == 0:
         return jsonify({"error": "Account not found"}), 404
+    LAST_RESULTS.pop(_norm_email(email_input), None)
+    if last_results_collection is not None:
+        try:
+            last_results_collection.delete_one({"_id": _norm_email(email_input)})
+        except Exception as e:
+            print(f"Last result cleanup error: {e}")
     if prefs_collection is not None:
         try:
             prefs_collection.update_one({"_id": PINS_ID}, {"$pull": {"emails": _norm_email(email_input)}})
