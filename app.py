@@ -12,12 +12,12 @@ import socket
 import unicodedata
 import select
 import queue
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime, parseaddr
 from email.header import decode_header, make_header
 import html as html_lib
 from zoneinfo import ZoneInfo
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for, Response
+from flask import Flask, render_template, jsonify, request, session, Response
 from pymongo import MongoClient
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -428,10 +428,6 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
     return score
 
 
-def extract_otp(text):
-    return extract_otp_scored(text)[0]
-
-
 def extract_otp_scored(text):
     """(code, score) ferot dey. Code na pele ("Code not found", 0). Score jototuku boro, toto nishchit."""
     if not text:
@@ -611,11 +607,6 @@ def get_email_texts(msg):
     if html_body.strip():
         texts.append(html_to_text(html_body))
     return texts
-
-
-def get_email_body(msg):
-    texts = get_email_texts(msg)
-    return texts[0] if texts else ""
 
 
 def decode_hdr(value, default=""):
@@ -834,7 +825,6 @@ def make_entry(info):
         "timestamp": info["timestamp"],
         "age_seconds": max(0, int(time.time() - info["timestamp"])),
         "ttl_seconds": ttl,
-        "ttl_from_email": bool(info.get("ttl_seconds")),
     }
 
 def _imap_login(account):
@@ -1418,22 +1408,6 @@ def add_account():
 
     return jsonify({"message": "Account verified and added!"})
 
-# ---------------- All-accounts unlock (envelope button) ----------------
-# Settings password-ei lage (eki lockout bucket). Prottekbar popup khulte password/fingerprint lagbe.
-@app.route('/api/accounts-unlock', methods=['POST'])
-def accounts_unlock():
-    if not session.get('logged_in'):
-        return jsonify({"error": "Unauthorized Access"}), 401
-    secs = lock_remaining('settings')
-    if secs:
-        return locked_response(secs)
-    data = request.json or {}
-    pw = str(data.get('password', '')).strip()
-    if pw_equal(pw, SETTINGS_PASSWORD):
-        clear_fails('settings')
-        return jsonify({"success": True})
-    return wrong_password_response('settings', "Incorrect password")
-
 # ---------------- Settings unlock (server-side) ----------------
 @app.route('/api/settings-unlock', methods=['POST'])
 def settings_unlock():
@@ -1534,7 +1508,7 @@ def passkey_auth_verify():
     challenge = session.pop('auth_challenge', None)
     if not challenge or passkeys_collection is None:
         return jsonify({"error": "Expired. Try again."}), 400
-    if purpose in ('settings', 'delete', 'accounts') and not session.get('logged_in'):
+    if purpose in ('settings', 'delete') and not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
 
     stored = passkeys_collection.find_one({"credential_id": credential.get('id')})
