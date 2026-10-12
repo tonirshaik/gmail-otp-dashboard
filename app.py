@@ -661,6 +661,28 @@ def service_name(display_name, addr):
         return _BRAND.get(label, label.capitalize())
     return str(display_name or addr or "").strip()[:30]
 
+# ======================= Sender-er site domain (favicon-er jonno) =======================
+# Free mail (gmail.com ...) ba bulk-mail service (amazonses.com ...) hole khali -- tader icon sender-er icon na.
+_FREE_MAIL = {"gmail.com", "googlemail.com", "outlook.com", "hotmail.com", "live.com", "yahoo.com", "ymail.com",
+              "icloud.com", "me.com", "proton.me", "protonmail.com", "aol.com", "mail.com", "zoho.com"}
+_BULK_MAIL = {"amazonses.com", "sendgrid.net", "mailgun.org", "mandrillapp.com", "mcsv.net", "rsgsv.net",
+              "sparkpostmail.com", "postmarkapp.com", "mailjet.com", "sendinblue.com", "brevo.com", "cmail19.com"}
+_DOMAIN_ALIAS = {"facebookmail.com": "facebook.com", "accountprotection.microsoft.com": "microsoft.com",
+                 "microsoftonline.com": "microsoft.com", "googlemail.com": "google.com"}
+
+def site_domain(addr):
+    """noreply@mail.github.com -> github.com. Icon dekhano jabe na hole \"\"."""
+    host = (addr or "").split("@")[-1].lower().strip("<> ")
+    parts = [x for x in host.split(".") if x]
+    if len(parts) < 2:
+        return ""
+    n = 3 if (len(parts) >= 3 and parts[-2] in _SLD and len(parts[-1]) == 2) else 2
+    dom = ".".join(parts[-n:])
+    dom = _DOMAIN_ALIAS.get(dom, dom)
+    if dom in _FREE_MAIL or dom in _BULK_MAIL:
+        return ""
+    return dom if re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", dom) else ""
+
 # ======================= Magic link (code-er bodole "Verify" button) =======================
 LINK_TTL_SECONDS = 600       # link-er meyad email-e na thakle 10 minute dhori
 _A_TAG = re.compile(r"""(?is)<a\b[^>]*?href\s*=\s*["']([^"']+)["'][^>]*>(.*?)</a>""")
@@ -775,6 +797,7 @@ def fetch_email_info(mail, uid):
             return {
                 "sender": sender,
                 "service": service_name(name, addr),
+                "domain": site_domain(addr),
                 "subject": subject,
                 "code": None if otp == "Code not found" else otp,
                 "confidence": "high" if score >= CONF_HIGH_SCORE else "low",
@@ -819,6 +842,7 @@ def make_entry(info):
         "url": info["link"] if is_link else None,
         "sender": info["sender"],
         "service": info.get("service") or info["sender"],
+        "domain": info.get("domain", ""),
         "subject": info["subject"],
         "confidence": "high" if is_link else info.get("confidence", "high"),   # link-er nijosso note ache
         "time": info["time"],
