@@ -981,6 +981,23 @@
             loadAccountCount();
             syncPins();
             ensurePush();
+            loadCachedHome();
+        }
+
+        // Server-er mone rakha shesh code gulo dekhai (Gmail-e kono connection hoy na).
+        // Je account ekbaro check hoyni tar card-e "Not checked yet" thake.
+        async function loadCachedHome() {
+            try {
+                const [a, c] = await Promise.all([fetch('/api/accounts-list'), fetch('/api/cached-otps')]);
+                if (!a.ok || !c.ok) return;
+                const emails = (await a.json()).emails || [];
+                const cached = await c.json();
+                const byEmail = {};
+                (cached || []).forEach(x => { byEmail[String(x.email).toLowerCase()] = x; });
+                const items = emails.map(em => byEmail[String(em).toLowerCase()] || { email: em, code: '', placeholder: true });
+                if (hasLoaded || isFetching) return;      // Refresh age shuru hoye gele oita-i thakbe
+                renderOTPs(items, true);
+            } catch (e) {}
         }
 
         async function fetchOTPs(silent = false) {
@@ -1324,7 +1341,7 @@
                     html = `
                     <div class="empty-state">
                         <i class="fa-solid fa-envelope-open" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        No codes yet.
+                        Click "Refresh OTPs" to load emails.
                     </div>`;
                 }
                 if (last) {
@@ -1507,24 +1524,28 @@
         document.getElementById('accountsCloseBtn').addEventListener('click', closeAccountsModal);
         accountsModal.addEventListener('click', (e) => { if (e.target === accountsModal) closeAccountsModal(); });
 
-        function renderOTPs(otps) {
+        // fromCache = true: login-er por server-er mone rakha shesh result (Gmail check hoy ni) -- "new" dhora hobe na
+        function renderOTPs(otps, fromCache) {
             hasLoaded = true;
             allItems = (otps || []).map(normalizeExpiry);
 
             // kon kon card notun ta check kora
             newCardEmails = [];
-            if (previousCodes.length > 0) {
+            if (fromCache) {
+                // kichu na
+            } else if (previousCodes.length > 0) {
                 allItems.forEach(item => {
                     if (isValidItem(item) && item.expiresAt > Date.now()) {
                         const prev = previousCodes.find(p => p.email === item.email);
-                        if (!prev || prev.code !== item.code) newCardEmails.push(item.email);
+                        // ager baar "check hoyni" (placeholder) thakle seta notun dhora hobe na
+                        if (!prev || (prev.code !== item.code && !prev.ph)) newCardEmails.push(item.email);
                     }
                 });
             } else if (allItems[0] && isValidItem(allItems[0]) && allItems[0].expiresAt > Date.now()) {
                 newCardEmails.push(allItems[0].email);
             }
 
-            previousCodes = allItems.map(item => ({ email: item.email, code: item.code }));
+            previousCodes = allItems.map(item => ({ email: item.email, code: item.code, ph: !!item.placeholder }));
 
             renderHome();
             if (accountsModalOpen()) renderAll();
