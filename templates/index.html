@@ -944,7 +944,7 @@
                 if (res.ok) {
                     loginSection.classList.add('hidden');
                     dashboardSection.classList.remove('hidden');
-                    onLoggedIn();
+                    fetchOTPs();
                 } else {
                     let msg = "Wrong Master Password!";
                     try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (e2) {}
@@ -969,36 +969,6 @@
         }
 
         let isFetching = false;
-
-        // Login-er por kono Gmail check hoy na -- shudhu khali home, account count, pin ar live connection.
-        // Code ante Refresh OTPs / Wait for new code chapte hobe.
-        function onLoggedIn() {
-            otpContainer.innerHTML = `
-                <div class="empty-state">
-                    <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                    Click "Refresh OTPs" to load emails.
-                </div>`;
-            loadAccountCount();
-            syncPins();
-            ensurePush();
-            loadCachedHome();
-        }
-
-        // Server-er mone rakha shesh code gulo dekhai (Gmail-e kono connection hoy na).
-        // Je account ekbaro check hoyni tar card-e "Not checked yet" thake.
-        async function loadCachedHome() {
-            try {
-                const [a, c] = await Promise.all([fetch('/api/accounts-list'), fetch('/api/cached-otps')]);
-                if (!a.ok || !c.ok) return;
-                const emails = (await a.json()).emails || [];
-                const cached = await c.json();
-                const byEmail = {};
-                (cached || []).forEach(x => { byEmail[String(x.email).toLowerCase()] = x; });
-                const items = emails.map(em => byEmail[String(em).toLowerCase()] || { email: em, code: '', placeholder: true });
-                if (hasLoaded || isFetching) return;      // Refresh age shuru hoye gele oita-i thakbe
-                renderOTPs(items, true);
-            } catch (e) {}
-        }
 
         async function fetchOTPs(silent = false) {
             if (isFetching) return;
@@ -1272,10 +1242,8 @@
             const healthDot = opts.pinnable
                 ? `<span class="health-dot ${health}" title="${escAttr(HEALTH_TITLE[health])}"></span>`
                 : '';
-            const infoLine = item.placeholder
-                ? `<i class="fa-regular fa-clock"></i> Not checked yet`
-                : health === 'ok'
-                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'}${fmtDate(item.timestamp)} |${item.service ? 'Service' : 'Sender'}: ${escAttr(item.service || item.sender || 'N/A')}`
+            const infoLine = health === 'ok'
+                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'}${fmtDate(item.timestamp)} | ${item.service ? 'Service' : 'Sender'}: ${escAttr(item.service || item.sender || 'N/A')}`
                 : `<span class="health-msg ${health}"><i class="fa-solid fa-triangle-exclamation"></i> ${escAttr(item.sender || HEALTH_TITLE[health])}</span>`;
             const isLink = validCode && item.kind === 'link';
             const linkBox = `<div class="otp-code-box link-box" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" data-url="${escAttr(item.url || '')}" onclick="onCodeTap(this)" title="Open link in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open verify link</div>`;
@@ -1283,7 +1251,7 @@
             const expiredBox = `<div class="otp-code-box expired-box"><i class="fa-regular fa-clock"></i> Code expired</div>`;
             const codeBox = showExpired ? expiredBox : isLink ? linkBox : validCode
                 ? `<div class="otp-code-box ${revealed ? '' : 'masked'}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${revealed ? escAttr(item.code) : maskText(item.code) + ' <i class="fa-regular fa-eye reveal-eye"></i>'}</div>`
-                : `<div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">${escAttr(item.placeholder ? 'Not checked yet - tap refresh' : (item.code || 'Code not found'))}</div>`;
+                : `<div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">${escAttr(item.code || 'Code not found')}</div>`;
             const verifyNote = (!validCode || showExpired) ? '' : isLink
                 ? `<div class="verify-note link"><i class="fa-solid fa-link"></i><span>Link from <b>${escAttr(item.service || item.sender || 'sender')}</b> &middot; ${escAttr(item.subject || '')}<br>Open it only if you just requested it.</span></div>`
                 : (item.confidence === 'low'
@@ -1341,7 +1309,7 @@
                     html = `
                     <div class="empty-state">
                         <i class="fa-solid fa-envelope-open" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        Click "Refresh OTPs" to load emails.
+                        No codes yet.
                     </div>`;
                 }
                 if (last) {
@@ -1446,20 +1414,17 @@
         // Popup: shob Gmail account (delete kora jay). Pin kora gulo upore, search e filter.
         function renderAll() {
             if (openWrap) openWrap = null;
-            // Refresh-er age: account-er list dekhai (Gmail check kora hoy ni), card-e "Not checked yet"
-            const baseItems = hasLoaded ? allItems : accountList.map(em =>
-                allItems.find(x => x.email === em) || { email: em, code: '', placeholder: true });
-            document.getElementById('allCount').innerText = baseItems.length;
-            if (!hasLoaded && isFetching) {
+            document.getElementById('allCount').innerText = allItems.length;
+            if (!hasLoaded) {
                 allContainer.innerHTML = skeletonHTML(3);
                 return;
             }
-            if (baseItems.length === 0) {
-                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>${hasLoaded || accountListLoaded ? 'No Gmail accounts added yet.' : 'Loading accounts...'}</div>`;
+            if (allItems.length === 0) {
+                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>No Gmail accounts added yet.</div>`;
                 return;
             }
             const q = searchQuery();
-            const list = q ? baseItems.filter(i => String(i.email).toLowerCase().includes(q)) : baseItems;
+            const list = q ? allItems.filter(i => String(i.email).toLowerCase().includes(q)) : allItems;
             if (list.length === 0) {
                 allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-magnifying-glass" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>No Gmail matches "${escAttr(accSearchInput.value.trim())}".</div>`;
                 return;
@@ -1487,25 +1452,11 @@
             showAccountsModal();
         }
 
-        // Shudhu account-er email-er list ane (kono Gmail check hoy na)
-        let accountList = [];
-        let accountListLoaded = false;
-        async function loadAccountList() {
-            try {
-                const res = await fetch('/api/accounts-list');
-                if (res.ok) {
-                    accountList = ((await res.json()).emails || []).map(x => String(x).toLowerCase());
-                    accountListLoaded = true;
-                    if (accountsModalOpen()) renderAll();
-                }
-            } catch (e) {}
-        }
-
         function showAccountsModal() {
             loadAccountCount();
             renderAll();
             accountsModal.classList.remove('hidden');
-            if (!hasLoaded) loadAccountList();
+            if (!hasLoaded && !isFetching) fetchOTPs(true);
         }
 
         function closeAccountsModal() {
@@ -1524,28 +1475,24 @@
         document.getElementById('accountsCloseBtn').addEventListener('click', closeAccountsModal);
         accountsModal.addEventListener('click', (e) => { if (e.target === accountsModal) closeAccountsModal(); });
 
-        // fromCache = true: login-er por server-er mone rakha shesh result (Gmail check hoy ni) -- "new" dhora hobe na
-        function renderOTPs(otps, fromCache) {
+        function renderOTPs(otps) {
             hasLoaded = true;
             allItems = (otps || []).map(normalizeExpiry);
 
             // kon kon card notun ta check kora
             newCardEmails = [];
-            if (fromCache) {
-                // kichu na
-            } else if (previousCodes.length > 0) {
+            if (previousCodes.length > 0) {
                 allItems.forEach(item => {
                     if (isValidItem(item) && item.expiresAt > Date.now()) {
                         const prev = previousCodes.find(p => p.email === item.email);
-                        // ager baar "check hoyni" (placeholder) thakle seta notun dhora hobe na
-                        if (!prev || (prev.code !== item.code && !prev.ph)) newCardEmails.push(item.email);
+                        if (!prev || prev.code !== item.code) newCardEmails.push(item.email);
                     }
                 });
             } else if (allItems[0] && isValidItem(allItems[0]) && allItems[0].expiresAt > Date.now()) {
                 newCardEmails.push(allItems[0].email);
             }
 
-            previousCodes = allItems.map(item => ({ email: item.email, code: item.code, ph: !!item.placeholder }));
+            previousCodes = allItems.map(item => ({ email: item.email, code: item.code }));
 
             renderHome();
             if (accountsModalOpen()) renderAll();
@@ -1867,7 +1814,7 @@
                 loginError.style.display = 'none';
                 loginSection.classList.add('hidden');
                 dashboardSection.classList.remove('hidden');
-                onLoggedIn();
+                fetchOTPs();
             } catch (err) {
                 loginError.style.display = 'block';
                 loginError.innerText = err.message || 'Fingerprint login failed';
@@ -2018,7 +1965,6 @@
                 .find(w => w.querySelector('.swipe-delete').dataset.email === email);
             previousCodes = previousCodes.filter(p => p.email !== email);
             allItems = allItems.filter(i => i.email !== email);
-            accountList = accountList.filter(x => x !== String(email).toLowerCase());
             newCardEmails = newCardEmails.filter(e => e !== email);
             pinnedEmails = pinnedEmails.filter(x => x !== String(email).toLowerCase());
             savePins();
@@ -2280,8 +2226,6 @@
             document.getElementById('masterPasswordInput').value = '';
             previousCodes = [];
             allItems = [];
-            accountList = [];
-            accountListLoaded = false;
             newCardEmails = [];
             hasLoaded = false;
             updateHealthBadge();
