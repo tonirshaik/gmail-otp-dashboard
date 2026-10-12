@@ -420,6 +420,20 @@
         @media (hover: none), (pointer: coarse) {
             .card-refresh, .card-pin { min-width: 40px; min-height: 40px; font-size: 16px; padding: 8px; }
         }
+        /* lomba email hole button jate card-er baire kete na jay: email chhoto hobe (...), button shobsomoy dekha jabe */
+        .otp-email { min-width: 0; gap: 4px; }
+        .otp-email > span:not(.health-dot):not(.used-badge) {
+            flex: 0 1 auto; min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .otp-email .health-dot, .otp-email .used-badge,
+        .otp-email .card-pin, .otp-email .card-refresh { flex: none; }
+        #allContainer .card-refresh { margin-right: 0; }
+        @media (max-width: 480px) {
+            .otp-email { gap: 2px; font-size: 12.5px; }
+            .otp-email .card-pin, .otp-email .card-refresh { min-width: 34px; min-height: 34px; padding: 6px; }
+            .used-badge { padding: 2px 7px; font-size: 10px; }
+        }
         #liveStatus { text-align: center; font-size: 12px; margin: 4px 0 10px; color: var(--accent-green); display: none; }
 
         /* ---- all accounts popup ---- */
