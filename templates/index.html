@@ -1294,11 +1294,14 @@
                 const last = allItems
                     .filter(isValidItem)
                     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
-                let html = `
+                let html = '';
+                if (!last) {
+                    html = `
                     <div class="empty-state">
                         <i class="fa-solid fa-envelope-open" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        No active codes right now.<br>New codes will show up here.
+                        No codes yet.
                     </div>`;
+                }
                 if (last) {
                     html += `<div class="acc-section" style="margin-top: 6px;"><i class="fa-solid fa-clock-rotate-left"></i> Last received code</div>`;
                     html += cardHTML(last, { isNew: false, deletable: false, showExpiry: false, expired: true });
