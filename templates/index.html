@@ -1053,6 +1053,15 @@
         .mail-row-bad { color: #f87171; font-weight: 700; }
         :root[data-theme="light"] .mail-row-code { color: #0369a1; }
         :root[data-theme="light"] .mail-row-bad { color: #b91c1c; }
+        .otp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+        .otp-foot .otp-time { min-width: 0; }
+        .card-tools { display: flex; gap: 6px; margin-left: auto; }
+        .card-tool { display: inline-flex; align-items: center; gap: 5px; background: var(--ctl-bg); border: 1px solid var(--ctl-border); color: var(--text-muted); cursor: pointer; font-family: inherit; font-size: 11.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+        .card-tool:hover, .card-tool:focus-visible { color: var(--accent-cyan); border-color: rgba(6, 182, 212, 0.5); background: rgba(6, 182, 212, 0.1); outline: none; }
+        .card-tool i { font-size: 11px; }
+        @media (hover: none), (pointer: coarse) { .card-tool { min-height: 34px; padding: 6px 12px; } }
+        .tfa-empty { text-align: center; padding: 26px 10px; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
+        .tfa-empty i { display: block; font-size: 26px; margin-bottom: 10px; color: var(--accent-cyan); opacity: 0.8; }
     </style>
 </head>
 <body>
@@ -1265,6 +1274,18 @@
             <div class="mail-acct" id="mailAcct"></div>
             <div class="mail-scroll" id="mailScroll"></div>
             <div class="mail-linkbar hidden" id="mailLinkBar"></div>
+        </div>
+    </div>
+
+    <!-- 2FA / Services popup (card-er footer button) -->
+    <div id="tfaModal" class="modal-overlay mail-overlay hidden" role="dialog" aria-modal="true" aria-label="Two-factor codes">
+        <div class="mail-box">
+            <div class="mail-head">
+                <span class="mail-title" id="tfaTitle"></span>
+                <button type="button" class="mail-ibtn" id="tfaCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mail-acct" id="tfaAcct"></div>
+            <div class="mail-scroll" id="tfaScroll"></div>
         </div>
     </div>
 
@@ -1847,7 +1868,13 @@
                     ${phishNote}
                     ${verifyNote}
                     ${expiryRow}
-                    <div class="otp-time">${infoLine}</div>
+                    <div class="otp-foot">
+                        <div class="otp-time">${infoLine}</div>
+                        <div class="card-tools">
+                            <button type="button" class="card-tool card-2fa" data-email="${escAttr(item.email)}" title="Two-factor (2FA) code of this Gmail" aria-label="2FA code of ${escAttr(item.email)}"><i class="fa-solid fa-shield-halved"></i> <span>2FA</span></button>
+                            <button type="button" class="card-tool card-svc-list" data-email="${escAttr(item.email)}" title="Services that use this Gmail" aria-label="Services that use ${escAttr(item.email)}"><i class="fa-solid fa-layer-group"></i> <span>Services</span></button>
+                        </div>
+                    </div>
                 </div>`;
             if (!opts.deletable) return card;
             return `
@@ -2699,6 +2726,46 @@
         document.getElementById('mailInboxBtn').addEventListener('click', () => mailTab('inbox'));
         document.getElementById('mailSpamBtn').addEventListener('click', () => mailTab('spam'));
 
+
+        // ======================= Card-er "2FA" ar "Services" popup (Step 1: shudhu khola/bondho) =======================
+        const tfaModal = document.getElementById('tfaModal');
+        const tfaScroll = document.getElementById('tfaScroll');
+        let tfaEmail = '', tfaView = '', tfaReturnFocus = null;
+        function tfaModalOpen() { return !tfaModal.classList.contains('hidden'); }
+        function closeTfaModal() {
+            tfaModal.classList.add('hidden');
+            tfaScroll.textContent = '';
+            tfaEmail = ''; tfaView = '';
+            if (tfaReturnFocus && document.contains(tfaReturnFocus)) { try { tfaReturnFocus.focus(); } catch (e) {} }
+            tfaReturnFocus = null;
+        }
+        function renderTfa() {
+            const title = document.getElementById('tfaTitle');
+            title.textContent = '';
+            title.appendChild(mkEl('i', tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
+            title.appendChild(document.createTextNode(tfaView === 'gmail' ? ' Gmail 2FA code' : ' Services'));
+            document.getElementById('tfaAcct').textContent = tfaEmail;
+            tfaScroll.textContent = '';
+            const box = mkEl('div', 'tfa-empty');
+            box.appendChild(mkEl('i', tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
+            box.appendChild(document.createTextNode(tfaView === 'gmail'
+                ? 'The 2FA code of this Gmail will appear here.'
+                : 'Social media, websites and other services used with this Gmail will be listed here, each with its 2FA code.'));
+            tfaScroll.appendChild(box);
+        }
+        function openTfaModal(view, email, trigger) {
+            tfaView = view; tfaEmail = String(email || ''); tfaReturnFocus = trigger || null;
+            renderTfa();
+            tfaModal.classList.remove('hidden');
+            document.getElementById('tfaCloseBtn').focus();
+        }
+        document.addEventListener('click', (e) => {
+            const b = e.target.closest('.card-2fa, .card-svc-list');
+            if (b) { e.preventDefault(); openTfaModal(b.classList.contains('card-2fa') ? 'gmail' : 'services', b.dataset.email, b); return; }
+            if (e.target === tfaModal) closeTfaModal();
+        });
+        document.getElementById('tfaCloseBtn').addEventListener('click', closeTfaModal);
+
         // ======================= Ekta account refresh =======================
         async function refreshAccount(email, silent = false) {
             try {
@@ -3145,6 +3212,7 @@
             }
             if (e.ctrlKey || e.metaKey || e.altKey) return;
             if (e.key === 'Escape') {
+                if (tfaModalOpen()) { closeTfaModal(); return; }
                 if (mailModalOpen()) { closeMailModal(); return; }
                 if (paletteOpen()) { closePalette(); return; }
                 if (deleteModalOpen()) { closeDeleteModal(); return; }
@@ -3212,7 +3280,7 @@
                 settingsPopup.classList.remove('active');
                 resetSettingsPopup();
                 closeDeleteModal();
-                closeMailModal();
+                closeMailModal(); closeTfaModal();
                 otpContainer.innerHTML = '';
                 allContainer.innerHTML = '';
                 await logout();
@@ -3275,7 +3343,7 @@
             updateHealthBadge();
             stopPush();
             stopWaiting(false);
-            closeMailModal();
+            closeMailModal(); closeTfaModal();
             closeAccountsModal();
             closePalette();
         }
