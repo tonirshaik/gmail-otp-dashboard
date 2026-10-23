@@ -1555,6 +1555,38 @@ def _last_in_folder(mail, folder):
         ts = 0
     return uid, ts
 
+def _spam_folder(mail):
+    """Spam folder select kore tar nam dey (Gmail-er bhasha-bhede nam alada hote pare). Na pele None."""
+    for fname in ("[Gmail]/Spam", "Spam"):
+        try:
+            if mail.select(fname, readonly=True)[0] == 'OK':
+                return fname
+        except Exception:
+            pass
+    return None
+
+def _select_view_folder(mail, folder_req):
+    """'inbox' / 'spam' -> select kore folder-er nam dey. Na pele None."""
+    if folder_req == 'inbox':
+        return 'inbox' if mail.select('inbox', readonly=True)[0] == 'OK' else None
+    return _spam_folder(mail)
+
+def _fetch_msg(mail, uid, nbytes):
+    """(email message, Gmail-e pouchanor epoch) -- BODY.PEEK, tai email \"read\" hoy na."""
+    _, md = mail.uid('fetch', uid, '(INTERNALDATE BODY.PEEK[]<0.%d>)' % nbytes)
+    msg, ts = None, 0
+    for part in md or []:
+        if isinstance(part, tuple) and msg is None:
+            msg = email.message_from_bytes(part[1])
+    try:
+        raw = b" ".join((p[0] if isinstance(p, tuple) else p) for p in (md or []) if isinstance(p, (bytes, tuple))).decode("ascii", "ignore")
+        m = re.search(r'INTERNALDATE "([^"]+)"', raw)
+        if m:
+            ts = datetime.strptime(m.group(1).strip(), "%d-%b-%Y %H:%M:%S %z").timestamp()
+    except Exception:
+        ts = 0
+    return msg, ts
+
 def _tidy_text(t):
     t = t.translate(_ZW).replace("\r\n", "\n").replace("\r", "\n")
     t = re.sub(r"[ \t\u00a0]+", " ", t)
@@ -1601,29 +1633,38 @@ def latest_mail():
     mail = None
     try:
         mail = _imap_login(acc)
-        cands = []                                          # (samoy, label, folder, uid)
-        r = _last_in_folder(mail, "inbox")
-        if r:
-            cands.append((r[1], "INBOX", "inbox", r[0]))
-        for fname in ("[Gmail]/Spam", "Spam"):
-            try:
-                r = _last_in_folder(mail, fname)
-            except Exception:
-                r = None
+        body_in = request.json or {}
+        folder_req = str(body_in.get('folder', '')).strip().lower()
+        uid_req = str(body_in.get('uid', '')).strip()
+        if folder_req or uid_req:
+            # List theke nirdishto ekta email (Inbox / Spam)
+            if folder_req not in ('inbox', 'spam') or not re.fullmatch(r'\d{1,12}', uid_req):
+                return jsonify({"error": "Bad request"}), 400
+            fname = _select_view_folder(mail, folder_req)
+            if not fname:
+                return jsonify({"error": "Could not read the email"}), 404
+            label, uid, ts = folder_req.upper(), uid_req.encode(), 0
+        else:
+            cands = []                                      # (samoy, label, folder, uid)
+            r = _last_in_folder(mail, "inbox")
             if r:
-                cands.append((r[1], "SPAM", fname, r[0]))
-                break
-        if not cands:
-            return jsonify({"found": False})
-        ts, label, fname, uid = max(cands, key=lambda c: c[0])
+                cands.append((r[1], "INBOX", "inbox", r[0]))
+            for fname in ("[Gmail]/Spam", "Spam"):
+                try:
+                    r = _last_in_folder(mail, fname)
+                except Exception:
+                    r = None
+                if r:
+                    cands.append((r[1], "SPAM", fname, r[0]))
+                    break
+            if not cands:
+                return jsonify({"found": False})
+            ts, label, fname, uid = max(cands, key=lambda c: c[0])
+            mail.select(fname, readonly=True)
 
-        mail.select(fname, readonly=True)
-        _, md = mail.uid('fetch', uid, '(BODY.PEEK[]<0.%d>)' % MAIL_FETCH_BYTES)
-        msg = None
-        for part in md or []:
-            if isinstance(part, tuple):
-                msg = email.message_from_bytes(part[1])
-                break
+        msg, ts_fetched = _fetch_msg(mail, uid, MAIL_FETCH_BYTES)
+        if not ts:
+            ts = ts_fetched
         if msg is None:
             return jsonify({"error": "Could not read the email"}), 502
 
@@ -1675,6 +1716,77 @@ def latest_mail():
         })
     except Exception as e:
         print(f"[LATEST-MAIL] {acc['email']}: {type(e).__name__}")
+        return jsonify({"error": _error_reason(e)}), 502
+    finally:
+        try:
+            if mail is not None:
+                mail.logout()
+        except Exception:
+            pass
+
+# ======================= Latest email popup: Inbox / Spam-er shesh 3 ta email =======================
+MAIL_LIST_COUNT = 3
+MAIL_LIST_FETCH_BYTES = 60000    # list-e shudhu sender/subject/code lage, tai shuru-r ongsho-i jothesto
+
+@app.route('/api/mail-list', methods=['POST'])
+def mail_list():
+    """Inbox ba Spam-er shesh 3 ta email-er shongkhipto talika (notun age)."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    data_in = request.json or {}
+    email_in = str(data_in.get('email', '')).strip().lower()
+    folder_req = str(data_in.get('folder', '')).strip().lower()
+    if folder_req not in ('inbox', 'spam'):
+        return jsonify({"error": "Bad request"}), 400
+    acc = next((x for x in load_accounts() if str(x.get('email', '')).lower() == email_in), None)
+    if not acc:
+        return jsonify({"error": "Account not found"}), 404
+    mail = None
+    try:
+        mail = _imap_login(acc)
+        items = []
+        fname = _select_view_folder(mail, folder_req)
+        if fname:
+            status, data = mail.uid('search', None, 'ALL')
+            uids = data[0].split()[-MAIL_LIST_COUNT:] if status == 'OK' and data and data[0] else []
+            for uid in reversed(uids):                      # notun age
+                try:
+                    msg, ts = _fetch_msg(mail, uid, MAIL_LIST_FETCH_BYTES)
+                except Exception:
+                    continue
+                if msg is None:
+                    continue
+                subject = decode_hdr(msg.get("Subject"), "(No subject)")
+                name, addr = parseaddr(decode_hdr(msg.get("From"), ""))
+                if not ts:
+                    try:
+                        ts = parsedate_to_datetime(msg.get("Date")).timestamp()
+                    except Exception:
+                        ts = time.time()
+                code = None
+                try:
+                    for t in (get_email_texts(msg) or [""]):
+                        c, _sc = extract_otp_scored(subject + "\n" + t)
+                        if c != "Code not found":
+                            code = c
+                            break
+                    auth = check_email_auth(msg)
+                except Exception:
+                    auth = {"status": "unknown"}
+                bad = auth.get("status") == "fail"
+                items.append({
+                    "uid": uid.decode(),
+                    "from_name": name,
+                    "from_addr": addr,
+                    "subject": subject,
+                    "timestamp": ts,
+                    "time": datetime.fromtimestamp(ts, ZoneInfo("Asia/Dhaka")).strftime("%d %b, %I:%M %p"),
+                    "code": None if bad else code,           # sondehojonok email-er code dekhai na
+                    "auth_fail": bad,
+                })
+        return jsonify({"folder": folder_req.upper(), "items": items})
+    except Exception as e:
+        print(f"[MAIL-LIST] {acc['email']}: {type(e).__name__}")
         return jsonify({"error": _error_reason(e)}), 502
     finally:
         try:
