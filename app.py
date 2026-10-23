@@ -1887,6 +1887,20 @@ def _no_store(resp):
     resp.headers["Cache-Control"] = "no-store"
     return resp
 
+def _settings_pw_check(data):
+    """Prottek bar settings password jachai kore (session unlock-er upor nirvor kore na).
+    Thik hole None, nahole (response, status) ferot dey. Vul-er hishab 'settings' bucket-e jay."""
+    secs = lock_remaining('settings')
+    if secs:
+        return locked_response(secs)
+    pw = str((data or {}).get('password', '')).strip()
+    if pw and pw_equal(pw, SETTINGS_PASSWORD):
+        clear_fails('settings')
+        return None
+    if not pw:
+        return jsonify({"error": "Settings password required", "need_password": True}), 403
+    return wrong_password_response('settings', "Incorrect password")
+
 @app.route('/api/totp/status')
 def totp_status():
     """Kon kon Gmail-er 2FA secret jora ache (shudhu email-er talika, secret na)."""
@@ -1914,6 +1928,15 @@ def totp_add():
         return jsonify({"error": "Too many tries. Wait a minute."}), 429
     data = request.json or {}
     email_in = str(data.get('email', '')).strip().lower()
+    try:
+        already = totp_collection.find_one({"email": email_in}, {"_id": 1}) is not None
+    except Exception as e:
+        print(f"[TOTP] add-check: {type(e).__name__}")
+        return jsonify({"error": "Could not save. Try again."}), 500
+    if already:                                   # purono key bodlano -> ei request-ei password lagbe
+        bad = _settings_pw_check(data)
+        if bad is not None:
+            return bad
     if not any(str(x.get('email', '')).lower() == email_in for x in load_accounts()):
         return jsonify({"error": "Account not found"}), 404
     try:
@@ -1975,6 +1998,9 @@ def totp_delete():
         return jsonify({"error": "Settings locked. Unlock first."}), 403
     if totp_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
+    bad = _settings_pw_check(request.json or {})   # session unlock thakleo password lagbe
+    if bad is not None:
+        return bad
     email_in = str((request.json or {}).get('email', '')).strip().lower()
     try:
         r = totp_collection.delete_one({"email": email_in})
