@@ -1097,6 +1097,24 @@
         .tfa-form { display: flex; flex-direction: column; gap: 10px; }
         .tfa-form-title { font-weight: 700; font-size: 14px; color: var(--text-main); }
         .tfa-steps { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
+        .svc-bar { display: flex; gap: 8px; margin-bottom: 10px; }
+        .svc-bar .tfa-input { flex: 1; min-width: 0; width: auto; }
+        .svc-bar .mail-btn { white-space: nowrap; }
+        .svc-list { display: flex; flex-direction: column; gap: 10px; }
+        .svc-list .otp-swipe { margin-bottom: 0; }
+        .svc-item.otp-card { padding: 12px 14px 12px 18px; }
+        .svc-row { display: flex; align-items: center; gap: 12px; }
+        .svc-av { width: 38px; height: 38px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #fff; }
+        .svc-info { flex: 1; min-width: 0; }
+        .svc-name { font-weight: 700; font-size: 14px; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .svc-label { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .svc-code { display: inline-block; margin-top: 2px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 24px; font-weight: 800; letter-spacing: 3px; color: var(--accent-cyan); cursor: pointer; line-height: 1.25; }
+        .svc-time { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; font-size: 11px; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
+        .svc-item.warn .svc-code, .svc-item.warn .svc-time { color: var(--accent-red); }
+        .svc-item.warn .ring-fg { stroke: var(--accent-red); }
+        .swipe-tfa .swipe-svc-edit { background: rgba(6, 182, 212, 0.92); }
+        .swipe-tfa .swipe-svc-del { background: rgba(239, 68, 68, 0.92); }
+        :root[data-theme="light"] .svc-code { color: #0369a1; }
         .tfa-qr-row { display: flex; gap: 8px; }
         .tfa-qr-row .mail-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; }
         .tfa-cam { display: flex; flex-direction: column; gap: 8px; }
@@ -2789,9 +2807,11 @@
         const tfaModal = document.getElementById('tfaModal');
         const tfaScroll = document.getElementById('tfaScroll');
         let tfaEmail = '', tfaView = '', tfaReturnFocus = null;
+        let svcList = [], svcLoaded = false, svcQuery = '', svcEditId = '', svcBusy = false;
         function tfaModalOpen() { return !tfaModal.classList.contains('hidden'); }
         function closeTfaModal() {
             stopQrCamera();
+            svcList = []; svcLoaded = false; svcQuery = ''; svcEditId = '';       // code memory-te rakhi na
             tfaModal.classList.add('hidden');
             tfaScroll.textContent = '';
             tfaEmail = ''; tfaView = '';
@@ -2802,18 +2822,27 @@
         function renderTfa() {
             const title = document.getElementById('tfaTitle');
             title.textContent = '';
-            title.appendChild(mkEl('i', tfaView === 'remove' ? 'fa-regular fa-trash-can' : tfaView === 'edit' ? 'fa-solid fa-pencil' : tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
-            title.appendChild(document.createTextNode(tfaView === 'remove' ? ' Remove 2FA' : tfaView === 'edit' ? ' Change 2FA key' : tfaView === 'gmail' ? ' Gmail 2FA code' : ' 2FA Service'));
-            document.getElementById('tfaAcct').textContent = tfaEmail || 'All Gmail accounts';
+            const T = {
+                remove: ['fa-regular fa-trash-can', ' Remove 2FA'],
+                edit: ['fa-solid fa-pencil', ' Change 2FA key'],
+                gmail: ['fa-solid fa-shield-halved', ' Gmail 2FA code'],
+                'svc-add': ['fa-solid fa-plus', ' Add a service'],
+                'svc-edit': ['fa-solid fa-pencil', ' Edit service'],
+                'svc-del': ['fa-regular fa-trash-can', ' Remove service']
+            }[tfaView] || ['fa-solid fa-layer-group', ' 2FA Service'];
+            title.appendChild(mkEl('i', T[0]));
+            title.appendChild(document.createTextNode(T[1]));
+            const isSvc = tfaView === 'services' || tfaView.indexOf('svc-') === 0;
+            document.getElementById('tfaAcct').textContent = tfaEmail || (isSvc ? 'Social media, websites and apps' : 'All Gmail accounts');
             stopQrCamera();
             tfaScroll.textContent = '';
             if (tfaView === 'remove') { renderTfaRemove(); return; }
             if (tfaView === 'edit') { renderTfaEdit(); return; }
             if (tfaView === 'gmail') { renderTfaForm(); return; }
-            const box = mkEl('div', 'tfa-empty');
-            box.appendChild(mkEl('i', 'fa-solid fa-layer-group'));
-            box.appendChild(document.createTextNode('Social media, websites and other services will be listed here, each with its 2FA code.'));
-            tfaScroll.appendChild(box);
+            if (tfaView === 'svc-add' || tfaView === 'svc-edit') { renderSvcForm(); return; }
+            if (tfaView === 'svc-del') { renderSvcDelete(); return; }
+            renderSvcList();
+            svcLoad(true);
         }
         function renderTfaRemove() {
             const box = mkEl('div', 'tfa-form');
@@ -2850,7 +2879,7 @@
                 const u = await tfaApi('/api/settings-unlock', { password: pw });      // password sob shomoy lagbe
                 if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
                 const r = await tfaApi('/api/totp/delete', { email, password: pw });   // server nijeo password jachai kore
-                if (r.status === 401) return;
+                if (r.loggedOut) return;
                 if (!r.ok && r.status !== 404) { if (tfaEmail === email) fail(r.data.error || 'Could not remove. Try again.'); return; }
                 pwEl.value = '';
                 tfaSet.delete(key);
@@ -2901,7 +2930,7 @@
                 const u = await tfaApi('/api/settings-unlock', { password: pw });
                 if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
                 const r = await tfaApi('/api/totp/add', { email, secret, password: pw });      // purono key bodlate server password chay
-                if (r.status === 401) return;
+                if (r.loggedOut) return;
                 if (!r.ok) { if (tfaEmail === email) fail(r.data.error || 'Could not save. Try again.'); return; }
                 secretEl.value = ''; pwEl.value = '';
                 tfaEnabled = true;
@@ -2968,7 +2997,7 @@
                 return null;
             } finally { if (revoke) URL.revokeObjectURL(revoke); }
         }
-        async function startQrCamera(secretEl, errEl, host) {
+        async function startQrCamera(secretEl, errEl, host, onRead) {
             stopQrCamera();
             const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
             errEl.classList.add('hidden');
@@ -2994,7 +3023,7 @@
                         ctx.drawImage(v, 0, 0, cv.width, cv.height);
                         const im = ctx.getImageData(0, 0, cv.width, cv.height);
                         const r = jsQR(im.data, im.width, im.height, { inversionAttempts: 'dontInvert' });
-                        if (r && r.data) { stopQrCamera(); qrToInput(r.data, secretEl, errEl); return; }
+                        if (r && r.data) { stopQrCamera(); if (qrToInput(r.data, secretEl, errEl) && onRead) onRead(r.data); return; }
                     }
                     qrRaf = requestAnimationFrame(tick);
                 };
@@ -3005,7 +3034,7 @@
                      e && e.name === 'NotFoundError' ? 'No camera found on this device.' : (e && e.message) || 'Could not start the camera.');
             }
         }
-        function tfaQrTools(secretEl, errEl) {
+        function tfaQrTools(secretEl, errEl, onRead) {
             const wrap = mkEl('div');
             const row = mkEl('div', 'tfa-qr-row');
             const up = mkEl('button', 'mail-btn'); up.type = 'button';
@@ -3023,16 +3052,240 @@
                 try {
                     const text = await qrDecodeFile(f);
                     if (!text) { errEl.textContent = 'No QR code found in this image. Try a clearer or cropped screenshot.'; errEl.classList.remove('hidden'); }
-                    else qrToInput(text, secretEl, errEl);
+                    else if (qrToInput(text, secretEl, errEl) && onRead) onRead(text);
                 } catch (e) {
                     errEl.textContent = (e && e.message) || 'Could not read this image.'; errEl.classList.remove('hidden');
                 } finally { up.disabled = false; }
             });
-            cam.addEventListener('click', () => startQrCamera(secretEl, errEl, wrap));
+            cam.addEventListener('click', () => startQrCamera(secretEl, errEl, wrap, onRead));
             row.appendChild(up); row.appendChild(cam);
             wrap.appendChild(row); wrap.appendChild(file);
             return wrap;
         }
+        // ======================= 2FA Services (social media / website / app) =======================
+        function svcColor(name) {
+            let hh = 0;
+            for (const c of String(name)) hh = (hh * 31 + c.charCodeAt(0)) >>> 0;
+            return 'hsl(' + (hh % 360) + ' 55% 42%)';
+        }
+        function svcFmt(code) {
+            code = String(code || '');
+            return code.length === 6 ? code.slice(0, 3) + ' ' + code.slice(3) : code.length === 8 ? code.slice(0, 4) + ' ' + code.slice(4) : code;
+        }
+        async function svcLoad(showErr) {
+            if (svcBusy) return;
+            svcBusy = true;
+            try {
+                const r = await tfaApi('/api/svc/list');
+                if (r.loggedOut) return;
+                if (!r.ok) { if (showErr) showToast(r.data.error || 'Could not load services'); if (!svcLoaded) { svcLoaded = true; if (tfaView === 'services') renderSvcItems(); } return; }
+                const now = Date.now();
+                const next = (r.data.services || []).map(x => Object.assign({}, x, { endAt: now + (x.remaining || 0) * 1000 }));
+                const same = svcLoaded && next.length === svcList.length &&
+                    next.every((x, i) => svcList[i] && svcList[i].id === x.id && svcList[i].name === x.name && svcList[i].label === x.label);
+                svcList = next; svcLoaded = true;
+                if (tfaModalOpen() && tfaView === 'services') { if (same) svcPaint(); else renderSvcItems(); }
+            } catch (e) {
+                if (showErr) showToast('Could not reach the server');
+            } finally { svcBusy = false; }
+        }
+        function renderSvcList() {
+            tfaScroll.textContent = '';
+            const bar = mkEl('div', 'svc-bar');
+            const q = tfaInput('search', 'Search services...', 'svcSearch');
+            q.value = svcQuery;
+            q.addEventListener('input', () => { svcQuery = q.value; renderSvcItems(); });
+            const add = mkEl('button', 'mail-btn primary'); add.type = 'button';
+            add.appendChild(mkEl('i', 'fa-solid fa-plus')); add.appendChild(document.createTextNode(' Add'));
+            add.addEventListener('click', () => openSvcForm('add'));
+            bar.appendChild(q); bar.appendChild(add);
+            const list = mkEl('div', 'svc-list'); list.id = 'svcList';
+            tfaScroll.appendChild(bar); tfaScroll.appendChild(list);
+            renderSvcItems();
+        }
+        function renderSvcItems() {
+            const list = document.getElementById('svcList');
+            if (!list) return;
+            if (!svcLoaded) { list.innerHTML = '<div class="mail-state">Loading...</div>'; return; }
+            if (!svcList.length) {
+                list.innerHTML = '<div class="tfa-empty"><i class="fa-solid fa-layer-group"></i>No service added yet. Tap <b>Add</b> to add Facebook, GitHub, any website or app.</div>';
+                return;
+            }
+            const q = svcQuery.trim().toLowerCase();
+            const items = svcList.filter(x => !q || (x.name + ' ' + (x.label || '')).toLowerCase().includes(q));
+            if (!items.length) { list.innerHTML = '<div class="mail-state">No service matches.</div>'; return; }
+            list.innerHTML = items.map(x => {
+                const id = escAttr(x.id), nm = escAttr(x.name);
+                const letter = escAttr((Array.from(x.name)[0] || '?').toUpperCase());
+                return `<div class="otp-swipe tfa">
+                    <div class="swipe-tfa">
+                        <button type="button" class="swipe-svc-edit" data-id="${id}" title="Edit" aria-label="Edit ${nm}"><i class="fa-solid fa-pencil"></i></button>
+                        <button type="button" class="swipe-svc-del" data-id="${id}" title="Remove" aria-label="Remove ${nm}"><i class="fa-regular fa-trash-can"></i></button>
+                    </div>
+                    <div class="otp-card svc-item" data-svc="${id}">
+                        <div class="svc-row">
+                            <div class="svc-av" style="background:${svcColor(x.name)}">${letter}</div>
+                            <div class="svc-info">
+                                <div class="svc-name">${nm}</div>
+                                ${x.label ? `<div class="svc-label">${escAttr(x.label)}</div>` : ''}
+                                <div class="svc-code" role="button" tabindex="0" data-id="${id}" title="Click to copy" aria-label="2FA code of ${nm}. Press to copy"></div>
+                            </div>
+                            <div class="svc-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg><span class="svc-left"></span></div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join('');
+            svcPaint();
+        }
+        function svcPaint() {
+            const now = Date.now();
+            document.querySelectorAll('#svcList .svc-item').forEach(el => {
+                const x = svcList.find(v => v.id === el.dataset.svc);
+                if (!x) return;
+                const leftMs = Math.max(0, x.endAt - now), left = Math.ceil(leftMs / 1000);
+                el.classList.toggle('warn', !!x.code && left <= 5);
+                const c = el.querySelector('.svc-code');
+                const txt = x.code ? svcFmt(x.code) : '------';
+                if (c && c.textContent !== txt) c.textContent = txt;
+                const ring = el.querySelector('.ring-fg');
+                if (ring) ring.style.strokeDashoffset = x.code ? RING_C * (1 - Math.min(1, leftMs / (x.period * 1000))) : RING_C;
+                const t = el.querySelector('.svc-left');
+                if (t) t.textContent = x.code ? left + 's' : '';
+            });
+        }
+        setInterval(() => {
+            if (!tfaModalOpen() || tfaView !== 'services' || !svcLoaded) return;
+            svcPaint();
+            const now = Date.now();
+            if (!svcBusy && svcList.some(x => now >= x.endAt + 300)) svcLoad(false);        // notun code
+        }, 1000);
+        tfaScroll.addEventListener('click', (e) => {
+            const c = e.target.closest('.svc-code');
+            if (!c) return;
+            const x = svcList.find(v => v.id === c.dataset.id);
+            if (!x || !x.code) return;
+            copyQuiet(x.code).then(ok => showToast(ok ? 'Code copied' : 'Could not copy'));
+        });
+        function openSvcForm(mode, id) {
+            tfaView = { add: 'svc-add', edit: 'svc-edit', del: 'svc-del' }[mode] || 'services';
+            svcEditId = id || '';
+            renderTfa();
+        }
+        function svcBack() { tfaView = 'services'; svcEditId = ''; renderTfa(); }
+        function svcPrefill(text, nameEl, labelEl) {                 // otpauth://totp/Issuer:account?issuer=X theke nam/account bosay
+            try {
+                if (!/^otpauth:\/\/totp\//i.test(text)) return;
+                const u = new URL(text);
+                const path = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
+                const i = path.indexOf(':');
+                const issuer = (u.searchParams.get('issuer') || (i > -1 ? path.slice(0, i) : '')).trim();
+                const account = (i > -1 ? path.slice(i + 1) : path).trim();
+                if (issuer && !nameEl.value.trim()) nameEl.value = issuer.slice(0, 40);
+                if (account && !labelEl.value.trim()) labelEl.value = account.slice(0, 60);
+            } catch (e) {}
+        }
+        function renderSvcForm() {
+            const edit = tfaView === 'svc-edit';
+            const cur = edit ? svcList.find(v => v.id === svcEditId) : null;
+            if (edit && !cur) { svcBack(); return; }
+            const form = mkEl('div', 'tfa-form');
+            form.appendChild(mkEl('div', 'tfa-form-title', edit ? 'Edit this service' : 'Add a service'));
+            form.appendChild(mkEl('div', 'tfa-steps', edit
+                ? 'Leave the key empty to keep the current one. The settings password is needed to save.'
+                : 'Open the service\u2019s security settings \u2192 Authenticator app, then paste the secret key or the otpauth:// link, or upload / scan its QR code.'));
+            const name = tfaInput('text', 'Service name (e.g. Facebook, GitHub)', 'svcName');
+            name.maxLength = 40; name.setAttribute('list', 'svcNames');
+            const dl = document.createElement('datalist'); dl.id = 'svcNames';
+            ['Google', 'Facebook', 'Instagram', 'X (Twitter)', 'GitHub', 'Microsoft', 'Apple', 'Amazon', 'Discord', 'Telegram', 'Binance',
+             'Coinbase', 'PayPal', 'Dropbox', 'LinkedIn', 'Reddit', 'TikTok', 'Snapchat', 'Steam', 'Cloudflare', 'Namecheap'
+            ].forEach(n => { const o = document.createElement('option'); o.value = n; dl.appendChild(o); });
+            const label = tfaInput('text', 'Account name (username or email) - optional', 'svcLabel');
+            label.maxLength = 60;
+            const secret = tfaInput('text', edit ? 'New secret key or otpauth:// link (optional)' : 'Secret key or otpauth:// link', 'tfaSecretInput');
+            if (cur) { name.value = cur.name; label.value = cur.label || ''; }
+            const pwRow = mkEl('div');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to save.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const qr = tfaQrTools(secret, err, (text) => svcPrefill(text, name, label));
+            const row = mkEl('div', 'mail-lb-row');
+            const save = mkEl('button', 'mail-btn primary', 'Save'); save.type = 'button';
+            const cancel = mkEl('button', 'mail-btn', 'Cancel'); cancel.type = 'button';
+            cancel.addEventListener('click', svcBack);
+            save.addEventListener('click', () => saveSvc(edit, name, label, secret, pw, err, save));
+            [name, label, secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
+            row.appendChild(save); row.appendChild(cancel);
+            [dl, name, label, qr, secret, pwRow, err, row].forEach(n => form.appendChild(n));
+            tfaScroll.appendChild(form);
+            setTimeout(() => { try { (edit ? label : name).focus(); } catch (e) {} }, 50);
+        }
+        async function saveSvc(edit, nameEl, labelEl, secretEl, pwEl, errEl, btn) {
+            errEl.classList.add('hidden');
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            const name = nameEl.value.trim(), label = labelEl.value.trim(), secret = secretEl.value.trim(), pw = pwEl.value.trim();
+            if (!name) { fail('Enter the service name'); nameEl.focus(); return; }
+            if (!edit && !secret) { fail('Paste the secret key or the otpauth:// link'); secretEl.focus(); return; }
+            if (!pw) { fail('Enter the settings password'); pwEl.focus(); return; }
+            btn.disabled = true;
+            try {
+                const payload = edit ? { id: svcEditId, name, label, password: pw } : { name, label, secret, password: pw };
+                if (edit && secret) payload.secret = secret;
+                const r = await tfaApi(edit ? '/api/svc/update' : '/api/svc/add', payload);
+                if (r.loggedOut) return;
+                if (!r.ok) { fail(r.data.error || 'Could not save. Try again.'); return; }
+                secretEl.value = ''; pwEl.value = '';
+                showToast(edit ? 'Service updated' : 'Service added');
+                svcLoaded = false;
+                svcBack();
+            } catch (err) {
+                fail('Could not reach the server. Try again.');
+            } finally { btn.disabled = false; }
+        }
+        function renderSvcDelete() {
+            const cur = svcList.find(v => v.id === svcEditId);
+            if (!cur) { svcBack(); return; }
+            const box = mkEl('div', 'tfa-form');
+            box.appendChild(mkEl('div', 'tfa-form-title', 'Remove ' + cur.name + (cur.label ? ' (' + cur.label + ')' : '') + '?'));
+            box.appendChild(mkEl('div', 'tfa-steps', 'This only deletes the key from this dashboard. Make sure you can still sign in to the service another way (your phone app or backup codes) before you remove it.'));
+            const pwRow = mkEl('div');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to remove it.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const row = mkEl('div', 'mail-lb-row');
+            const del = mkEl('button', 'mail-btn danger', 'Remove'); del.type = 'button';
+            const cancel = mkEl('button', 'mail-btn', 'Cancel'); cancel.type = 'button';
+            cancel.addEventListener('click', svcBack);
+            del.addEventListener('click', async () => {
+                err.classList.add('hidden');
+                const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+                const p = pw.value.trim();
+                if (!p) { fail('Enter the settings password'); pw.focus(); return; }
+                del.disabled = true;
+                try {
+                    const r = await tfaApi('/api/svc/delete', { id: cur.id, password: p });
+                    if (r.loggedOut) return;
+                    if (!r.ok && r.status !== 404) { fail(r.data.error || 'Could not remove. Try again.'); return; }
+                    pw.value = '';
+                    showToast('Service removed');
+                    svcLoaded = false;
+                    svcBack();
+                } catch (e) {
+                    fail('Could not reach the server. Try again.');
+                } finally { del.disabled = false; }
+            });
+            pw.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); del.click(); } });
+            row.appendChild(del); row.appendChild(cancel);
+            [pwRow, err, row].forEach(n => box.appendChild(n));
+            tfaScroll.appendChild(box);
+            setTimeout(() => { try { pw.focus(); } catch (e) {} }, 50);
+        }
+
         function tfaInput(type, ph, id) {
             const el = document.createElement('input');
             el.type = type; el.placeholder = ph; el.id = id; el.className = 'tfa-input';
@@ -3082,7 +3335,7 @@
                     if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
                     r = await tfaApi('/api/totp/add', { email, secret });
                 }
-                if (r.status === 401) return;
+                if (r.loggedOut) return;
                 if (!r.ok) { if (tfaEmail === email) fail(r.data.error || 'Could not save. Try again.'); return; }
                 secretEl.value = ''; pwEl.value = '';
                 tfaEnabled = true;
@@ -3141,13 +3394,14 @@
             });
             const data = await res.json().catch(() => ({}));
             // settings-unlock-e vul password dile server 401 dey (\"Incorrect password\") -- eta logout na, shudhu vul password.
-            const wrongPw = (url === '/api/settings-unlock' || url === '/api/totp/delete' || url === '/api/totp/add') && data.error && data.error !== 'Unauthorized Access';
-            if (res.status === 401 && !wrongPw) {
+            const wrongPw = (url === '/api/settings-unlock' || url === '/api/totp/delete' || url === '/api/totp/add' || String(url).indexOf('/api/svc/') === 0) && data.error && data.error !== 'Unauthorized Access';
+            const loggedOut = res.status === 401 && !wrongPw;
+            if (loggedOut) {
                 closeTfaModal(); tfaActive.clear(); stopPush(); stopWaiting(false);
                 dashboardSection.classList.add('hidden');
                 loginSection.classList.remove('hidden');
             }
-            return { ok: res.ok, status: res.status, data };
+            return { ok: res.ok, status: res.status, data, loggedOut };
         }
         function rerenderCards() { renderHome(); if (accountsModalOpen()) renderAll(); }
         async function loadTfaStatus() {
@@ -3569,6 +3823,20 @@
                     setSwipe(wrap, false);
                     return;
                 }
+                const svcEdit = e.target.closest('.swipe-svc-edit');
+                if (svcEdit) {
+                    e.stopPropagation(); e.preventDefault();
+                    setSwipe(wrap, false);
+                    openSvcForm('edit', svcEdit.dataset.id);
+                    return;
+                }
+                const svcDel = e.target.closest('.swipe-svc-del');
+                if (svcDel) {
+                    e.stopPropagation(); e.preventDefault();
+                    setSwipe(wrap, false);
+                    openSvcForm('del', svcDel.dataset.id);
+                    return;
+                }
                 if (wrapIsOpen(wrap)) {
                     e.stopPropagation(); e.preventDefault();
                     setSwipe(wrap, false);
@@ -3588,6 +3856,7 @@
         }
         attachSwipe(allContainer);
         attachSwipe(otpContainer);
+        attachSwipe(tfaScroll);
 
         document.addEventListener('click', (e) => {
             if (openWrap && !openWrap.contains(e.target)) setSwipe(openWrap, false);
