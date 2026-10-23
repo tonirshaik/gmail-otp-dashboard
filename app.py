@@ -1,4 +1,6 @@
 import os
+import base64
+import struct
 import imaplib
 import email
 import re
@@ -16,7 +18,7 @@ from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime, parseaddr
 from email.header import decode_header, make_header
 import html as html_lib
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs, unquote
 from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request, session, Response, send_from_directory
 from pymongo import MongoClient
@@ -83,6 +85,7 @@ passkeys_collection = None
 security_collection = None
 prefs_collection = None
 push_collection = None
+totp_collection = None
 
 if MONGO_URI:
     try:
@@ -93,6 +96,7 @@ if MONGO_URI:
         security_collection = db['security']   # login lock-er state (shob worker-e eki)
         prefs_collection = db['prefs']         # pin-er moto preference (shob device-e eki)
         push_collection = db['push_subs']      # notification subscription (device-wise)
+        totp_collection = db['totp']           # Gmail-wise 2FA (Authenticator) secret -- ENCRYPTED
         print("MongoDB Connected Successfully!")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
@@ -1795,6 +1799,192 @@ def mail_list():
         except Exception:
             pass
 
+# ======================= 2FA (Authenticator / TOTP) =======================
+# Gmail-er "Authenticator app" 2FA secret. Secret MongoDB-te shudhu ENCRYPTED obosthay thake (Fernet/AES).
+# Chabi (TOTP_ENC_KEY) shudhu Render-er Environment-e thake -- code ba database-e na.
+# Browser-e secret kokhono ferot jay na; browser shudhu 6 ongker code pay.
+# Chabi baniye nite:  python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+try:
+    from cryptography.fernet import Fernet, InvalidToken
+except Exception:                      # install na thakle shudhu 2FA bondho, baki app thik cholbe
+    Fernet = None
+    InvalidToken = Exception
+
+TOTP_ENC_KEY = os.environ.get("TOTP_ENC_KEY", "").strip()
+_totp_fernet = None
+if not TOTP_ENC_KEY:
+    print("WARNING: TOTP_ENC_KEY set kora nai! 2FA (Authenticator) feature bondho thakbe.")
+elif Fernet is None:
+    print("WARNING: 'cryptography' install nai! 2FA feature bondho thakbe.")
+else:
+    try:
+        _totp_fernet = Fernet(TOTP_ENC_KEY.encode())
+    except Exception:
+        print("WARNING: TOTP_ENC_KEY thik nai (Fernet key hote hobe). 2FA feature bondho thakbe.")
+
+_TOTP_ALGOS = {"SHA1": hashlib.sha1, "SHA256": hashlib.sha256, "SHA512": hashlib.sha512}
+
+def parse_totp_input(raw):
+    """Base32 secret ba otpauth://totp/... link theke {secret, digits, period, algo, issuer}. Vul hole ValueError."""
+    raw = str(raw or "").strip()
+    if not raw or len(raw) > 2000:
+        raise ValueError("Paste the secret key or the otpauth:// link")
+    digits, period, algo, issuer, secret = 6, 30, "SHA1", "", raw
+    if raw.lower().startswith("otpauth://"):
+        u = urlparse(raw)
+        if u.netloc.lower() != "totp":
+            raise ValueError("Only time-based (TOTP) links are supported")
+        q = {k.lower(): v[0] for k, v in parse_qs(u.query).items() if v}
+        secret = q.get("secret", "")
+        algo = q.get("algorithm", "SHA1").upper()
+        try:
+            digits = int(q.get("digits", 6))
+            period = int(q.get("period", 30))
+        except ValueError:
+            raise ValueError("The link has wrong digits/period values")
+        issuer = (q.get("issuer") or unquote(u.path.lstrip("/")).split(":")[0])[:60]
+    secret = re.sub(r"[\s\-]", "", secret).rstrip("=").upper()
+    if algo not in _TOTP_ALGOS:
+        raise ValueError("Unsupported algorithm")
+    if digits not in (6, 7, 8) or not (15 <= period <= 120):
+        raise ValueError("Unsupported digits/period")
+    if not re.fullmatch(r"[A-Z2-7]{16,128}", secret):
+        raise ValueError("The secret key looks wrong (use letters A-Z and digits 2-7, at least 16 characters)")
+    return {"secret": secret, "digits": digits, "period": period, "algo": algo, "issuer": issuer}
+
+def totp_at(secret_b32, digits, period, algo, t):
+    """RFC 6238. (code, bakI sekend) dey."""
+    key = base64.b32decode(secret_b32 + "=" * (-len(secret_b32) % 8))
+    mac = hmac.new(key, struct.pack(">Q", int(t // period)), _TOTP_ALGOS[algo]).digest()
+    off = mac[-1] & 0x0F
+    num = struct.unpack(">I", mac[off:off + 4])[0] & 0x7FFFFFFF
+    return str(num % (10 ** digits)).zfill(digits), period - int(t % period)
+
+_rl_hits = {}
+_rl_lock = threading.Lock()
+def _rate_ok(name, limit, window):
+    """Chhoto in-memory rate limit (IP + name). limit-er beshi hole False."""
+    now = time.time()
+    key = f"{request.remote_addr}:{name}"
+    with _rl_lock:
+        hits = [x for x in _rl_hits.get(key, []) if now - x < window]
+        ok = len(hits) < limit
+        if ok:
+            hits.append(now)
+        _rl_hits[key] = hits
+        if len(_rl_hits) > 2000:
+            for k in [k for k, v in _rl_hits.items() if not v or now - v[-1] > window]:
+                _rl_hits.pop(k, None)
+    return ok
+
+def _totp_ready():
+    return _totp_fernet is not None and totp_collection is not None
+
+def _totp_off():
+    return jsonify({"error": "2FA is not set up on the server (TOTP_ENC_KEY missing)"}), 503
+
+def _no_store(resp):
+    resp.headers["Cache-Control"] = "no-store"
+    return resp
+
+@app.route('/api/totp/status')
+def totp_status():
+    """Kon kon Gmail-er 2FA secret jora ache (shudhu email-er talika, secret na)."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not _totp_ready():
+        return _no_store(jsonify({"enabled": False, "emails": []}))
+    try:
+        emails = [d["email"] for d in totp_collection.find({}, {"_id": 0, "email": 1})]
+    except Exception as e:
+        print(f"[TOTP] status: {type(e).__name__}")
+        return jsonify({"error": "Could not load 2FA list"}), 500
+    return _no_store(jsonify({"enabled": True, "emails": emails}))
+
+@app.route('/api/totp/add', methods=['POST'])
+def totp_add():
+    """Ekta Gmail-er 2FA secret (key / otpauth link) encrypt kore rakhe. Settings unlock lagbe."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not session.get('settings_unlocked'):
+        return jsonify({"error": "Settings locked. Unlock first."}), 403
+    if not _totp_ready():
+        return _totp_off()
+    if not _rate_ok("totp-add", 10, 60):
+        return jsonify({"error": "Too many tries. Wait a minute."}), 429
+    data = request.json or {}
+    email_in = str(data.get('email', '')).strip().lower()
+    if not any(str(x.get('email', '')).lower() == email_in for x in load_accounts()):
+        return jsonify({"error": "Account not found"}), 404
+    try:
+        p = parse_totp_input(data.get('secret'))
+        code, left = totp_at(p["secret"], p["digits"], p["period"], p["algo"], time.time())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        return jsonify({"error": "The secret key looks wrong"}), 400
+    blob = _totp_fernet.encrypt(json.dumps({"e": email_in, "s": p["secret"]}).encode()).decode()
+    try:
+        totp_collection.update_one(
+            {"email": email_in},
+            {"$set": {"email": email_in, "secret_enc": blob, "digits": p["digits"], "period": p["period"],
+                      "algo": p["algo"], "issuer": p["issuer"], "updated_at": datetime.now()},
+             "$setOnInsert": {"created_at": datetime.now()}},
+            upsert=True)
+    except Exception as e:
+        print(f"[TOTP] add: {type(e).__name__}")
+        return jsonify({"error": "Could not save. Try again."}), 500
+    # Prothom code sathe-i dei, jate Google-er "Verify" ghor-e sathe sathe bosano jay
+    return _no_store(jsonify({"message": "2FA added", "code": code, "remaining": left,
+                              "period": p["period"], "digits": p["digits"]}))
+
+@app.route('/api/totp/code', methods=['POST'])
+def totp_code():
+    """Ekta Gmail-er ekhonkar 2FA code. Secret kokhono ferot dey na."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not _totp_ready():
+        return _totp_off()
+    if not _rate_ok("totp-code", 60, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    email_in = str((request.json or {}).get('email', '')).strip().lower()
+    try:
+        doc = totp_collection.find_one({"email": email_in}, {"_id": 0})
+    except Exception as e:
+        print(f"[TOTP] code: {type(e).__name__}")
+        return jsonify({"error": "Could not load 2FA. Try again."}), 500
+    if not doc:
+        return jsonify({"error": "No 2FA set for this Gmail", "not_set": True}), 404
+    try:
+        plain = json.loads(_totp_fernet.decrypt(doc["secret_enc"].encode()).decode())
+        if plain.get("e") != email_in:                    # onno account-er secret ulte-palte rakha hole code dei na
+            raise ValueError("mismatch")
+        now = time.time()
+        code, left = totp_at(plain["s"], doc["digits"], doc["period"], doc["algo"], now)
+    except Exception:
+        return jsonify({"error": "Could not read the saved 2FA key (is TOTP_ENC_KEY the same as before?)"}), 500
+    return _no_store(jsonify({"code": code, "remaining": left, "period": doc["period"],
+                              "digits": doc["digits"], "issuer": doc.get("issuer", ""),
+                              "server_time": int(now)}))
+
+@app.route('/api/totp/delete', methods=['POST'])
+def totp_delete():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not session.get('settings_unlocked'):
+        return jsonify({"error": "Settings locked. Unlock first."}), 403
+    if totp_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    email_in = str((request.json or {}).get('email', '')).strip().lower()
+    try:
+        r = totp_collection.delete_one({"email": email_in})
+    except Exception as e:
+        print(f"[TOTP] delete: {type(e).__name__}")
+        return jsonify({"error": "Could not remove. Try again."}), 500
+    if r.deleted_count == 0:
+        return jsonify({"error": "No 2FA set for this Gmail"}), 404
+    return jsonify({"message": "2FA removed"})
+
 @app.route('/api/push-status')
 def push_status():
     return jsonify({"enabled": ENABLE_PUSH})
@@ -1957,6 +2147,11 @@ def delete_account():
     result = accounts_collection.delete_one({"email": email_input})
     if result.deleted_count == 0:
         return jsonify({"error": "Account not found"}), 404
+    if totp_collection is not None:
+        try:
+            totp_collection.delete_one({"email": email_input.lower()})
+        except Exception as e:
+            print(f"2FA cleanup error: {type(e).__name__}")
     if prefs_collection is not None:
         try:
             prefs_collection.update_one({"_id": PINS_ID}, {"$pull": {"emails": _norm_email(email_input)}})
