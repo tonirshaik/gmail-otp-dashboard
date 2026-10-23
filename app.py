@@ -14,6 +14,7 @@ import socket
 import unicodedata
 import select
 import queue
+import uuid
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime, parseaddr
 from email.header import decode_header, make_header
@@ -86,6 +87,7 @@ security_collection = None
 prefs_collection = None
 push_collection = None
 totp_collection = None
+svc_collection = None
 
 if MONGO_URI:
     try:
@@ -97,6 +99,7 @@ if MONGO_URI:
         prefs_collection = db['prefs']         # pin-er moto preference (shob device-e eki)
         push_collection = db['push_subs']      # notification subscription (device-wise)
         totp_collection = db['totp']           # Gmail-wise 2FA (Authenticator) secret -- ENCRYPTED
+        svc_collection = db['totp_services']   # onno shob service-er (social media / website / app) 2FA secret -- ENCRYPTED
         print("MongoDB Connected Successfully!")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
@@ -2010,6 +2013,146 @@ def totp_delete():
     if r.deleted_count == 0:
         return jsonify({"error": "No 2FA set for this Gmail"}), 404
     return jsonify({"message": "2FA removed"})
+
+# ---------------- 2FA Services (social media / website / app -- Gmail chhara) ----------------
+def _svc_ready():
+    return _totp_fernet is not None and svc_collection is not None
+
+def _svc_clean(data):
+    name = re.sub(r"\s+", " ", str(data.get('name', ''))).strip()
+    label = re.sub(r"\s+", " ", str(data.get('label', ''))).strip()
+    if not name:
+        raise ValueError("Enter the service name")
+    if len(name) > 40:
+        raise ValueError("Service name is too long (max 40)")
+    if len(label) > 60:
+        raise ValueError("Account name is too long (max 60)")
+    return name, label
+
+def _svc_public(doc, now):
+    """Ekta service-er ekhonkar code. Secret kokhono ferot dey na."""
+    out = {"id": doc["sid"], "name": doc.get("name", ""), "label": doc.get("label", ""),
+           "period": doc.get("period", 30), "digits": doc.get("digits", 6)}
+    try:
+        plain = json.loads(_totp_fernet.decrypt(doc["secret_enc"].encode()).decode())
+        if plain.get("i") != doc["sid"]:                  # onno service-er secret ulte-palte rakha hole code dei na
+            raise ValueError("mismatch")
+        code, left = totp_at(plain["s"], doc["digits"], doc["period"], doc["algo"], now)
+        out.update({"code": code, "remaining": left})
+    except Exception:
+        out.update({"code": "", "remaining": out["period"], "unreadable": True})
+    return out
+
+@app.route('/api/svc/list')
+def svc_list():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not _svc_ready():
+        return _totp_off()
+    if not _rate_ok("svc-list", 120, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    try:
+        docs = list(svc_collection.find({}, {"_id": 0}))
+    except Exception as e:
+        print(f"[SVC] list: {type(e).__name__}")
+        return jsonify({"error": "Could not load services. Try again."}), 500
+    docs.sort(key=lambda d: (str(d.get("name", "")).lower(), d.get("created_at") or datetime.min))
+    now = time.time()
+    return _no_store(jsonify({"services": [_svc_public(d, now) for d in docs], "server_time": int(now)}))
+
+@app.route('/api/svc/add', methods=['POST'])
+def svc_add():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not _svc_ready():
+        return _totp_off()
+    if not _rate_ok("svc-add", 15, 60):
+        return jsonify({"error": "Too many tries. Wait a minute."}), 429
+    data = request.json or {}
+    bad = _settings_pw_check(data)                          # prottek bar settings password lagbe
+    if bad is not None:
+        return bad
+    try:
+        name, label = _svc_clean(data)
+        p = parse_totp_input(data.get('secret'))
+        totp_at(p["secret"], p["digits"], p["period"], p["algo"], time.time())
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        return jsonify({"error": "The secret key looks wrong"}), 400
+    try:
+        if svc_collection.count_documents({}) >= 500:
+            return jsonify({"error": "Too many services saved (max 500)"}), 400
+        sid = uuid.uuid4().hex
+        blob = _totp_fernet.encrypt(json.dumps({"i": sid, "s": p["secret"]}).encode()).decode()
+        now_dt = datetime.now()
+        svc_collection.insert_one({"sid": sid, "name": name, "label": label, "secret_enc": blob,
+                                   "digits": p["digits"], "period": p["period"], "algo": p["algo"],
+                                   "issuer": p["issuer"], "created_at": now_dt, "updated_at": now_dt})
+    except Exception as e:
+        print(f"[SVC] add: {type(e).__name__}")
+        return jsonify({"error": "Could not save. Try again."}), 500
+    return _no_store(jsonify({"message": "Service added", "id": sid}))
+
+@app.route('/api/svc/update', methods=['POST'])
+def svc_update():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not _svc_ready():
+        return _totp_off()
+    if not _rate_ok("svc-update", 20, 60):
+        return jsonify({"error": "Too many tries. Wait a minute."}), 429
+    data = request.json or {}
+    bad = _settings_pw_check(data)
+    if bad is not None:
+        return bad
+    sid = str(data.get('id', '')).strip()
+    try:
+        doc = svc_collection.find_one({"sid": sid}, {"_id": 0, "sid": 1})
+    except Exception as e:
+        print(f"[SVC] update-find: {type(e).__name__}")
+        return jsonify({"error": "Could not save. Try again."}), 500
+    if not doc:
+        return jsonify({"error": "Service not found"}), 404
+    new_secret = str(data.get('secret', '')).strip()
+    fields = {"updated_at": datetime.now()}
+    try:
+        fields["name"], fields["label"] = _svc_clean(data)
+        if new_secret:                                      # khali thakle purono key-i thake
+            p = parse_totp_input(new_secret)
+            totp_at(p["secret"], p["digits"], p["period"], p["algo"], time.time())
+            fields.update({"secret_enc": _totp_fernet.encrypt(json.dumps({"i": sid, "s": p["secret"]}).encode()).decode(),
+                           "digits": p["digits"], "period": p["period"], "algo": p["algo"], "issuer": p["issuer"]})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+    except Exception:
+        return jsonify({"error": "The secret key looks wrong"}), 400
+    try:
+        svc_collection.update_one({"sid": sid}, {"$set": fields})
+    except Exception as e:
+        print(f"[SVC] update: {type(e).__name__}")
+        return jsonify({"error": "Could not save. Try again."}), 500
+    return _no_store(jsonify({"message": "Service updated"}))
+
+@app.route('/api/svc/delete', methods=['POST'])
+def svc_delete():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if svc_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    data = request.json or {}
+    bad = _settings_pw_check(data)
+    if bad is not None:
+        return bad
+    sid = str(data.get('id', '')).strip()
+    try:
+        r = svc_collection.delete_one({"sid": sid})
+    except Exception as e:
+        print(f"[SVC] delete: {type(e).__name__}")
+        return jsonify({"error": "Could not remove. Try again."}), 500
+    if r.deleted_count == 0:
+        return jsonify({"error": "Service not found"}), 404
+    return jsonify({"message": "Service removed"})
 
 @app.route('/api/push-status')
 def push_status():
