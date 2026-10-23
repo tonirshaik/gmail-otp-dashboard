@@ -1097,6 +1097,10 @@
         .tfa-form { display: flex; flex-direction: column; gap: 10px; }
         .tfa-form-title { font-weight: 700; font-size: 14px; color: var(--text-main); }
         .tfa-steps { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
+        .tfa-qr-row { display: flex; gap: 8px; }
+        .tfa-qr-row .mail-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; }
+        .tfa-cam { display: flex; flex-direction: column; gap: 8px; }
+        .tfa-cam video { width: 100%; max-height: 260px; object-fit: cover; border-radius: 12px; background: #000; border: 1px solid var(--ctl-border); }
         .tfa-input { width: 100%; box-sizing: border-box; background: var(--ctl-bg); border: 1px solid var(--ctl-border); color: var(--text-main); border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 14px; }
         .tfa-input:focus { outline: none; border-color: var(--accent-cyan); }
         .tfa-err { color: #f87171; font-size: 12.5px; }
@@ -2787,6 +2791,7 @@
         let tfaEmail = '', tfaView = '', tfaReturnFocus = null;
         function tfaModalOpen() { return !tfaModal.classList.contains('hidden'); }
         function closeTfaModal() {
+            stopQrCamera();
             tfaModal.classList.add('hidden');
             tfaScroll.textContent = '';
             tfaEmail = ''; tfaView = '';
@@ -2800,6 +2805,7 @@
             title.appendChild(mkEl('i', tfaView === 'remove' ? 'fa-regular fa-trash-can' : tfaView === 'edit' ? 'fa-solid fa-pencil' : tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
             title.appendChild(document.createTextNode(tfaView === 'remove' ? ' Remove 2FA' : tfaView === 'edit' ? ' Change 2FA key' : tfaView === 'gmail' ? ' Gmail 2FA code' : ' 2FA Service'));
             document.getElementById('tfaAcct').textContent = tfaEmail || 'All Gmail accounts';
+            stopQrCamera();
             tfaScroll.textContent = '';
             if (tfaView === 'remove') { renderTfaRemove(); return; }
             if (tfaView === 'edit') { renderTfaEdit(); return; }
@@ -2843,7 +2849,7 @@
             try {
                 const u = await tfaApi('/api/settings-unlock', { password: pw });      // password sob shomoy lagbe
                 if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
-                const r = await tfaApi('/api/totp/delete', { email });
+                const r = await tfaApi('/api/totp/delete', { email, password: pw });   // server nijeo password jachai kore
                 if (r.status === 401) return;
                 if (!r.ok && r.status !== 404) { if (tfaEmail === email) fail(r.data.error || 'Could not remove. Try again.'); return; }
                 pwEl.value = '';
@@ -2879,7 +2885,8 @@
             save.addEventListener('click', () => saveTfaEdit(secret, pw, err, save));
             [secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
             row.appendChild(save); row.appendChild(cancel);
-            [secret, pwRow, err, row].forEach(n => form.appendChild(n));
+            const qr = tfaQrTools(secret, err);
+            [qr, secret, pwRow, err, row].forEach(n => form.appendChild(n));
             tfaScroll.appendChild(form);
             setTimeout(() => { try { secret.focus(); } catch (e) {} }, 50);
         }
@@ -2893,13 +2900,7 @@
             try {
                 const u = await tfaApi('/api/settings-unlock', { password: pw });
                 if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
-                let r = await tfaApi('/api/totp/add', { email, secret });
-                if (r.status === 401) return;
-                if (!r.ok && r.status === 409) {                    // purono key ache -> bodle felo
-                    const d = await tfaApi('/api/totp/delete', { email });
-                    if (d.status === 401) return;
-                    if (d.ok || d.status === 404) r = await tfaApi('/api/totp/add', { email, secret });
-                }
+                const r = await tfaApi('/api/totp/add', { email, secret, password: pw });      // purono key bodlate server password chay
                 if (r.status === 401) return;
                 if (!r.ok) { if (tfaEmail === email) fail(r.data.error || 'Could not save. Try again.'); return; }
                 secretEl.value = ''; pwEl.value = '';
@@ -2915,6 +2916,123 @@
                 btn.disabled = false;
             }
         }
+        // ---------- QR: chobi upload / camera scan ----------
+        let qrStream = null, qrRaf = 0;
+        function stopQrCamera() {
+            if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = 0; }
+            if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
+            const b = document.getElementById('tfaCamBox');
+            if (b) b.remove();
+        }
+        function loadJsQR() {
+            if (window.jsQR) return Promise.resolve(window.jsQR);
+            return new Promise((res, rej) => {
+                const sc = document.createElement('script');
+                sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/jsQR/1.4.0/jsQR.min.js';
+                sc.onload = () => window.jsQR ? res(window.jsQR) : rej(new Error('QR reader failed to load'));
+                sc.onerror = () => rej(new Error('Could not load the QR reader. Check your internet.'));
+                document.head.appendChild(sc);
+            });
+        }
+        function qrToInput(text, secretEl, errEl) {
+            text = String(text || '').trim();
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); return false; };
+            if (/^otpauth-migration:\/\//i.test(text)) return fail('This is a Google Authenticator export QR. Use the original setup QR from Google instead.');
+            if (!/^otpauth:\/\/totp\//i.test(text) && !/^[A-Za-z2-7\s-]{16,}=*$/.test(text)) return fail('This QR is not a 2FA (TOTP) setup code.');
+            secretEl.value = text;
+            errEl.classList.add('hidden');
+            showToast('QR read. Now enter the password and save.');
+            return true;
+        }
+        async function qrDecodeFile(file) {
+            const jsQR = await loadJsQR();
+            let src, w0, h0, revoke = null;
+            try { src = await createImageBitmap(file); w0 = src.width; h0 = src.height; }
+            catch (e) {
+                const url = URL.createObjectURL(file); revoke = url;
+                src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('Could not open this image')); im.src = url; });
+                w0 = src.naturalWidth; h0 = src.naturalHeight;
+            }
+            try {
+                const cv = document.createElement('canvas');
+                const ctx = cv.getContext('2d', { willReadFrequently: true });
+                for (const maxSide of [1000, 600, 1600]) {            // bivinno size-e cheshta
+                    const sc = Math.min(1, maxSide / Math.max(w0, h0));
+                    cv.width = Math.max(1, Math.round(w0 * sc)); cv.height = Math.max(1, Math.round(h0 * sc));
+                    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+                    ctx.drawImage(src, 0, 0, cv.width, cv.height);
+                    const im = ctx.getImageData(0, 0, cv.width, cv.height);
+                    const r = jsQR(im.data, im.width, im.height, { inversionAttempts: 'attemptBoth' });
+                    if (r && r.data) return r.data;
+                }
+                return null;
+            } finally { if (revoke) URL.revokeObjectURL(revoke); }
+        }
+        async function startQrCamera(secretEl, errEl, host) {
+            stopQrCamera();
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            errEl.classList.add('hidden');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { fail('Camera works only on HTTPS (or localhost). Upload a QR image instead.'); return; }
+            try {
+                const jsQR = await loadJsQR();
+                qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+                const box = mkEl('div', 'tfa-cam'); box.id = 'tfaCamBox';
+                const v = document.createElement('video');
+                v.setAttribute('playsinline', ''); v.muted = true; v.srcObject = qrStream;
+                const stop = mkEl('button', 'mail-btn', 'Stop camera'); stop.type = 'button';
+                stop.addEventListener('click', stopQrCamera);
+                box.appendChild(v); box.appendChild(stop);
+                host.appendChild(box);
+                await v.play();
+                const cv = document.createElement('canvas');
+                const ctx = cv.getContext('2d', { willReadFrequently: true });
+                const tick = () => {
+                    if (!qrStream) return;
+                    if (v.readyState >= 2 && v.videoWidth) {
+                        const sc = Math.min(1, 640 / v.videoWidth);
+                        cv.width = Math.round(v.videoWidth * sc); cv.height = Math.round(v.videoHeight * sc);
+                        ctx.drawImage(v, 0, 0, cv.width, cv.height);
+                        const im = ctx.getImageData(0, 0, cv.width, cv.height);
+                        const r = jsQR(im.data, im.width, im.height, { inversionAttempts: 'dontInvert' });
+                        if (r && r.data) { stopQrCamera(); qrToInput(r.data, secretEl, errEl); return; }
+                    }
+                    qrRaf = requestAnimationFrame(tick);
+                };
+                qrRaf = requestAnimationFrame(tick);
+            } catch (e) {
+                stopQrCamera();
+                fail(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'Camera permission was denied.' :
+                     e && e.name === 'NotFoundError' ? 'No camera found on this device.' : (e && e.message) || 'Could not start the camera.');
+            }
+        }
+        function tfaQrTools(secretEl, errEl) {
+            const wrap = mkEl('div');
+            const row = mkEl('div', 'tfa-qr-row');
+            const up = mkEl('button', 'mail-btn'); up.type = 'button';
+            up.appendChild(mkEl('i', 'fa-regular fa-image')); up.appendChild(document.createTextNode(' Upload QR'));
+            const cam = mkEl('button', 'mail-btn'); cam.type = 'button';
+            cam.appendChild(mkEl('i', 'fa-solid fa-camera')); cam.appendChild(document.createTextNode(' Scan QR'));
+            const file = document.createElement('input');
+            file.type = 'file'; file.accept = 'image/*'; file.className = 'hidden';
+            up.addEventListener('click', () => { stopQrCamera(); file.value = ''; file.click(); });
+            file.addEventListener('change', async () => {
+                const f = file.files && file.files[0];
+                if (!f) return;
+                errEl.classList.add('hidden');
+                up.disabled = true;
+                try {
+                    const text = await qrDecodeFile(f);
+                    if (!text) { errEl.textContent = 'No QR code found in this image. Try a clearer or cropped screenshot.'; errEl.classList.remove('hidden'); }
+                    else qrToInput(text, secretEl, errEl);
+                } catch (e) {
+                    errEl.textContent = (e && e.message) || 'Could not read this image.'; errEl.classList.remove('hidden');
+                } finally { up.disabled = false; }
+            });
+            cam.addEventListener('click', () => startQrCamera(secretEl, errEl, wrap));
+            row.appendChild(up); row.appendChild(cam);
+            wrap.appendChild(row); wrap.appendChild(file);
+            return wrap;
+        }
         function tfaInput(type, ph, id) {
             const el = document.createElement('input');
             el.type = type; el.placeholder = ph; el.id = id; el.className = 'tfa-input';
@@ -2928,7 +3046,7 @@
             const steps = mkEl('ol', 'tfa-steps');
             ['Open Google Account \u2192 Security \u2192 2-Step Verification \u2192 Authenticator app \u2192 Set up.',
              'Tap "Can\u2019t scan it?" and copy the secret key (or paste the otpauth:// link).',
-             'Paste it below and save. Then type the 6-digit code shown here into Google to finish.'
+             'Paste it below, or upload / scan the QR code, then save. Then type the 6-digit code shown here into Google to finish.'
             ].forEach(t => steps.appendChild(mkEl('li', null, t)));
             form.appendChild(steps);
             const secret = tfaInput('text', 'Secret key or otpauth:// link', 'tfaSecretInput');
@@ -2944,7 +3062,8 @@
             const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
             save.addEventListener('click', () => saveTfa(secret, pw, pwRow, fail, err, save));
             [secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
-            form.appendChild(secret); form.appendChild(pwRow); form.appendChild(err); form.appendChild(save);
+            const qr = tfaQrTools(secret, err);
+            form.appendChild(qr); form.appendChild(secret); form.appendChild(pwRow); form.appendChild(err); form.appendChild(save);
             tfaScroll.appendChild(form);
             setTimeout(() => { try { secret.focus(); } catch (e) {} }, 50);
         }
@@ -3020,12 +3139,14 @@
             const res = await fetch(url, payload === undefined ? {} : {
                 method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
             });
-            if (res.status === 401) {
+            const data = await res.json().catch(() => ({}));
+            // settings-unlock-e vul password dile server 401 dey (\"Incorrect password\") -- eta logout na, shudhu vul password.
+            const wrongPw = (url === '/api/settings-unlock' || url === '/api/totp/delete' || url === '/api/totp/add') && data.error && data.error !== 'Unauthorized Access';
+            if (res.status === 401 && !wrongPw) {
                 closeTfaModal(); tfaActive.clear(); stopPush(); stopWaiting(false);
                 dashboardSection.classList.add('hidden');
                 loginSection.classList.remove('hidden');
             }
-            const data = await res.json().catch(() => ({}));
             return { ok: res.ok, status: res.status, data };
         }
         function rerenderCards() { renderHome(); if (accountsModalOpen()) renderAll(); }
