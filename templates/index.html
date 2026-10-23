@@ -1080,8 +1080,17 @@
         .card-2fa:hover, .card-2fa:focus-visible { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.12); outline: none; }
         @media (hover: none), (pointer: coarse) { .card-2fa { min-width: 40px; min-height: 40px; font-size: 16px; padding: 8px; } }
         @media (max-width: 480px) { .otp-email .card-2fa { min-width: 34px; min-height: 34px; padding: 6px; } }
-        .fchip.tfa-svc { margin-left: auto; white-space: nowrap; }
-        .fchip.tfa-svc + .fchip.sort { margin-left: 0; }
+        .acc-top { display: flex; gap: 8px; align-items: stretch; margin-bottom: 12px; }
+        .acc-top .acc-search { flex: 1; min-width: 0; margin-bottom: 0; }
+        .svc-open-btn {
+            flex: none; display: inline-flex; align-items: center; gap: 7px; font: inherit; font-size: 13px; font-weight: 600;
+            background: rgba(6, 182, 212, 0.12); border: 1px solid rgba(6, 182, 212, 0.4); color: var(--accent-cyan);
+            border-radius: 12px; padding: 0 14px; cursor: pointer; white-space: nowrap;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
+        .svc-open-btn:hover, .svc-open-btn:focus-visible { background: rgba(6, 182, 212, 0.2); outline: none; }
+        @media (max-width: 480px) { .svc-open-btn { padding: 0 12px; } .svc-open-btn .svc-more { display: none; } }
+        :root[data-theme="light"] .svc-open-btn { color: #0369a1; }
         .card-2fa.set { color: var(--accent-cyan); }
         .card-2fa.on { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.18); }
         .tfa-box { margin: 4px 0 8px; }
@@ -1272,10 +1281,13 @@
                 <span><i class="fa-solid fa-envelope"></i> All Gmail Accounts (<span id="allCount">0</span>)</span>
                 <button type="button" class="accounts-close" id="accountsCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="acc-search" id="accSearchWrap">
-                <i class="fa-solid fa-magnifying-glass"></i>
-                <input type="text" id="accSearchInput" placeholder="Search Gmail by name..." autocomplete="off" spellcheck="false">
-                <button type="button" class="search-clear" id="accSearchClear" title="Clear"><i class="fa-solid fa-xmark"></i></button>
+            <div class="acc-top">
+                <div class="acc-search" id="accSearchWrap">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <input type="text" id="accSearchInput" placeholder="Search Gmail by name..." autocomplete="off" spellcheck="false">
+                    <button type="button" class="search-clear" id="accSearchClear" title="Clear"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <button type="button" class="svc-open-btn" id="tfaServiceBtn" title="2FA services (social media, websites and more)" aria-label="2FA Service"><i class="fa-solid fa-layer-group"></i><span>2FA<span class="svc-more"> Service</span></span></button>
             </div>
             <div class="filter-row" id="filterRow" role="group" aria-label="Filter accounts">
                 <button type="button" class="fchip on" data-filter="all" aria-pressed="true">All <b>0</b></button>
@@ -1283,7 +1295,6 @@
                 <button type="button" class="fchip" data-filter="unused" aria-pressed="false">Unused <b>0</b></button>
                 <button type="button" class="fchip" data-filter="errors" aria-pressed="false">Errors <b>0</b></button>
                 <button type="button" class="fchip" data-filter="pinned" aria-pressed="false">Pinned <b>0</b></button>
-                <button type="button" class="fchip tfa-svc" id="tfaServiceBtn" title="2FA services (social media, websites and more)"><i class="fa-solid fa-layer-group"></i> <span>2FA Service</span></button>
                 <button type="button" class="fchip sort" id="sortBtn" title="Change sort order"><i class="fa-solid fa-arrow-down-wide-short"></i> <span>Newest</span></button>
             </div>
             <div id="allContainer"></div>
@@ -4179,10 +4190,10 @@
             if (sp) sp.textContent = accSort === 'az' ? 'A-Z' : 'Newest';
         }
         function resetAccFilters() { accFilter = 'all'; accSort = 'recent'; }
+        document.getElementById('tfaServiceBtn').addEventListener('click', (e) => openTfaModal('services', '', e.currentTarget));
         document.getElementById('filterRow').addEventListener('click', (e) => {
             const c = e.target.closest('.fchip');
             if (!c) return;
-            if (c.id === 'tfaServiceBtn') { openTfaModal('services', '', c); return; }
             if (c.id === 'sortBtn') accSort = accSort === 'az' ? 'recent' : 'az';
             else accFilter = c.dataset.filter;
             renderAll();
