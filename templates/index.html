@@ -1072,6 +1072,9 @@
         .tfa-time { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
         .tfa-box.warn .tfa-label, .tfa-box.warn .tfa-time { color: var(--accent-red); }
         .tfa-box.warn .ring-fg { stroke: var(--accent-red); }
+        .tfa-remove { margin-left: auto; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 4px 8px; border-radius: 8px; touch-action: manipulation; }
+        .tfa-remove:hover, .tfa-remove:focus-visible { color: #f87171; background: rgba(239, 68, 68, 0.12); outline: none; }
+        @media (hover: none), (pointer: coarse) { .tfa-remove { min-width: 38px; min-height: 38px; } }
         .tfa-wait { opacity: 0.6; letter-spacing: 6px; }
         .tfa-form { display: flex; flex-direction: column; gap: 10px; }
         .tfa-form-title { font-weight: 700; font-size: 14px; color: var(--text-main); }
@@ -2767,15 +2770,68 @@
         function renderTfa() {
             const title = document.getElementById('tfaTitle');
             title.textContent = '';
-            title.appendChild(mkEl('i', tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
-            title.appendChild(document.createTextNode(tfaView === 'gmail' ? ' Gmail 2FA code' : ' 2FA Service'));
+            title.appendChild(mkEl('i', tfaView === 'remove' ? 'fa-regular fa-trash-can' : tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
+            title.appendChild(document.createTextNode(tfaView === 'remove' ? ' Remove 2FA' : tfaView === 'gmail' ? ' Gmail 2FA code' : ' 2FA Service'));
             document.getElementById('tfaAcct').textContent = tfaEmail || 'All Gmail accounts';
             tfaScroll.textContent = '';
+            if (tfaView === 'remove') { renderTfaRemove(); return; }
             if (tfaView === 'gmail') { renderTfaForm(); return; }
             const box = mkEl('div', 'tfa-empty');
             box.appendChild(mkEl('i', 'fa-solid fa-layer-group'));
             box.appendChild(document.createTextNode('Social media, websites and other services will be listed here, each with its 2FA code.'));
             tfaScroll.appendChild(box);
+        }
+        function renderTfaRemove() {
+            const box = mkEl('div', 'tfa-form');
+            box.appendChild(mkEl('div', 'tfa-form-title', 'Remove the 2FA key of this Gmail?'));
+            box.appendChild(mkEl('div', 'tfa-steps', 'This only deletes the key from this dashboard. Google still has the Authenticator turned on for this account, so make sure you can sign in another way (your phone app or backup codes) before you remove it.'));
+            const pwRow = mkEl('div', 'hidden');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Settings are locked. Enter the settings password.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const row = mkEl('div', 'mail-lb-row');
+            const del = mkEl('button', 'mail-btn danger', 'Remove');
+            del.type = 'button';
+            const cancel = mkEl('button', 'mail-btn', 'Cancel');
+            cancel.type = 'button';
+            cancel.addEventListener('click', closeTfaModal);
+            del.addEventListener('click', () => removeTfa(pw, pwRow, err, del));
+            pw.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); del.click(); } });
+            row.appendChild(del); row.appendChild(cancel);
+            [pwRow, err, row].forEach(n => box.appendChild(n));
+            tfaScroll.appendChild(box);
+            setTimeout(() => { try { cancel.focus(); } catch (e) {} }, 50);       // vul-kore Enter chaple "Cancel"-e jay, "Remove"-e na
+        }
+        async function removeTfa(pwEl, pwRow, errEl, btn) {
+            errEl.classList.add('hidden');
+            const email = tfaEmail, key = tfaKey(email);
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            btn.disabled = true;
+            try {
+                let r = await tfaApi('/api/totp/delete', { email });
+                if (r.status === 403) {                          // settings locked -> password
+                    pwRow.classList.remove('hidden');
+                    const pw = pwEl.value.trim();
+                    if (!pw) { pwEl.focus(); return; }
+                    const u = await tfaApi('/api/settings-unlock', { password: pw });
+                    if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
+                    r = await tfaApi('/api/totp/delete', { email });
+                }
+                if (r.status === 401) return;
+                if (!r.ok && r.status !== 404) { if (tfaEmail === email) fail(r.data.error || 'Could not remove. Try again.'); return; }
+                tfaSet.delete(key);
+                tfaActive.delete(key);
+                if (tfaEmail === email) closeTfaModal();
+                rerenderCards();
+                showToast('2FA key removed');
+            } catch (err) {
+                fail('Could not reach the server. Try again.');
+            } finally {
+                btn.disabled = false;
+            }
         }
         function tfaInput(type, ph, id) {
             const el = document.createElement('input');
@@ -2869,6 +2925,8 @@
         document.addEventListener('click', (e) => {
             const b = e.target.closest('.card-2fa');
             if (b) { e.preventDefault(); onTfaButton(b); return; }
+            const rb = e.target.closest('.tfa-remove');
+            if (rb) { e.preventDefault(); e.stopPropagation(); openTfaModal('remove', rb.dataset.tfaRemove, rb); return; }
             const cb = e.target.closest('.tfa-code[data-tfa-email]');
             if (cb) { tfaCopy(cb); return; }
             if (e.target === tfaModal) closeTfaModal();
@@ -2908,7 +2966,7 @@
             return `<div class="tfa-box" data-tfa-email="${escAttr(email)}">
                 <div class="tfa-label"><i class="fa-solid fa-shield-halved"></i> 2FA code</div>
                 <div class="otp-code-box has-cells tfa-code" role="button" tabindex="0" data-tfa-email="${escAttr(email)}" data-code="${escAttr(s.code || '')}" title="Click to copy" aria-label="2FA code. Press to copy">${s.code ? codeCellsHTML(s.code, false) : '<span class="tfa-wait">&bull;&bull;&bull;</span>'}</div>
-                <div class="tfa-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg> <span class="tfa-left"></span></div>
+                <div class="tfa-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg> <span class="tfa-left"></span><button type="button" class="tfa-remove" data-tfa-remove="${escAttr(email)}" title="Remove the 2FA key of this Gmail" aria-label="Remove the 2FA key of ${escAttr(email)}"><i class="fa-regular fa-trash-can"></i></button></div>
             </div>`;
         }
         function paintTfa() {
