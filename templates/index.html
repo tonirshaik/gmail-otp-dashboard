@@ -394,6 +394,24 @@
             opacity: 0;
             transition: opacity 0.15s ease;
         }
+        /* ---- swipe from right: 2FA edit + delete ---- */
+        .swipe-tfa {
+            position: absolute;
+            top: 0; right: 0; bottom: 0;
+            display: flex;
+            opacity: 0;
+            transition: opacity 0.15s ease;
+        }
+        .swipe-tfa button {
+            width: 68px;
+            border: none;
+            color: #fff;
+            font-size: 18px;
+            cursor: pointer;
+        }
+        .swipe-tfa .swipe-tfa-edit { background: rgba(6, 182, 212, 0.92); }
+        .swipe-tfa .swipe-tfa-del { background: rgba(239, 68, 68, 0.92); }
+        .otp-container .otp-swipe { margin-bottom: 12px; }
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -853,7 +871,7 @@
                 max-height: none; overflow: visible; padding: 0;
                 display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-content: start;
             }
-            .otp-container .otp-card, .otp-container .skeleton-card { margin-bottom: 0; }
+            .otp-container .otp-card, .otp-container .skeleton-card, .otp-container .otp-swipe { margin-bottom: 0; }
             .otp-container > .empty-state, .otp-container > .acc-section { grid-column: 1 / -1; }
             .accounts-box { max-width: 780px; }
             #allContainer { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-content: start; }
@@ -1903,10 +1921,19 @@
                     ${tfaOn ? '' : expiryRow}
                     <div class="otp-time">${infoLine}</div>
                 </div>`;
-            if (!opts.deletable) return card;
+            const tfaActions = tfaOn
+                ? `<div class="swipe-tfa">
+                        <button type="button" class="swipe-tfa-edit" data-email="${escAttr(item.email)}" title="Set a new 2FA key" aria-label="Set a new 2FA key for ${escAttr(item.email)}"><i class="fa-solid fa-pencil"></i></button>
+                        <button type="button" class="swipe-tfa-del" data-email="${escAttr(item.email)}" title="Remove the 2FA key" aria-label="Remove the 2FA key of ${escAttr(item.email)}"><i class="fa-regular fa-trash-can"></i></button>
+                    </div>`
+                : '';
+            if (!opts.deletable) {
+                return tfaOn ? `<div class="otp-swipe tfa">${tfaActions}${card}</div>` : card;
+            }
             return `
-                <div class="otp-swipe">
+                <div class="otp-swipe ${tfaOn ? 'tfa' : ''}">
                     <button type="button" class="swipe-delete" data-email="${escAttr(item.email)}" title="Remove this Gmail"><i class="fa-solid fa-trash"></i></button>
+                    ${tfaActions}
                     ${card}
                 </div>`;
         }
@@ -2770,11 +2797,12 @@
         function renderTfa() {
             const title = document.getElementById('tfaTitle');
             title.textContent = '';
-            title.appendChild(mkEl('i', tfaView === 'remove' ? 'fa-regular fa-trash-can' : tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
-            title.appendChild(document.createTextNode(tfaView === 'remove' ? ' Remove 2FA' : tfaView === 'gmail' ? ' Gmail 2FA code' : ' 2FA Service'));
+            title.appendChild(mkEl('i', tfaView === 'remove' ? 'fa-regular fa-trash-can' : tfaView === 'edit' ? 'fa-solid fa-pencil' : tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
+            title.appendChild(document.createTextNode(tfaView === 'remove' ? ' Remove 2FA' : tfaView === 'edit' ? ' Change 2FA key' : tfaView === 'gmail' ? ' Gmail 2FA code' : ' 2FA Service'));
             document.getElementById('tfaAcct').textContent = tfaEmail || 'All Gmail accounts';
             tfaScroll.textContent = '';
             if (tfaView === 'remove') { renderTfaRemove(); return; }
+            if (tfaView === 'edit') { renderTfaEdit(); return; }
             if (tfaView === 'gmail') { renderTfaForm(); return; }
             const box = mkEl('div', 'tfa-empty');
             box.appendChild(mkEl('i', 'fa-solid fa-layer-group'));
@@ -2785,8 +2813,8 @@
             const box = mkEl('div', 'tfa-form');
             box.appendChild(mkEl('div', 'tfa-form-title', 'Remove the 2FA key of this Gmail?'));
             box.appendChild(mkEl('div', 'tfa-steps', 'This only deletes the key from this dashboard. Google still has the Authenticator turned on for this account, so make sure you can sign in another way (your phone app or backup codes) before you remove it.'));
-            const pwRow = mkEl('div', 'hidden');
-            pwRow.appendChild(mkEl('div', 'mail-note', 'Settings are locked. Enter the settings password.'));
+            const pwRow = mkEl('div');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to remove it.'));
             const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
             pw.autocomplete = 'current-password';
             pwRow.appendChild(pw);
@@ -2803,30 +2831,84 @@
             row.appendChild(del); row.appendChild(cancel);
             [pwRow, err, row].forEach(n => box.appendChild(n));
             tfaScroll.appendChild(box);
-            setTimeout(() => { try { cancel.focus(); } catch (e) {} }, 50);       // vul-kore Enter chaple "Cancel"-e jay, "Remove"-e na
+            setTimeout(() => { try { pw.focus(); } catch (e) {} }, 50);
         }
         async function removeTfa(pwEl, pwRow, errEl, btn) {
             errEl.classList.add('hidden');
             const email = tfaEmail, key = tfaKey(email);
             const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            const pw = pwEl.value.trim();
+            if (!pw) { fail('Enter the settings password'); try { pwEl.focus(); } catch (e) {} return; }
             btn.disabled = true;
             try {
-                let r = await tfaApi('/api/totp/delete', { email });
-                if (r.status === 403) {                          // settings locked -> password
-                    pwRow.classList.remove('hidden');
-                    const pw = pwEl.value.trim();
-                    if (!pw) { pwEl.focus(); return; }
-                    const u = await tfaApi('/api/settings-unlock', { password: pw });
-                    if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
-                    r = await tfaApi('/api/totp/delete', { email });
-                }
+                const u = await tfaApi('/api/settings-unlock', { password: pw });      // password sob shomoy lagbe
+                if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
+                const r = await tfaApi('/api/totp/delete', { email });
                 if (r.status === 401) return;
                 if (!r.ok && r.status !== 404) { if (tfaEmail === email) fail(r.data.error || 'Could not remove. Try again.'); return; }
+                pwEl.value = '';
                 tfaSet.delete(key);
                 tfaActive.delete(key);
                 if (tfaEmail === email) closeTfaModal();
                 rerenderCards();
                 showToast('2FA key removed');
+            } catch (err) {
+                fail('Could not reach the server. Try again.');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        function renderTfaEdit() {
+            const form = mkEl('div', 'tfa-form');
+            form.appendChild(mkEl('div', 'tfa-form-title', 'Set a new Authenticator key for this Gmail'));
+            form.appendChild(mkEl('div', 'tfa-steps', 'Paste the new secret key (or the otpauth:// link). It replaces the old key. The settings password is needed to save.'));
+            const secret = tfaInput('text', 'New secret key or otpauth:// link', 'tfaSecretInput');
+            const pwRow = mkEl('div');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to save.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const row = mkEl('div', 'mail-lb-row');
+            const save = mkEl('button', 'mail-btn primary', 'Save');
+            save.type = 'button';
+            const cancel = mkEl('button', 'mail-btn', 'Cancel');
+            cancel.type = 'button';
+            cancel.addEventListener('click', closeTfaModal);
+            save.addEventListener('click', () => saveTfaEdit(secret, pw, err, save));
+            [secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
+            row.appendChild(save); row.appendChild(cancel);
+            [secret, pwRow, err, row].forEach(n => form.appendChild(n));
+            tfaScroll.appendChild(form);
+            setTimeout(() => { try { secret.focus(); } catch (e) {} }, 50);
+        }
+        async function saveTfaEdit(secretEl, pwEl, errEl, btn) {
+            errEl.classList.add('hidden');
+            const email = tfaEmail, secret = secretEl.value.trim(), pw = pwEl.value.trim();
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            if (!secret) { fail('Paste the new secret key or the otpauth:// link'); return; }
+            if (!pw) { fail('Enter the settings password'); try { pwEl.focus(); } catch (e) {} return; }
+            btn.disabled = true;
+            try {
+                const u = await tfaApi('/api/settings-unlock', { password: pw });
+                if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
+                let r = await tfaApi('/api/totp/add', { email, secret });
+                if (r.status === 401) return;
+                if (!r.ok && r.status === 409) {                    // purono key ache -> bodle felo
+                    const d = await tfaApi('/api/totp/delete', { email });
+                    if (d.status === 401) return;
+                    if (d.ok || d.status === 404) r = await tfaApi('/api/totp/add', { email, secret });
+                }
+                if (r.status === 401) return;
+                if (!r.ok) { if (tfaEmail === email) fail(r.data.error || 'Could not save. Try again.'); return; }
+                secretEl.value = ''; pwEl.value = '';
+                tfaEnabled = true;
+                tfaSet.add(tfaKey(email));
+                tfaActive.set(tfaKey(email), { code: r.data.code, period: r.data.period || 30, endAt: Date.now() + r.data.remaining * 1000, hideAt: Date.now() + TFA_SHOW_MS, busy: false });
+                if (tfaEmail === email) closeTfaModal();
+                rerenderCards();
+                showToast('2FA key updated');
             } catch (err) {
                 fail('Could not reach the server. Try again.');
             } finally {
@@ -2925,8 +3007,6 @@
         document.addEventListener('click', (e) => {
             const b = e.target.closest('.card-2fa');
             if (b) { e.preventDefault(); onTfaButton(b); return; }
-            const rb = e.target.closest('.tfa-remove');
-            if (rb) { e.preventDefault(); e.stopPropagation(); openTfaModal('remove', rb.dataset.tfaRemove, rb); return; }
             const cb = e.target.closest('.tfa-code[data-tfa-email]');
             if (cb) { tfaCopy(cb); return; }
             if (e.target === tfaModal) closeTfaModal();
@@ -2966,7 +3046,7 @@
             return `<div class="tfa-box" data-tfa-email="${escAttr(email)}">
                 <div class="tfa-label"><i class="fa-solid fa-shield-halved"></i> 2FA code</div>
                 <div class="otp-code-box has-cells tfa-code" role="button" tabindex="0" data-tfa-email="${escAttr(email)}" data-code="${escAttr(s.code || '')}" title="Click to copy" aria-label="2FA code. Press to copy">${s.code ? codeCellsHTML(s.code, false) : '<span class="tfa-wait">&bull;&bull;&bull;</span>'}</div>
-                <div class="tfa-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg> <span class="tfa-left"></span><button type="button" class="tfa-remove" data-tfa-remove="${escAttr(email)}" title="Remove the 2FA key of this Gmail" aria-label="Remove the 2FA key of ${escAttr(email)}"><i class="fa-regular fa-trash-can"></i></button></div>
+                <div class="tfa-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg> <span class="tfa-left"></span></div>
             </div>`;
         }
         function paintTfa() {
@@ -3274,53 +3354,106 @@
             }
         });
 
-        // ---------- Swipe to delete ----------
-        const OPEN_W = 76;
+        // ---------- Swipe: dan dike = Gmail delete (age-er moto), bam dike = 2FA edit/delete ----------
+        const OPEN_W = 76;       // Gmail delete button
+        const TFA_W = 136;       // 2FA edit + delete buttons
         let swipe = null;
         let openWrap = null;
 
-        function setSwipe(wrap, open) {
+        function setSwipe(wrap, open) {            // open: false | 'del' | 'tfa'
+            if (open === true) open = 'del';
             const card = wrap.querySelector('.otp-card');
-            const btn = wrap.querySelector('.swipe-delete');
-            card.style.transform = open ? `translateX(${OPEN_W}px)` : '';
-            btn.style.opacity = open ? '1' : '0';
-            wrap.classList.toggle('open', open);
+            const del = wrap.querySelector('.swipe-delete');
+            const tfa = wrap.querySelector('.swipe-tfa');
+            card.style.transform = open === 'del' ? `translateX(${OPEN_W}px)` : open === 'tfa' ? `translateX(${-TFA_W}px)` : '';
+            if (del) del.style.opacity = open === 'del' ? '1' : '0';
+            if (tfa) tfa.style.opacity = open === 'tfa' ? '1' : '0';
+            wrap.classList.toggle('open', open === 'del');
+            wrap.classList.toggle('open-tfa', open === 'tfa');
             openWrap = open ? wrap : (openWrap === wrap ? null : openWrap);
         }
+        function wrapIsOpen(wrap) { return wrap.classList.contains('open') || wrap.classList.contains('open-tfa'); }
 
-        allContainer.addEventListener('pointerdown', (e) => {
-            // Button (refresh / pin / used) chaple swipe shuru hobe na -- nahole phone-e angul-er
-            // halka nora-te pointer capture hoy ar click button-e pouchay na (refresh kaj korto na).
-            if (e.target.closest('button')) return;
-            const card = e.target.closest('.otp-card');
-            if (!card) return;
-            const wrap = card.parentElement;
-            if (openWrap && openWrap !== wrap) setSwipe(openWrap, false);
-            swipe = {
-                wrap, card, id: e.pointerId,
-                startX: e.clientX, startY: e.clientY,
-                base: wrap.classList.contains('open') ? OPEN_W : 0,
-                horizontal: null, x: 0
-            };
-        });
+        function attachSwipe(container) {
+            container.addEventListener('pointerdown', (e) => {
+                // Button (refresh / pin / used) chaple swipe shuru hobe na -- nahole phone-e angul-er
+                // halka nora-te pointer capture hoy ar click button-e pouchay na (refresh kaj korto na).
+                if (e.target.closest('button')) return;
+                const card = e.target.closest('.otp-card');
+                if (!card) return;
+                const wrap = card.parentElement;
+                if (!wrap || !wrap.classList.contains('otp-swipe')) return;
+                if (openWrap && openWrap !== wrap) setSwipe(openWrap, false);
+                swipe = {
+                    wrap, card, id: e.pointerId,
+                    startX: e.clientX, startY: e.clientY,
+                    base: wrap.classList.contains('open') ? OPEN_W : wrap.classList.contains('open-tfa') ? -TFA_W : 0,
+                    minX: wrap.querySelector('.swipe-tfa') ? -(TFA_W + 20) : 0,
+                    maxX: wrap.querySelector('.swipe-delete') ? OPEN_W + 20 : 0,
+                    horizontal: null, x: 0
+                };
+            });
 
-        allContainer.addEventListener('pointermove', (e) => {
-            if (!swipe || e.pointerId !== swipe.id) return;
-            const dx = e.clientX - swipe.startX;
-            const dy = e.clientY - swipe.startY;
-            if (swipe.horizontal === null) {
-                if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
-                swipe.horizontal = Math.abs(dx) > Math.abs(dy);
-                if (swipe.horizontal) {
-                    try { swipe.card.setPointerCapture(e.pointerId); } catch (err) {}
-                    swipe.card.style.transition = 'none';
+            container.addEventListener('pointermove', (e) => {
+                if (!swipe || e.pointerId !== swipe.id) return;
+                const dx = e.clientX - swipe.startX;
+                const dy = e.clientY - swipe.startY;
+                if (swipe.horizontal === null) {
+                    if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+                    swipe.horizontal = Math.abs(dx) > Math.abs(dy);
+                    if (swipe.horizontal) {
+                        try { swipe.card.setPointerCapture(e.pointerId); } catch (err) {}
+                        swipe.card.style.transition = 'none';
+                    }
                 }
-            }
-            if (!swipe.horizontal) return;
-            swipe.x = Math.max(0, Math.min(OPEN_W + 20, swipe.base + dx));
-            swipe.card.style.transform = `translateX(${swipe.x}px)`;
-            swipe.wrap.querySelector('.swipe-delete').style.opacity = Math.min(swipe.x / 50, 1);
-        });
+                if (!swipe.horizontal) return;
+                swipe.x = Math.max(swipe.minX, Math.min(swipe.maxX, swipe.base + dx));
+                swipe.card.style.transform = `translateX(${swipe.x}px)`;
+                const del = swipe.wrap.querySelector('.swipe-delete');
+                const tfa = swipe.wrap.querySelector('.swipe-tfa');
+                if (del) del.style.opacity = Math.max(0, Math.min(swipe.x / 50, 1));
+                if (tfa) tfa.style.opacity = Math.max(0, Math.min(-swipe.x / 50, 1));
+            });
+
+            container.addEventListener('pointerup', endSwipe);
+            container.addEventListener('pointercancel', endSwipe);
+
+            // drag-er por ba khola obosthay click holey OTP copy hobe na
+            container.addEventListener('click', (e) => {
+                const wrap = e.target.closest('.otp-swipe');
+                if (!wrap) return;
+                if (wrap.dataset.dragged === '1') { e.stopPropagation(); e.preventDefault(); return; }
+                const pinBtn = e.target.closest('.card-pin');
+                if (pinBtn && !wrapIsOpen(wrap)) {
+                    e.stopPropagation(); e.preventDefault();
+                    togglePin(pinBtn.dataset.email);
+                    return;
+                }
+                const delBtn = e.target.closest('.swipe-delete');
+                if (delBtn) {
+                    openDeleteModal(delBtn.dataset.email);
+                    return;
+                }
+                const editBtn = e.target.closest('.swipe-tfa-edit');
+                if (editBtn) {
+                    e.stopPropagation(); e.preventDefault();
+                    openTfaModal('edit', editBtn.dataset.email, editBtn);
+                    setSwipe(wrap, false);
+                    return;
+                }
+                const tfaDelBtn = e.target.closest('.swipe-tfa-del');
+                if (tfaDelBtn) {
+                    e.stopPropagation(); e.preventDefault();
+                    openTfaModal('remove', tfaDelBtn.dataset.email, tfaDelBtn);
+                    setSwipe(wrap, false);
+                    return;
+                }
+                if (wrapIsOpen(wrap)) {
+                    e.stopPropagation(); e.preventDefault();
+                    setSwipe(wrap, false);
+                }
+            }, true);
+        }
 
         function endSwipe() {
             if (!swipe) return;
@@ -3328,34 +3461,12 @@
             swipe = null;
             if (!s.horizontal) return;
             s.card.style.transition = '';
-            setSwipe(s.wrap, s.x > OPEN_W / 2);
+            setSwipe(s.wrap, s.x > OPEN_W / 2 ? 'del' : s.x < -TFA_W / 2 ? 'tfa' : false);
             s.wrap.dataset.dragged = '1';
             setTimeout(() => { delete s.wrap.dataset.dragged; }, 80);
         }
-        allContainer.addEventListener('pointerup', endSwipe);
-        allContainer.addEventListener('pointercancel', endSwipe);
-
-        // drag-er por ba khola obosthay click holey OTP copy hobe na
-        allContainer.addEventListener('click', (e) => {
-            const wrap = e.target.closest('.otp-swipe');
-            if (!wrap) return;
-            if (wrap.dataset.dragged === '1') { e.stopPropagation(); e.preventDefault(); return; }
-            const pinBtn = e.target.closest('.card-pin');
-            if (pinBtn && !wrap.classList.contains('open')) {
-                e.stopPropagation(); e.preventDefault();
-                togglePin(pinBtn.dataset.email);
-                return;
-            }
-            const delBtn = e.target.closest('.swipe-delete');
-            if (delBtn) {
-                openDeleteModal(delBtn.dataset.email);
-                return;
-            }
-            if (wrap.classList.contains('open')) {
-                e.stopPropagation(); e.preventDefault();
-                setSwipe(wrap, false);
-            }
-        }, true);
+        attachSwipe(allContainer);
+        attachSwipe(otpContainer);
 
         document.addEventListener('click', (e) => {
             if (openWrap && !openWrap.contains(e.target)) setSwipe(openWrap, false);
