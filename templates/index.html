@@ -954,6 +954,84 @@
         :root[data-theme="light"] .mail-badge.spam { color: #b45309; }
         :root[data-theme="light"] .mail-auth-ok { color: #047857; }
         :root[data-theme="light"] .mail-auth-bad { color: #b91c1c; }
+
+        /* ---- latest email: poriskar body, link chip, code box ---- */
+        .mail-code {
+            display: flex; align-items: center; gap: 10px; background: rgba(6, 182, 212, 0.08);
+            border: 1px solid rgba(6, 182, 212, 0.3); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px;
+        }
+        .mail-code-main { flex: 1; min-width: 0; }
+        .mail-code-lbl { font-size: 11px; color: var(--text-muted); }
+        .mail-code-val {
+            font-size: 24px; font-weight: 800; letter-spacing: 4px; color: var(--accent-cyan);
+            font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; word-break: break-all; line-height: 1.25;
+        }
+        .mail-code-hint { font-size: 11px; color: #fbbf24; margin-top: 2px; }
+        .mail-btn {
+            border: 1px solid var(--ctl-border); background: var(--ctl-bg); color: var(--text-main); cursor: pointer;
+            font-family: inherit; font-size: 12.5px; font-weight: 600; padding: 7px 12px; border-radius: 10px;
+        }
+        .mail-btn:hover { border-color: rgba(6, 182, 212, 0.5); }
+        .mail-btn.primary { background: rgba(6, 182, 212, 0.16); color: var(--accent-cyan); border-color: rgba(6, 182, 212, 0.4); }
+        .mail-btn.danger { background: rgba(239, 68, 68, 0.14); color: #f87171; border-color: rgba(239, 68, 68, 0.45); }
+        .mail-p { margin: 0 0 12px; white-space: pre-wrap; word-break: break-word; font-size: 13.5px; line-height: 1.65; color: var(--text-main); }
+        .mail-foot { border-top: 1px solid var(--card-border); margin-top: 14px; padding-top: 10px; }
+        .mail-foot .mail-p { font-size: 11.5px; line-height: 1.5; color: var(--text-muted); margin-bottom: 6px; }
+        .mail-link {
+            display: inline-flex; align-items: center; gap: 5px; max-width: 100%; vertical-align: baseline;
+            background: rgba(6, 182, 212, 0.1); color: var(--accent-cyan); border: 1px solid rgba(6, 182, 212, 0.3);
+            border-radius: 999px; padding: 1px 10px; font-family: inherit; font-size: 12px; cursor: pointer;
+            word-break: break-all; text-align: left; white-space: normal;
+        }
+        .mail-link i { font-size: 10px; flex: none; }
+        .mail-link:hover { background: rgba(6, 182, 212, 0.2); }
+        .mail-link.warn { background: rgba(245, 158, 11, 0.12); color: #fbbf24; border-color: rgba(245, 158, 11, 0.4); }
+        .mail-toggle { background: none; border: none; color: var(--text-muted); cursor: pointer; font-family: inherit; font-size: 11.5px; text-decoration: underline; padding: 6px 0 0; }
+        .mail-linkbar { flex: none; margin-top: 10px; border: 1px solid var(--card-border); background: var(--ctl-bg); border-radius: 12px; padding: 10px 12px; }
+        .mail-lb-title { font-size: 13px; font-weight: 700; margin-bottom: 4px; color: var(--text-main); }
+        .mail-lb-url { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11.5px; word-break: break-all; color: var(--text-muted); max-height: 72px; overflow-y: auto; }
+        .mail-lb-warn { font-size: 12px; color: #fbbf24; margin-top: 6px; line-height: 1.4; }
+        .mail-lb-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+        :root[data-theme="light"] .mail-code-val { color: #0369a1; }
+        :root[data-theme="light"] .mail-link { color: #0369a1; }
+        :root[data-theme="light"] .mail-link.warn, :root[data-theme="light"] .mail-lb-warn, :root[data-theme="light"] .mail-code-hint { color: #92400e; }
+        :root[data-theme="light"] .mail-btn.primary { color: #0369a1; }
+        :root[data-theme="light"] .mail-btn.danger { color: #b91c1c; }
+
+        /* ---- latest email: header (avatar, verified badge, time) ---- */
+        .mail-header { border-bottom: 1px solid var(--card-border); padding-bottom: 12px; margin-bottom: 12px; }
+        .mail-from { display: flex; align-items: center; gap: 10px; min-width: 0; }
+        .mail-avatar { flex: none; display: inline-flex; }
+        .mail-avatar .svc-avatar { width: 42px; height: 42px; border-radius: 50%; font-size: 18px; }
+        .mail-avatar .svc-avatar i { font-size: 19px; }
+        .mail-avatar.bad .svc-avatar { box-shadow: 0 0 0 2px rgba(239, 68, 68, 0.75); }
+        .mail-who { flex: 1; min-width: 0; }
+        .mail-who-name { font-weight: 700; font-size: 14.5px; color: var(--text-main); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mail-who-addr { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mail-trust {
+            flex: none; display: inline-flex; align-items: center; gap: 5px; border: 1px solid; border-radius: 999px;
+            padding: 4px 10px; font-family: inherit; font-size: 11.5px; font-weight: 700; cursor: pointer; background: transparent;
+        }
+        .mail-trust.ok { color: #34d399; background: rgba(16, 185, 129, 0.12); border-color: rgba(16, 185, 129, 0.4); }
+        .mail-trust.warn { color: #fbbf24; background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.4); }
+        .mail-trust.bad { color: #f87171; background: rgba(239, 68, 68, 0.14); border-color: rgba(239, 68, 68, 0.5); }
+        .mail-trust.none { color: var(--text-muted); background: var(--ctl-bg); border-color: var(--ctl-border); }
+        .mail-header .mail-subject { margin: 12px 0 4px; font-size: 16px; line-height: 1.35; }
+        .mail-when { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; font-size: 12px; color: var(--text-muted); }
+        .mail-ago { font-size: 13.5px; font-weight: 700; color: var(--text-main); }
+        .mail-ago.fresh { color: #34d399; }
+        .mail-trust-details {
+            margin-top: 10px; padding: 10px 12px; border: 1px solid var(--card-border); background: var(--ctl-bg);
+            border-radius: 12px; font-size: 12.5px; line-height: 1.5; color: var(--text-main);
+        }
+        .mail-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+        .mail-pill { font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--ctl-border); color: var(--text-muted); }
+        .mail-pill.ok { color: #34d399; border-color: rgba(16, 185, 129, 0.4); background: rgba(16, 185, 129, 0.1); }
+        .mail-pill.bad { color: #f87171; border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.1); }
+        .mail-attach { margin-top: 8px; font-size: 12px; color: var(--text-muted); word-break: break-word; }
+        :root[data-theme="light"] .mail-trust.ok, :root[data-theme="light"] .mail-pill.ok, :root[data-theme="light"] .mail-ago.fresh { color: #047857; }
+        :root[data-theme="light"] .mail-trust.warn { color: #92400e; }
+        :root[data-theme="light"] .mail-trust.bad, :root[data-theme="light"] .mail-pill.bad { color: #b91c1c; }
     </style>
 </head>
 <body>
@@ -1163,6 +1241,7 @@
             </div>
             <div class="mail-acct" id="mailAcct"></div>
             <div class="mail-scroll" id="mailScroll"></div>
+            <div class="mail-linkbar hidden" id="mailLinkBar"></div>
         </div>
     </div>
 
@@ -2156,15 +2235,18 @@
         const mailModal = document.getElementById('mailModal');
         const mailAcct = document.getElementById('mailAcct');
         const mailScroll = document.getElementById('mailScroll');
-        let mailEmail = '', mailReq = 0, mailReturnFocus = null;
+        let mailEmail = '', mailReq = 0, mailReturnFocus = null, mailAgoTimer = null;
 
         function mailModalOpen() { return !mailModal.classList.contains('hidden'); }
         function closeMailModal() {
             mailReq++;                                  // cholte thaka request-er uttor ar dekhabe na
+            clearInterval(mailAgoTimer);
             mailModal.classList.add('hidden');
             mailScroll.textContent = '';
             mailAcct.textContent = '';
             mailEmail = '';
+            mailData = null;
+            hideLinkBar();
             if (mailReturnFocus && document.contains(mailReturnFocus)) { try { mailReturnFocus.focus(); } catch (e) {} }
             mailReturnFocus = null;
         }
@@ -2188,18 +2270,244 @@
             box.appendChild(document.createTextNode(text));
             mailScroll.appendChild(box);
         }
-        function metaRow(label, ...nodes) {
-            const row = mkEl('div');
-            row.appendChild(mkEl('span', 'k', label + ': '));
-            nodes.forEach(n => row.appendChild(typeof n === 'string' ? document.createTextNode(n) : n));
-            return row;
+        // ---- header: avatar, "Verified sender" badge, "8 hours ago" ----
+        function mailAgoLong(ts) {
+            const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+            const u = (n, w) => n + ' ' + w + (n === 1 ? '' : 's') + ' ago';
+            if (s < 45) return 'Just now';
+            if (s < 3600) return u(Math.max(1, Math.floor(s / 60)), 'minute');
+            if (s < 86400) return u(Math.floor(s / 3600), 'hour');
+            return u(Math.floor(s / 86400), 'day');
         }
-        function authSpan(name, val) {
+        function mailTrust(d) {
+            const a = d.auth || {};
+            if (d.auth_fail) return { cls: 'bad', icon: 'fa-triangle-exclamation', label: 'Suspicious sender' };
+            if (!a.status || a.status === 'unknown') return { cls: 'none', icon: 'fa-circle-question', label: 'Not checked' };
+            if (a.dmarc === 'pass' || (a.spf === 'pass' && a.dkim === 'pass')) return { cls: 'ok', icon: 'fa-circle-check', label: 'Verified sender' };
+            return { cls: 'warn', icon: 'fa-circle-exclamation', label: 'Not fully verified' };
+        }
+        function authPill(name, val) {
             const bad = ['fail', 'softfail', 'permerror'].includes(val);
-            const good = val === 'pass';
-            return mkEl('span', good ? 'mail-auth-ok' : bad ? 'mail-auth-bad' : '', name + ' ' + (val || 'n/a'));
+            return mkEl('span', 'mail-pill' + (val === 'pass' ? ' ok' : bad ? ' bad' : ''), name + ' ' + (val || 'n/a'));
         }
+        function mailAvatar(d) {
+            // Logo / favicon shudhu VERIFIED sender-er. Nokol email "PayPal" nam diye asol logo dekhate na pare, tai
+            // sondehojonok -> shotorkota-chinho, ar ajana/adhura -> shudhu akkhor.
+            const wrap = mkEl('span', 'mail-avatar');
+            const name = d.from_name || d.from_addr || '?';
+            const t = mailTrust(d);
+            if (t.cls === 'bad') {
+                wrap.classList.add('bad');
+                wrap.innerHTML = '<span class="svc-avatar" style="--c:#b91c1c" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></span>';
+            } else if (t.cls === 'ok') {
+                wrap.innerHTML = avatarHTML({ code: 'x', service: name, sender: name, domain: d.sender_domain || '', email: d.from_addr || '' });   // avatarHTML nijei escape kore
+            } else {
+                wrap.innerHTML = avatarHTML({ code: '', email: name });                // code nai -> brand/favicon chhara shudhu akkhor
+            }
+            return wrap;
+        }
+        function mailTrustText(d, t) {
+            const dom = String(d.from_addr || '').split('@')[1] || 'the sender';
+            if (t.cls === 'ok') return 'Gmail checked this email and confirmed it was sent by ' + dom + '.';
+            if (t.cls === 'bad') return 'This email failed the sender check (' + (d.auth_detail || 'SPF/DKIM') + '). It may be pretending to be ' + dom + '. Do not use its codes or links.';
+            if (t.cls === 'warn') return 'Some sender checks are missing, so we cannot be sure this really comes from ' + dom + '. Be careful with links and codes.';
+            return 'Gmail did not include sender check results for this email.';
+        }
+        function mailHeader(d) {
+            const t = mailTrust(d), a = d.auth || {};
+            const box = mkEl('div', 'mail-header');
+
+            const top = mkEl('div', 'mail-from');
+            top.appendChild(mailAvatar(d));
+            const who = mkEl('div', 'mail-who');
+            who.appendChild(mkEl('div', 'mail-who-name', d.from_name || d.from_addr || 'Unknown sender'));
+            if (d.from_addr) who.appendChild(mkEl('div', 'mail-who-addr', d.from_addr));
+            top.appendChild(who);
+            const badge = mkEl('button', 'mail-trust ' + t.cls);
+            badge.type = 'button';
+            badge.setAttribute('aria-expanded', 'false');
+            badge.title = 'Tap for details';
+            badge.appendChild(mkEl('i', 'fa-solid ' + t.icon));
+            badge.appendChild(document.createTextNode(t.label));
+            top.appendChild(badge);
+            box.appendChild(top);
+
+            box.appendChild(mkEl('div', 'mail-subject', d.subject || '(No subject)'));
+
+            const when = mkEl('div', 'mail-when');
+            const ago = mkEl('span', 'mail-ago' + (Date.now() / 1000 - d.timestamp < 300 ? ' fresh' : ''), mailAgoLong(d.timestamp));
+            ago.dataset.ts = String(d.timestamp);
+            when.appendChild(ago);
+            when.appendChild(mkEl('span', 'mail-date', d.time));
+            when.appendChild(mkEl('span', 'mail-badge' + (d.folder === 'SPAM' ? ' spam' : ''), d.folder === 'SPAM' ? 'Spam' : 'Inbox'));
+            box.appendChild(when);
+
+            const det = mkEl('div', 'mail-trust-details hidden');
+            const pills = mkEl('div', 'mail-pills');
+            [['SPF', a.spf], ['DKIM', a.dkim], ['DMARC', a.dmarc]].forEach(([n, v]) => pills.appendChild(authPill(n, v)));
+            det.appendChild(pills);
+            det.appendChild(mkEl('div', null, mailTrustText(d, t)));
+            box.appendChild(det);
+            badge.addEventListener('click', () => {
+                const open = det.classList.contains('hidden');
+                det.classList.toggle('hidden', !open);
+                badge.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+
+            if (d.attachments && d.attachments.length) {
+                const at = mkEl('div', 'mail-attach');
+                at.appendChild(mkEl('i', 'fa-solid fa-paperclip'));
+                at.appendChild(document.createTextNode(' ' + d.attachments.join(', ')));
+                box.appendChild(at);
+            }
+            return box;
+        }
+        function startMailAgoTimer() {                     // popup khola thakle "2 minutes ago" nijei bodlay
+            clearInterval(mailAgoTimer);
+            mailAgoTimer = setInterval(() => {
+                const el = mailScroll.querySelector('[data-ts]');
+                if (!el) return;
+                const ts = Number(el.dataset.ts);
+                el.textContent = mailAgoLong(ts);
+                el.classList.toggle('fresh', Date.now() / 1000 - ts < 300);
+            }, 15000);
+        }
+        // ---- email body poriskar kora: [image:] bad, footer chhoto, link -> domain chip ----
+        const MAIL_ALIAS = { 'googlemail.com': 'google.com', 'facebookmail.com': 'facebook.com', 'microsoftonline.com': 'microsoft.com' };
+        const MAIL_SLD = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'or', 'ne']);
+        const MAIL_IMG_LINE = /^\s*\[(?:image|img|logo|photo|picture)\b[^\]]*\]\s*$/i;
+        const MAIL_IMG_INLINE = /\[(?:image|img|logo)\s*:[^\]]*\]/gi;
+        const MAIL_FOOT_START = /^\s*(?:you received this (?:email|message)|this (?:email|message) (?:was|is) sent|to stop receiving|unsubscribe|manage (?:your )?(?:email )?preferences|view (?:this email )?in (?:your )?browser|copyright\b|all rights reserved)/i;
+        const MAIL_URL_RE = /<?(https?:\/\/[^\s<>"'\u27e8\u27e9]+)>?/gi;
+        let mailData = null, mailRaw = false;
+
+        function regDomain(host) {
+            const p = String(host).toLowerCase().replace(/\.$/, '').split('.').filter(Boolean);
+            let r = String(host).toLowerCase();
+            if (p.length >= 2) {
+                const n = (p.length >= 3 && MAIL_SLD.has(p[p.length - 2]) && p[p.length - 1].length === 2) ? 3 : 2;
+                r = p.slice(-n).join('.');
+            }
+            return MAIL_ALIAS[r] || r;
+        }
+        function parseMailLink(u, d) {
+            let url;
+            try { url = new URL(u); } catch (e) { return null; }
+            if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+            const host = url.hostname.replace(/^www\./, '');
+            const sender = d && d.sender_domain ? regDomain(d.sender_domain) : '';
+            return {
+                href: u, host, sender,
+                secure: url.protocol === 'https:',
+                idn: /(^|\.)xn--/.test(host),
+                mismatch: !!sender && regDomain(host) !== sender
+            };
+        }
+        function hideLinkBar() {
+            const bar = document.getElementById('mailLinkBar');
+            bar.classList.add('hidden');
+            bar.textContent = '';
+        }
+        function showLinkBar(info) {
+            const bar = document.getElementById('mailLinkBar');
+            bar.textContent = '';
+            bar.appendChild(mkEl('div', 'mail-lb-title', 'Open this link?'));
+            bar.appendChild(mkEl('div', 'mail-lb-url', info.href));
+            const notes = [];
+            if (mailData && mailData.auth_fail) notes.push('This email failed the sender check (' + (mailData.auth_detail || 'SPF/DKIM') + ').');
+            if (info.mismatch) notes.push('This link goes to ' + info.host + ', but the email is from ' + info.sender + '.');
+            if (!info.secure) notes.push('This link is not secure (http).');
+            if (info.idn) notes.push('The web address has unusual characters.');
+            notes.forEach(n => {
+                const w = mkEl('div', 'mail-lb-warn');
+                w.appendChild(mkEl('i', 'fa-solid fa-triangle-exclamation'));
+                w.appendChild(document.createTextNode(' ' + n));
+                bar.appendChild(w);
+            });
+            const row = mkEl('div', 'mail-lb-row');
+            const open = mkEl('button', 'mail-btn ' + (notes.length ? 'danger' : 'primary'), notes.length ? 'Open anyway' : 'Open');
+            open.type = 'button';
+            open.addEventListener('click', () => { window.open(info.href, '_blank', 'noopener,noreferrer'); hideLinkBar(); });
+            const copy = mkEl('button', 'mail-btn', 'Copy link');
+            copy.type = 'button';
+            copy.addEventListener('click', () => copyQuiet(info.href).then(ok => showToast(ok ? 'Link copied' : 'Could not copy')));
+            const cancel = mkEl('button', 'mail-btn', 'Cancel');
+            cancel.type = 'button';
+            cancel.addEventListener('click', hideLinkBar);
+            [open, copy, cancel].forEach(b => row.appendChild(b));
+            bar.appendChild(row);
+            bar.classList.remove('hidden');
+        }
+        function mailChip(info) {
+            const warn = info.mismatch || !info.secure || info.idn || !!(mailData && mailData.auth_fail);
+            const b = mkEl('button', 'mail-link' + (warn ? ' warn' : ''));
+            b.type = 'button';
+            b.title = info.href;
+            b.appendChild(mkEl('i', 'fa-solid ' + (warn ? 'fa-triangle-exclamation' : 'fa-arrow-up-right-from-square')));
+            b.appendChild(document.createTextNode(info.host));
+            b.addEventListener('click', () => showLinkBar(info));
+            return b;
+        }
+        function appendMailText(parent, text) {
+            let last = 0, m;
+            MAIL_URL_RE.lastIndex = 0;
+            while ((m = MAIL_URL_RE.exec(text)) !== null) {
+                let url = m[1];
+                const trail = (url.match(/[.,;:!?)\]]+$/) || [''])[0];
+                if (trail) url = url.slice(0, url.length - trail.length);
+                if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+                const info = parseMailLink(url, mailData);
+                parent.appendChild(info ? mailChip(info) : document.createTextNode(url));
+                if (trail) parent.appendChild(document.createTextNode(trail));
+                last = m.index + m[0].length;
+            }
+            if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+        }
+        function splitMailBody(body) {
+            let lines = String(body || '').split('\n').map(l => l.replace(MAIL_IMG_INLINE, '').replace(/\s+$/, ''));
+            lines = lines.filter(l => !MAIL_IMG_LINE.test(l));
+            let cut = -1;
+            for (let i = Math.floor(lines.length * 0.4); i < lines.length; i++) {
+                if (MAIL_FOOT_START.test(lines[i]) || lines[i].includes('\u00a9')) { cut = i; break; }
+            }
+            // "Check activity" + porer line-e shudhu link -> ek line-e jora (chip text-er pashe boshe)
+            const paras = arr => arr.join('\n')
+                .replace(/([^\n])\n[ \t]*(<?https?:\/\/\S+>?)[ \t]*(?=\n|$)/g, '$1 $2')
+                .split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+            return { main: paras(cut >= 0 ? lines.slice(0, cut) : lines), foot: paras(cut >= 0 ? lines.slice(cut) : []) };
+        }
+        function renderMailBody(d) {
+            const wrap = mkEl('div', 'mail-body');
+            let { main, foot } = splitMailBody(d.body);
+            if (!main.length) { main = foot; foot = []; }
+            if (!main.length) { wrap.appendChild(mkEl('div', 'mail-state', '(This email has no readable text)')); return wrap; }
+            main.forEach(p => { const el = mkEl('div', 'mail-p'); appendMailText(el, p); wrap.appendChild(el); });
+            if (foot.length) {
+                const f = mkEl('div', 'mail-foot');
+                foot.forEach(p => { const el = mkEl('div', 'mail-p'); appendMailText(el, p); f.appendChild(el); });
+                wrap.appendChild(f);
+            }
+            return wrap;
+        }
+        function mailCodeBox(d) {
+            const box = mkEl('div', 'mail-code');
+            const main = mkEl('div', 'mail-code-main');
+            main.appendChild(mkEl('div', 'mail-code-lbl', 'Verification code found in this email'));
+            main.appendChild(mkEl('div', 'mail-code-val', d.code));
+            if (d.code_confidence === 'low') main.appendChild(mkEl('div', 'mail-code-hint', 'Not fully sure - please check the email below.'));
+            const btn = mkEl('button', 'mail-btn primary');
+            btn.type = 'button';
+            btn.appendChild(mkEl('i', 'fa-regular fa-copy'));
+            btn.appendChild(document.createTextNode(' Copy'));
+            btn.addEventListener('click', () => copyQuiet(d.code).then(ok => showToast(ok ? 'Code copied' : 'Could not copy')));
+            box.appendChild(main);
+            box.appendChild(btn);
+            return box;
+        }
+
         function renderMail(d) {
+            mailData = d;
+            hideLinkBar();
             mailScroll.textContent = '';
             if (!d.found) { mailState('No emails in this Gmail yet.'); return; }
 
@@ -2213,27 +2521,31 @@
                 mailScroll.appendChild(note);
             }
 
-            const meta = mkEl('div', 'mail-meta');
-            meta.appendChild(mkEl('div', 'mail-subject', d.subject || '(No subject)'));
-            const from = d.from_name && d.from_addr ? d.from_name + ' <' + d.from_addr + '>' : (d.from_addr || d.from_name || 'Unknown');
-            meta.appendChild(metaRow('From', from));
-            meta.appendChild(metaRow('Received', d.time + ' \u00b7 ' + mailAgo(d.timestamp),
-                mkEl('span', 'mail-badge' + (d.folder === 'SPAM' ? ' spam' : ''), d.folder === 'SPAM' ? 'Spam' : 'Inbox')));
-            if (d.auth && d.auth.status !== 'unknown') {
-                meta.appendChild(metaRow('Checks', authSpan('SPF', d.auth.spf), ' \u00b7 ', authSpan('DKIM', d.auth.dkim), ' \u00b7 ', authSpan('DMARC', d.auth.dmarc)));
-            } else {
-                meta.appendChild(metaRow('Checks', 'SPF/DKIM info not available'));
-            }
-            if (d.attachments && d.attachments.length) meta.appendChild(metaRow('Attachments', d.attachments.join(', ')));
-            mailScroll.appendChild(meta);
+            mailScroll.appendChild(mailHeader(d));
+            startMailAgoTimer();
 
-            mailScroll.appendChild(mkEl('pre', 'mail-text', d.body || '(This email has no readable text)'));
+            if (d.code && !d.auth_fail) mailScroll.appendChild(mailCodeBox(d));   // sondehojonok email-er code copy-te uthsaho dei na
+
+            const holder = mkEl('div');
+            const toggle = mkEl('button', 'mail-toggle');
+            toggle.type = 'button';
+            const paint = () => {
+                holder.textContent = '';
+                holder.appendChild(mailRaw ? mkEl('pre', 'mail-text', d.body || '') : renderMailBody(d));
+                toggle.textContent = mailRaw ? 'Show clean view' : 'Show original text';
+                hideLinkBar();
+            };
+            toggle.addEventListener('click', () => { mailRaw = !mailRaw; paint(); });
+            paint();
+            mailScroll.appendChild(holder);
             if (d.truncated) mailScroll.appendChild(mkEl('div', 'mail-note', 'Long email - only the first part is shown.'));
+            mailScroll.appendChild(toggle);
             mailScroll.scrollTop = 0;
         }
         async function loadMail() {
             const my = ++mailReq;
             const email = mailEmail;
+            hideLinkBar();
             mailState('Reading the latest email...', true);
             try {
                 const res = await fetch('/api/latest-mail', {
@@ -2258,6 +2570,7 @@
         }
         function openMailModal(email, trigger) {
             mailEmail = String(email || '');
+            mailRaw = false;
             mailReturnFocus = trigger || null;
             mailAcct.textContent = mailEmail;
             mailModal.classList.remove('hidden');
