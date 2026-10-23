@@ -1053,13 +1053,17 @@
         .mail-row-bad { color: #f87171; font-weight: 700; }
         :root[data-theme="light"] .mail-row-code { color: #0369a1; }
         :root[data-theme="light"] .mail-row-bad { color: #b91c1c; }
-        .otp-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
-        .otp-foot .otp-time { min-width: 0; }
-        .card-tools { display: flex; gap: 6px; margin-left: auto; }
-        .card-tool { display: inline-flex; align-items: center; gap: 5px; background: var(--ctl-bg); border: 1px solid var(--ctl-border); color: var(--text-muted); cursor: pointer; font-family: inherit; font-size: 11.5px; font-weight: 700; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
-        .card-tool:hover, .card-tool:focus-visible { color: var(--accent-cyan); border-color: rgba(6, 182, 212, 0.5); background: rgba(6, 182, 212, 0.1); outline: none; }
-        .card-tool i { font-size: 11px; }
-        @media (hover: none), (pointer: coarse) { .card-tool { min-height: 34px; padding: 6px 12px; } }
+        .card-2fa {
+            flex: none; margin-left: 0; background: none; border: none; color: var(--text-muted);
+            cursor: pointer; font-size: 13px; padding: 4px 7px; border-radius: 8px;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
+        .card-mail + .card-2fa, .card-2fa + .card-refresh { margin-left: 0; }
+        .card-2fa:hover, .card-2fa:focus-visible { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.12); outline: none; }
+        @media (hover: none), (pointer: coarse) { .card-2fa { min-width: 40px; min-height: 40px; font-size: 16px; padding: 8px; } }
+        @media (max-width: 480px) { .otp-email .card-2fa { min-width: 34px; min-height: 34px; padding: 6px; } }
+        .fchip.tfa-svc { margin-left: auto; white-space: nowrap; }
+        .fchip.tfa-svc + .fchip.sort { margin-left: 0; }
         .tfa-empty { text-align: center; padding: 26px 10px; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
         .tfa-empty i { display: block; font-size: 26px; margin-bottom: 10px; color: var(--accent-cyan); opacity: 0.8; }
     </style>
@@ -1219,6 +1223,7 @@
                 <button type="button" class="fchip" data-filter="unused" aria-pressed="false">Unused <b>0</b></button>
                 <button type="button" class="fchip" data-filter="errors" aria-pressed="false">Errors <b>0</b></button>
                 <button type="button" class="fchip" data-filter="pinned" aria-pressed="false">Pinned <b>0</b></button>
+                <button type="button" class="fchip tfa-svc" id="tfaServiceBtn" title="2FA services (social media, websites and more)"><i class="fa-solid fa-layer-group"></i> <span>2FA Service</span></button>
                 <button type="button" class="fchip sort" id="sortBtn" title="Change sort order"><i class="fa-solid fa-arrow-down-wide-short"></i> <span>Newest</span></button>
             </div>
             <div id="allContainer"></div>
@@ -1861,6 +1866,7 @@
                         ${pinBtn}
                         ${health === 'ok' ? cardWaitHTML(item.email) : ''}
                         <button type="button" class="card-mail" data-email="${escAttr(item.email)}" title="Read the latest email in this Gmail" aria-label="Read the latest email in ${escAttr(item.email)}"><i class="fa-regular fa-envelope"></i></button>
+                        <button type="button" class="card-2fa" data-email="${escAttr(item.email)}" title="Two-factor (2FA) code of this Gmail" aria-label="2FA code of ${escAttr(item.email)}"><i class="fa-solid fa-shield-halved"></i></button>
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
                     ${validCode ? svcRowHTML(item) : ''}
@@ -1868,13 +1874,7 @@
                     ${phishNote}
                     ${verifyNote}
                     ${expiryRow}
-                    <div class="otp-foot">
-                        <div class="otp-time">${infoLine}</div>
-                        <div class="card-tools">
-                            <button type="button" class="card-tool card-2fa" data-email="${escAttr(item.email)}" title="Two-factor (2FA) code of this Gmail" aria-label="2FA code of ${escAttr(item.email)}"><i class="fa-solid fa-shield-halved"></i> <span>2FA</span></button>
-                            <button type="button" class="card-tool card-svc-list" data-email="${escAttr(item.email)}" title="Services that use this Gmail" aria-label="Services that use ${escAttr(item.email)}"><i class="fa-solid fa-layer-group"></i> <span>Services</span></button>
-                        </div>
-                    </div>
+                    <div class="otp-time">${infoLine}</div>
                 </div>`;
             if (!opts.deletable) return card;
             return `
@@ -2743,14 +2743,14 @@
             const title = document.getElementById('tfaTitle');
             title.textContent = '';
             title.appendChild(mkEl('i', tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
-            title.appendChild(document.createTextNode(tfaView === 'gmail' ? ' Gmail 2FA code' : ' Services'));
-            document.getElementById('tfaAcct').textContent = tfaEmail;
+            title.appendChild(document.createTextNode(tfaView === 'gmail' ? ' Gmail 2FA code' : ' 2FA Service'));
+            document.getElementById('tfaAcct').textContent = tfaEmail || 'All Gmail accounts';
             tfaScroll.textContent = '';
             const box = mkEl('div', 'tfa-empty');
             box.appendChild(mkEl('i', tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
             box.appendChild(document.createTextNode(tfaView === 'gmail'
                 ? 'The 2FA code of this Gmail will appear here.'
-                : 'Social media, websites and other services used with this Gmail will be listed here, each with its 2FA code.'));
+                : 'Social media, websites and other services will be listed here, each with its 2FA code.'));
             tfaScroll.appendChild(box);
         }
         function openTfaModal(view, email, trigger) {
@@ -2760,8 +2760,8 @@
             document.getElementById('tfaCloseBtn').focus();
         }
         document.addEventListener('click', (e) => {
-            const b = e.target.closest('.card-2fa, .card-svc-list');
-            if (b) { e.preventDefault(); openTfaModal(b.classList.contains('card-2fa') ? 'gmail' : 'services', b.dataset.email, b); return; }
+            const b = e.target.closest('.card-2fa');
+            if (b) { e.preventDefault(); openTfaModal('gmail', b.dataset.email, b); return; }
             if (e.target === tfaModal) closeTfaModal();
         });
         document.getElementById('tfaCloseBtn').addEventListener('click', closeTfaModal);
@@ -3400,6 +3400,7 @@
         document.getElementById('filterRow').addEventListener('click', (e) => {
             const c = e.target.closest('.fchip');
             if (!c) return;
+            if (c.id === 'tfaServiceBtn') { openTfaModal('services', '', c); return; }
             if (c.id === 'sortBtn') accSort = accSort === 'az' ? 'recent' : 'az';
             else accFilter = c.dataset.filter;
             renderAll();
