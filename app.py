@@ -1561,6 +1561,34 @@ def _tidy_text(t):
     t = re.sub(r" *\n *", "\n", t)
     return re.sub(r"\n{3,}", "\n\n", t).strip()
 
+def _mail_display_text(msg):
+    """Pora-r jonno email-er text. HTML-only email-e link-er thikana hariye jay, tai \"text <url>\" hishebe rakhi."""
+    plain, html_body = "", ""
+    for part in (msg.walk() if msg.is_multipart() else [msg]):
+        ctype = part.get_content_type()
+        if ctype not in ("text/plain", "text/html") or part.get_filename():
+            continue
+        try:
+            d = _decode_part(part)
+        except Exception:
+            continue
+        if not d:
+            continue
+        if ctype == "text/plain" and not plain:
+            plain = d
+        elif ctype == "text/html" and not html_body:
+            html_body = d
+    if len(plain.strip()) >= 40 or not html_body.strip():
+        return plain
+    def repl(m):
+        url = html_lib.unescape(m.group(1)).strip()
+        text = _clean_anchor(m.group(2))
+        if not url.lower().startswith(("https://", "http://")) or len(url) > 2000:
+            return text
+        return (text + " " if text else "") + "\u27e8" + url + "\u27e9"   # < > dile html_to_text muche felto
+    t = html_to_text(_A_TAG.sub(repl, html_body))
+    return t.replace("\u27e8", "<").replace("\u27e9", ">")
+
 @app.route('/api/latest-mail', methods=['POST'])
 def latest_mail():
     """Ekta Gmail-er shesh email (sender, subject, shomoy, SPF/DKIM, text) -- card-er envelope button-er jonno."""
@@ -1609,11 +1637,13 @@ def latest_mail():
                 received = time.time()
         shown = datetime.fromtimestamp(received, ZoneInfo("Asia/Dhaka")).strftime("%d %b %Y, %I:%M %p")
 
-        texts = get_email_texts(msg)
-        body = texts[0] if texts else ""
-        if len(texts) > 1 and len(body.strip()) < 40:        # plain part shudhu \"view in browser\" hole html-ta nai
-            body = texts[1]
-        body = _tidy_text(body)
+        body = _tidy_text(_mail_display_text(msg))
+        code, code_score = None, 0                           # email-e code thakle alada kore dekhanor jonno
+        for t in (get_email_texts(msg) or [""]):
+            c, sc = extract_otp_scored(subject + "\n" + t)
+            if c != "Code not found":
+                code, code_score = c, sc
+                break
         truncated = len(body) > MAIL_VIEW_MAX_CHARS
         if truncated:
             body = body[:MAIL_VIEW_MAX_CHARS]
@@ -1631,6 +1661,9 @@ def latest_mail():
             "subject": subject,
             "from_name": name,
             "from_addr": addr,
+            "sender_domain": site_domain(addr),             # link-er domain-er sathe milanor jonno ("" hole milabo na)
+            "code": code,
+            "code_confidence": "high" if code_score >= CONF_HIGH_SCORE else "low",
             "time": shown,
             "timestamp": received,
             "body": body,
