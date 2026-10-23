@@ -764,6 +764,57 @@ def pick_magic_link(links, subject, text):
     return best
 
 
+# ======================= Phishing check (SPF / DKIM / DMARC) =======================
+# Gmail nijer receive-kora prottek email-e "Authentication-Results" header boshay. Shetar upor vorsha kora jay,
+# kintu SHUDHU Gmail-er nijer header-ta (shobcheye upore, authserv-id = *.google.com).
+# Sender nijer toiri kora nokol "Authentication-Results: ... spf=pass" header niche thakte pare -- seta ignore kori.
+_AUTH_RES = re.compile(r"(?i)(?<![\w.])(spf|dkim|dmarc)\s*=\s*([a-z]+)")
+_SPF_BAD = {"fail", "softfail", "permerror"}
+_DKIM_BAD = {"fail", "permerror"}
+_DMARC_BAD = {"fail"}
+
+def check_email_auth(msg):
+    """{'status': 'fail' | 'ok' | 'unknown', 'reasons': [...], 'spf', 'dkim', 'dmarc'}
+    fail    = SPF / DKIM / DMARC-er kono ekta fail (lal sotorkota dekhabo)
+    unknown = Gmail-er header paoa gelo na (kichu dekhabo na)"""
+    try:
+        headers = msg.get_all("Authentication-Results") or []
+        if not headers:
+            return {"status": "unknown", "reasons": []}
+        top = re.sub(r"\s+", " ", str(headers[0]))                 # shobcheye upore-rta = Gmail-er nijer
+        authserv = top.split(";", 1)[0].strip().lower()
+        if not (authserv == "google.com" or authserv.endswith(".google.com")):
+            return {"status": "unknown", "reasons": []}
+
+        spf = dmarc = None
+        dkim_all = []
+        for m in _AUTH_RES.finditer(top):
+            k, v = m.group(1).lower(), m.group(2).lower()
+            if k == "spf" and spf is None:
+                spf = v
+            elif k == "dkim":
+                dkim_all.append(v)
+            elif k == "dmarc" and dmarc is None:
+                dmarc = v
+        # Ekadhik DKIM signature thakle: ekta-o pass hole thik (mailing list / forward-er extra signature fail korte pare)
+        if "pass" in dkim_all:
+            dkim = "pass"
+        else:
+            dkim = next((v for v in dkim_all if v in _DKIM_BAD), dkim_all[0] if dkim_all else None)
+
+        reasons = []
+        if spf in _SPF_BAD:
+            reasons.append("SPF " + spf)
+        if dkim in _DKIM_BAD:
+            reasons.append("DKIM " + dkim)
+        if dmarc in _DMARC_BAD:
+            reasons.append("DMARC " + dmarc)
+        return {"status": "fail" if reasons else "ok", "reasons": reasons, "spf": spf, "dkim": dkim, "dmarc": dmarc}
+    except Exception as e:
+        print(f"[AUTH] parse error: {type(e).__name__}")
+        return {"status": "unknown", "reasons": []}
+
+
 def fetch_email_info(mail, uid):
     """Ekta email download kore OTP, sender, subject, time ber kore."""
     _, msg_data = mail.uid('fetch', uid, '(BODY.PEEK[])')
@@ -808,6 +859,7 @@ def fetch_email_info(mail, uid):
                     ttl = extract_ttl(subject + "\n" + body)
                     if ttl:
                         break
+            auth = check_email_auth(msg)
             return {
                 "sender": sender,
                 "service": service_name(name, addr),
@@ -819,6 +871,8 @@ def fetch_email_info(mail, uid):
                 "time": msg_dt.strftime("%I:%M %p"),
                 "timestamp": epoch,
                 "ttl_seconds": ttl,                  # None hole default meyad
+                "auth_fail": auth["status"] == "fail",              # SPF/DKIM/DMARC fail -> card-e lal sotorkota
+                "auth_detail": ", ".join(auth.get("reasons", [])),  # jemon "SPF fail, DKIM fail"
             }
     return None
 
@@ -863,6 +917,8 @@ def make_entry(info):
         "timestamp": info["timestamp"],
         "age_seconds": max(0, int(time.time() - info["timestamp"])),
         "ttl_seconds": ttl,
+        "auth_fail": bool(info.get("auth_fail")),
+        "auth_detail": info.get("auth_detail", ""),
     }
 
 def _imap_login(account):
@@ -1249,7 +1305,9 @@ def _push_worker(item):
     service = item.get("service") or item.get("sender") or "New code"
     is_link = item.get("kind") == "link"
     for doc in docs:
-        if is_link:
+        if item.get("auth_fail"):
+            body = f"\u26a0 Suspicious email for {email_addr} - don't use this code"   # code kokhono dekhai na
+        elif is_link:
             body = f"Verify link for {email_addr}"
         elif doc.get("show_code"):
             body = f"Code {item.get('code')} · {email_addr}"
@@ -1470,6 +1528,127 @@ def refresh_one():
     if not out:
         return jsonify({"error": "No result"}), 500
     return jsonify(out[0])
+
+# ======================= Card-er "Latest email" button: sesh email-ta pora =======================
+# Inbox ar Spam-er shesh email-er moddhe je-ta notun seta dekhay. Email "read" hoye jay na (readonly + BODY.PEEK).
+# Shudhu text dekhano hoy (HTML render na) -- jate tracking pixel / script / nokol link kaj na kore.
+MAIL_VIEW_MAX_CHARS = 30000
+MAIL_FETCH_BYTES = 500000        # boro attachment-wala email-e shob download na kore, shuru-r ongsho-i jothesto
+
+def _last_in_folder(mail, folder):
+    """(uid, Gmail-e pouchanor samoy/epoch) -- folder-er shobcheye notun email. Nai hole None."""
+    status, _ = mail.select(folder, readonly=True)
+    if status != 'OK':
+        return None
+    status, data = mail.uid('search', None, 'ALL')
+    if status != 'OK' or not data or not data[0]:
+        return None
+    uid = data[0].split()[-1]
+    ts = 0
+    try:
+        _, md = mail.uid('fetch', uid, '(INTERNALDATE)')
+        raw = b" ".join((p[0] if isinstance(p, tuple) else p) for p in (md or []) if isinstance(p, (bytes, tuple))).decode("ascii", "ignore")
+        m = re.search(r'INTERNALDATE "([^"]+)"', raw)
+        if m:
+            ts = datetime.strptime(m.group(1).strip(), "%d-%b-%Y %H:%M:%S %z").timestamp()
+    except Exception:
+        ts = 0
+    return uid, ts
+
+def _tidy_text(t):
+    t = t.translate(_ZW).replace("\r\n", "\n").replace("\r", "\n")
+    t = re.sub(r"[ \t\u00a0]+", " ", t)
+    t = re.sub(r" *\n *", "\n", t)
+    return re.sub(r"\n{3,}", "\n\n", t).strip()
+
+@app.route('/api/latest-mail', methods=['POST'])
+def latest_mail():
+    """Ekta Gmail-er shesh email (sender, subject, shomoy, SPF/DKIM, text) -- card-er envelope button-er jonno."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    email_in = str((request.json or {}).get('email', '')).strip().lower()
+    acc = next((x for x in load_accounts() if str(x.get('email', '')).lower() == email_in), None)
+    if not acc:
+        return jsonify({"error": "Account not found"}), 404
+    mail = None
+    try:
+        mail = _imap_login(acc)
+        cands = []                                          # (samoy, label, folder, uid)
+        r = _last_in_folder(mail, "inbox")
+        if r:
+            cands.append((r[1], "INBOX", "inbox", r[0]))
+        for fname in ("[Gmail]/Spam", "Spam"):
+            try:
+                r = _last_in_folder(mail, fname)
+            except Exception:
+                r = None
+            if r:
+                cands.append((r[1], "SPAM", fname, r[0]))
+                break
+        if not cands:
+            return jsonify({"found": False})
+        ts, label, fname, uid = max(cands, key=lambda c: c[0])
+
+        mail.select(fname, readonly=True)
+        _, md = mail.uid('fetch', uid, '(BODY.PEEK[]<0.%d>)' % MAIL_FETCH_BYTES)
+        msg = None
+        for part in md or []:
+            if isinstance(part, tuple):
+                msg = email.message_from_bytes(part[1])
+                break
+        if msg is None:
+            return jsonify({"error": "Could not read the email"}), 502
+
+        subject = decode_hdr(msg.get("Subject"), "(No subject)")
+        name, addr = parseaddr(decode_hdr(msg.get("From"), ""))
+        received = ts
+        if not received:                                    # INTERNALDATE na pele Date header
+            try:
+                received = parsedate_to_datetime(msg.get("Date")).timestamp()
+            except Exception:
+                received = time.time()
+        shown = datetime.fromtimestamp(received, ZoneInfo("Asia/Dhaka")).strftime("%d %b %Y, %I:%M %p")
+
+        texts = get_email_texts(msg)
+        body = texts[0] if texts else ""
+        if len(texts) > 1 and len(body.strip()) < 40:        # plain part shudhu \"view in browser\" hole html-ta nai
+            body = texts[1]
+        body = _tidy_text(body)
+        truncated = len(body) > MAIL_VIEW_MAX_CHARS
+        if truncated:
+            body = body[:MAIL_VIEW_MAX_CHARS]
+
+        attachments = []
+        for p in msg.walk():
+            fn = p.get_filename()
+            if fn:
+                attachments.append(decode_hdr(fn)[:80])
+
+        auth = check_email_auth(msg)
+        return jsonify({
+            "found": True,
+            "folder": label,
+            "subject": subject,
+            "from_name": name,
+            "from_addr": addr,
+            "time": shown,
+            "timestamp": received,
+            "body": body,
+            "truncated": truncated,
+            "attachments": attachments[:5],
+            "auth": {"status": auth["status"], "spf": auth.get("spf"), "dkim": auth.get("dkim"), "dmarc": auth.get("dmarc")},
+            "auth_fail": auth["status"] == "fail",
+            "auth_detail": ", ".join(auth.get("reasons", [])),
+        })
+    except Exception as e:
+        print(f"[LATEST-MAIL] {acc['email']}: {type(e).__name__}")
+        return jsonify({"error": _error_reason(e)}), 502
+    finally:
+        try:
+            if mail is not None:
+                mail.logout()
+        except Exception:
+            pass
 
 @app.route('/api/push-status')
 def push_status():
