@@ -576,6 +576,9 @@
         }
         .verify-note i { margin-top: 2px; }
         .verify-note.link { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.08); border-color: rgba(6, 182, 212, 0.25); }
+        .verify-note.danger { color: #f87171; background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.5); font-weight: 600; }
+        .verify-note.danger small { display: block; font-weight: 400; opacity: 0.9; margin-top: 1px; }
+        .otp-card.is-suspicious { border-color: rgba(239, 68, 68, 0.55); }
         .otp-code-box.link-box { font-size: 15px; letter-spacing: normal; display: flex; align-items: center; justify-content: center; gap: 8px; }
 
         /* ---- countdown ring ---- */
@@ -714,6 +717,7 @@
         :root[data-theme="light"] .card-pin.pinned { color: #d97706; }
         :root[data-theme="light"] .verify-note { color: #92400e; }
         :root[data-theme="light"] .verify-note.link { color: var(--accent-cyan); }
+        :root[data-theme="light"] .verify-note.danger { color: #b91c1c; background: rgba(220, 38, 38, 0.08); }
         :root[data-theme="light"] .health-msg.warn { color: #b45309; }
         :root[data-theme="light"] .health-msg.bad { color: #b91c1c; }
         :root[data-theme="light"] .otp-code-box { color: #0369a1; background: rgba(2, 132, 199, 0.08); border-color: rgba(2, 132, 199, 0.3); }
@@ -913,6 +917,43 @@
         @media (max-width: 480px) { .otp-email .card-wait { min-width: 34px; min-height: 34px; padding: 6px; } }
         :root[data-theme="light"] .card-wait:hover { color: #6d28d9; }
         :root[data-theme="light"] .card-wait.active { color: #b45309; }
+
+        /* ---- per-card "read latest email" button + popup ---- */
+        .card-mail {
+            flex: none; margin-left: auto; background: none; border: none; color: var(--text-muted);
+            cursor: pointer; font-size: 13px; padding: 4px 7px; border-radius: 8px;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
+        .card-pin + .card-mail, .card-wait + .card-mail, .card-mail + .card-refresh { margin-left: 0; }
+        .card-mail:hover { color: #34d399; background: rgba(16, 185, 129, 0.12); }
+        @media (hover: none), (pointer: coarse) { .card-mail { min-width: 40px; min-height: 40px; font-size: 16px; padding: 8px; } }
+        @media (max-width: 480px) { .otp-email .card-mail { min-width: 34px; min-height: 34px; padding: 6px; } }
+        :root[data-theme="light"] .card-mail:hover { color: #047857; }
+        .mail-overlay { z-index: 650; }
+        .mail-box {
+            width: 100%; max-width: 600px; max-height: 88vh; display: flex; flex-direction: column;
+            background: var(--popup-bg); border: 1px solid var(--card-border); border-radius: 18px;
+            padding: 16px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+        }
+        .mail-head { display: flex; align-items: center; gap: 4px; margin-bottom: 4px; }
+        .mail-title { flex: 1; font-weight: 700; font-size: 14px; color: var(--text-main); }
+        .mail-ibtn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 15px; padding: 6px 9px; border-radius: 8px; }
+        .mail-ibtn:hover { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.12); }
+        .mail-acct { font-size: 12px; color: var(--text-muted); word-break: break-all; margin-bottom: 10px; }
+        .mail-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; min-height: 0; }
+        .mail-state { text-align: center; padding: 28px 8px; color: var(--text-muted); font-size: 13px; }
+        .mail-meta { font-size: 12.5px; line-height: 1.6; color: var(--text-main); border-bottom: 1px solid var(--card-border); padding-bottom: 10px; margin-bottom: 10px; word-break: break-word; }
+        .mail-subject { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+        .mail-meta .k { color: var(--text-muted); }
+        .mail-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 4px; background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
+        .mail-badge.spam { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
+        .mail-auth-ok { color: #34d399; }
+        .mail-auth-bad { color: #f87171; font-weight: 700; }
+        .mail-text { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 13.5px; line-height: 1.6; color: var(--text-main); margin: 0; }
+        .mail-note { font-size: 11px; color: var(--text-muted); margin-top: 10px; }
+        :root[data-theme="light"] .mail-badge.spam { color: #b45309; }
+        :root[data-theme="light"] .mail-auth-ok { color: #047857; }
+        :root[data-theme="light"] .mail-auth-bad { color: #b91c1c; }
     </style>
 </head>
 <body>
@@ -1109,6 +1150,19 @@
             </div>
             <div id="paletteList" class="palette-list" role="listbox"></div>
             <div class="palette-foot">Up / Down to move &middot; Enter to run &middot; Esc to close</div>
+        </div>
+    </div>
+
+    <!-- Latest email viewer (card-er envelope button) -->
+    <div id="mailModal" class="modal-overlay mail-overlay hidden" role="dialog" aria-modal="true" aria-label="Latest email">
+        <div class="mail-box">
+            <div class="mail-head">
+                <span class="mail-title"><i class="fa-regular fa-envelope-open"></i> Latest email</span>
+                <button type="button" class="mail-ibtn" id="mailReloadBtn" title="Check again"><i class="fa-solid fa-rotate-right"></i></button>
+                <button type="button" class="mail-ibtn" id="mailCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mail-acct" id="mailAcct"></div>
+            <div class="mail-scroll" id="mailScroll"></div>
         </div>
     </div>
 
@@ -1659,6 +1713,10 @@
             const codeBox = showExpired ? expiredBox : isLink ? linkBox : validCode
                 ? `<div class="otp-code-box has-cells ${revealed ? '' : 'masked'}" role="button" tabindex="0" aria-label="${escAttr(codeAria(item.code, revealed))}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${codeCellsHTML(item.code, !revealed)}</div>`
                 : `<div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">${escAttr(item.placeholder ? 'Not checked yet - tap refresh' : (item.code || 'Code not found'))}</div>`;
+            const suspicious = validCode && !showExpired && !!item.auth_fail;
+            const phishNote = suspicious
+                ? `<div class="verify-note danger" role="alert"><i class="fa-solid fa-triangle-exclamation"></i><span>এই কোডের ইমেইল সন্দেহজনক<small>ফিশিং সতর্কতা: ${escAttr(item.auth_detail || 'SPF/DKIM')} - ব্যবহার করবেন না</small></span></div>`
+                : '';
             const verifyNote = (!validCode || showExpired) ? '' : isLink
                 ? `<div class="verify-note link"><i class="fa-solid fa-link"></i><span>Link from <b>${escAttr(item.service || item.sender || 'sender')}</b> &middot; ${escAttr(item.subject || '')}<br>Open it only if you just requested it.</span></div>`
                 : (item.confidence === 'low'
@@ -1671,7 +1729,7 @@
                 ? `<button type="button" class="used-badge" data-used-key="${escAttr(uKey)}" title="Tap to mark as unused"><i class="fa-solid fa-check"></i> Used</button>`
                 : '';
             const card = `
-                <div class="otp-card ${isNew && !used ? 'is-new' : ''} ${used && !showExpired ? 'is-used' : ''} ${showExpired ? 'is-expired' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''} ${opts.enter ? 'enter' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
+                <div class="otp-card ${suspicious ? 'is-suspicious' : ''} ${isNew && !used ? 'is-new' : ''} ${used && !showExpired ? 'is-used' : ''} ${showExpired ? 'is-expired' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''} ${opts.enter ? 'enter' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
                     ${isNew && !used ? '<div class="new-dot"></div>' : ''}
                     <div class="otp-email">
                         ${healthDot}
@@ -1679,10 +1737,12 @@
                         ${usedBadge}
                         ${pinBtn}
                         ${health === 'ok' ? cardWaitHTML(item.email) : ''}
+                        <button type="button" class="card-mail" data-email="${escAttr(item.email)}" title="Read the latest email in this Gmail" aria-label="Read the latest email in ${escAttr(item.email)}"><i class="fa-regular fa-envelope"></i></button>
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
                     ${validCode ? svcRowHTML(item) : ''}
                     ${codeBox}
+                    ${phishNote}
                     ${verifyNote}
                     ${expiryRow}
                     <div class="otp-time">${infoLine}</div>
@@ -1964,7 +2024,9 @@
             try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) {}
             beep();
             const it = allItems.find(x => x.email === email);
-            if (autoCopyOn && it && isValidItem(it) && it.kind !== 'link' && document.visibilityState === 'visible') {
+            if (it && isValidItem(it) && it.auth_fail) {
+                showToast('Suspicious email - code NOT copied: ' + email);
+            } else if (autoCopyOn && it && isValidItem(it) && it.kind !== 'link' && document.visibilityState === 'visible') {
                 copyQuiet(it.code).then(ok => showToast(ok ? 'New code copied: ' + email : 'New code: ' + email));
             } else {
                 showToast((it && it.kind === 'link' ? 'New link: ' : 'New code: ') + email);
@@ -2088,6 +2150,127 @@
             startWaiting(email);
             showToast('Waiting for a new code on ' + email);
         });
+
+        // ======================= Card-er "Read latest email" popup =======================
+        // Shob text textContent diye boshano hoy (innerHTML na) -- email-er kono HTML/script cholbe na.
+        const mailModal = document.getElementById('mailModal');
+        const mailAcct = document.getElementById('mailAcct');
+        const mailScroll = document.getElementById('mailScroll');
+        let mailEmail = '', mailReq = 0, mailReturnFocus = null;
+
+        function mailModalOpen() { return !mailModal.classList.contains('hidden'); }
+        function closeMailModal() {
+            mailReq++;                                  // cholte thaka request-er uttor ar dekhabe na
+            mailModal.classList.add('hidden');
+            mailScroll.textContent = '';
+            mailAcct.textContent = '';
+            mailEmail = '';
+            if (mailReturnFocus && document.contains(mailReturnFocus)) { try { mailReturnFocus.focus(); } catch (e) {} }
+            mailReturnFocus = null;
+        }
+        function mkEl(tag, cls, text) {
+            const el = document.createElement(tag);
+            if (cls) el.className = cls;
+            if (text != null) el.textContent = text;
+            return el;
+        }
+        function mailAgo(ts) {
+            const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+            if (s < 60) return 'just now';
+            if (s < 3600) return Math.floor(s / 60) + ' min ago';
+            if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+            return Math.floor(s / 86400) + ' d ago';
+        }
+        function mailState(text, spinning) {
+            mailScroll.textContent = '';
+            const box = mkEl('div', 'mail-state');
+            if (spinning) { box.appendChild(mkEl('i', 'fa-solid fa-spinner rotating')); box.appendChild(document.createTextNode(' ')); }
+            box.appendChild(document.createTextNode(text));
+            mailScroll.appendChild(box);
+        }
+        function metaRow(label, ...nodes) {
+            const row = mkEl('div');
+            row.appendChild(mkEl('span', 'k', label + ': '));
+            nodes.forEach(n => row.appendChild(typeof n === 'string' ? document.createTextNode(n) : n));
+            return row;
+        }
+        function authSpan(name, val) {
+            const bad = ['fail', 'softfail', 'permerror'].includes(val);
+            const good = val === 'pass';
+            return mkEl('span', good ? 'mail-auth-ok' : bad ? 'mail-auth-bad' : '', name + ' ' + (val || 'n/a'));
+        }
+        function renderMail(d) {
+            mailScroll.textContent = '';
+            if (!d.found) { mailState('No emails in this Gmail yet.'); return; }
+
+            if (d.auth_fail) {
+                const note = mkEl('div', 'verify-note danger');
+                note.setAttribute('role', 'alert');
+                note.appendChild(mkEl('i', 'fa-solid fa-triangle-exclamation'));
+                const sp = mkEl('span', null, 'এই ইমেইলটি সন্দেহজনক');
+                sp.appendChild(mkEl('small', null, 'ফিশিং সতর্কতা: ' + (d.auth_detail || 'SPF/DKIM') + ' - লিংকে ক্লিক বা কোড ব্যবহার করবেন না'));
+                note.appendChild(sp);
+                mailScroll.appendChild(note);
+            }
+
+            const meta = mkEl('div', 'mail-meta');
+            meta.appendChild(mkEl('div', 'mail-subject', d.subject || '(No subject)'));
+            const from = d.from_name && d.from_addr ? d.from_name + ' <' + d.from_addr + '>' : (d.from_addr || d.from_name || 'Unknown');
+            meta.appendChild(metaRow('From', from));
+            meta.appendChild(metaRow('Received', d.time + ' \u00b7 ' + mailAgo(d.timestamp),
+                mkEl('span', 'mail-badge' + (d.folder === 'SPAM' ? ' spam' : ''), d.folder === 'SPAM' ? 'Spam' : 'Inbox')));
+            if (d.auth && d.auth.status !== 'unknown') {
+                meta.appendChild(metaRow('Checks', authSpan('SPF', d.auth.spf), ' \u00b7 ', authSpan('DKIM', d.auth.dkim), ' \u00b7 ', authSpan('DMARC', d.auth.dmarc)));
+            } else {
+                meta.appendChild(metaRow('Checks', 'SPF/DKIM info not available'));
+            }
+            if (d.attachments && d.attachments.length) meta.appendChild(metaRow('Attachments', d.attachments.join(', ')));
+            mailScroll.appendChild(meta);
+
+            mailScroll.appendChild(mkEl('pre', 'mail-text', d.body || '(This email has no readable text)'));
+            if (d.truncated) mailScroll.appendChild(mkEl('div', 'mail-note', 'Long email - only the first part is shown.'));
+            mailScroll.scrollTop = 0;
+        }
+        async function loadMail() {
+            const my = ++mailReq;
+            const email = mailEmail;
+            mailState('Reading the latest email...', true);
+            try {
+                const res = await fetch('/api/latest-mail', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                if (my !== mailReq) return;
+                if (res.status === 401) {
+                    closeMailModal(); stopPush(); stopWaiting(false);
+                    dashboardSection.classList.add('hidden');
+                    loginSection.classList.remove('hidden');
+                    return;
+                }
+                const data = await res.json().catch(() => ({}));
+                if (my !== mailReq) return;
+                if (!res.ok) { mailState(data.error || 'Could not read this Gmail. Try again.'); return; }
+                renderMail(data);
+            } catch (err) {
+                if (my === mailReq) mailState('Could not reach the server. Try again.');
+            }
+        }
+        function openMailModal(email, trigger) {
+            mailEmail = String(email || '');
+            mailReturnFocus = trigger || null;
+            mailAcct.textContent = mailEmail;
+            mailModal.classList.remove('hidden');
+            document.getElementById('mailCloseBtn').focus();
+            loadMail();
+        }
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.card-mail');
+            if (btn) { e.preventDefault(); openMailModal(btn.dataset.email, btn); return; }
+            if (e.target === mailModal) closeMailModal();            // bairer dark jaygay click
+        });
+        document.getElementById('mailCloseBtn').addEventListener('click', closeMailModal);
+        document.getElementById('mailReloadBtn').addEventListener('click', () => { if (mailEmail) loadMail(); });
 
         // ======================= Ekta account refresh =======================
         async function refreshAccount(email, silent = false) {
@@ -2535,6 +2718,7 @@
             }
             if (e.ctrlKey || e.metaKey || e.altKey) return;
             if (e.key === 'Escape') {
+                if (mailModalOpen()) { closeMailModal(); return; }
                 if (paletteOpen()) { closePalette(); return; }
                 if (deleteModalOpen()) { closeDeleteModal(); return; }
                 if (accountsModalOpen()) {
@@ -2601,6 +2785,7 @@
                 settingsPopup.classList.remove('active');
                 resetSettingsPopup();
                 closeDeleteModal();
+                closeMailModal();
                 otpContainer.innerHTML = '';
                 allContainer.innerHTML = '';
                 await logout();
@@ -2663,6 +2848,7 @@
             updateHealthBadge();
             stopPush();
             stopWaiting(false);
+            closeMailModal();
             closeAccountsModal();
             closePalette();
         }
