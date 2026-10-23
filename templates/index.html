@@ -1032,6 +1032,27 @@
         :root[data-theme="light"] .mail-trust.ok, :root[data-theme="light"] .mail-pill.ok, :root[data-theme="light"] .mail-ago.fresh { color: #047857; }
         :root[data-theme="light"] .mail-trust.warn { color: #92400e; }
         :root[data-theme="light"] .mail-trust.bad, :root[data-theme="light"] .mail-pill.bad { color: #b91c1c; }
+
+        .mail-tab { display: inline-flex; align-items: center; gap: 5px; background: var(--ctl-bg); border: 1px solid var(--ctl-border); color: var(--text-muted); cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 700; padding: 5px 10px; border-radius: 999px; white-space: nowrap; }
+        .mail-tab:hover { color: var(--accent-cyan); border-color: rgba(6, 182, 212, 0.5); }
+        .mail-tab.active { background: rgba(6, 182, 212, 0.16); color: var(--accent-cyan); border-color: rgba(6, 182, 212, 0.45); }
+        .mail-tab.spam.active { background: rgba(245, 158, 11, 0.16); color: #fbbf24; border-color: rgba(245, 158, 11, 0.45); }
+        :root[data-theme="light"] .mail-tab.active { color: #0369a1; }
+        :root[data-theme="light"] .mail-tab.spam.active { color: #92400e; }
+        @media (max-width: 420px) { .mail-tab { padding: 5px 8px; font-size: 11.5px; } .mail-ibtn { padding: 6px 7px; } }
+        .mail-back { background: none; border: none; color: var(--accent-cyan); cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 700; padding: 0 0 10px; }
+        .mail-list { display: flex; flex-direction: column; gap: 8px; }
+        .mail-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font-family: inherit; color: var(--text-main); background: var(--ctl-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 10px 12px; cursor: pointer; }
+        .mail-row:hover, .mail-row:focus-visible { border-color: rgba(6, 182, 212, 0.5); outline: none; }
+        .mail-row .svc-avatar { width: 34px; height: 34px; border-radius: 50%; font-size: 15px; }
+        .mail-row-main { flex: 1; min-width: 0; }
+        .mail-row-name { font-weight: 700; font-size: 13.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mail-row-sub { font-size: 12.5px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .mail-row-side { flex: none; text-align: right; font-size: 11.5px; color: var(--text-muted); display: flex; flex-direction: column; align-items: flex-end; gap: 3px; }
+        .mail-row-code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; letter-spacing: 1px; font-size: 12.5px; color: var(--accent-cyan); background: rgba(6, 182, 212, 0.12); border-radius: 6px; padding: 1px 7px; }
+        .mail-row-bad { color: #f87171; font-weight: 700; }
+        :root[data-theme="light"] .mail-row-code { color: #0369a1; }
+        :root[data-theme="light"] .mail-row-bad { color: #b91c1c; }
     </style>
 </head>
 <body>
@@ -1235,7 +1256,9 @@
     <div id="mailModal" class="modal-overlay mail-overlay hidden" role="dialog" aria-modal="true" aria-label="Latest email">
         <div class="mail-box">
             <div class="mail-head">
-                <span class="mail-title"><i class="fa-regular fa-envelope-open"></i> Latest email</span>
+                <span class="mail-title" id="mailTitle"><i class="fa-regular fa-envelope-open"></i> Latest email</span>
+                <button type="button" class="mail-tab" id="mailInboxBtn" aria-pressed="false" title="Last 3 emails in Inbox"><i class="fa-solid fa-inbox"></i> Inbox</button>
+                <button type="button" class="mail-tab spam" id="mailSpamBtn" aria-pressed="false" title="Last 3 emails in Spam"><i class="fa-solid fa-ban"></i> Spam</button>
                 <button type="button" class="mail-ibtn" id="mailReloadBtn" title="Check again"><i class="fa-solid fa-rotate-right"></i></button>
                 <button type="button" class="mail-ibtn" id="mailCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -2236,6 +2259,7 @@
         const mailAcct = document.getElementById('mailAcct');
         const mailScroll = document.getElementById('mailScroll');
         let mailEmail = '', mailReq = 0, mailReturnFocus = null, mailAgoTimer = null;
+        let mailMode = 'latest', mailItem = null;      // mailMode: latest | inbox | spam ; mailItem: list theke khola email
 
         function mailModalOpen() { return !mailModal.classList.contains('hidden'); }
         function closeMailModal() {
@@ -2246,6 +2270,7 @@
             mailAcct.textContent = '';
             mailEmail = '';
             mailData = null;
+            mailMode = 'latest'; mailItem = null; setMailModeUI();
             hideLinkBar();
             if (mailReturnFocus && document.contains(mailReturnFocus)) { try { mailReturnFocus.focus(); } catch (e) {} }
             mailReturnFocus = null;
@@ -2509,6 +2534,12 @@
             mailData = d;
             hideLinkBar();
             mailScroll.textContent = '';
+            if (mailItem) {
+                const back = mkEl('button', 'mail-back', '\u2190 Back to ' + (mailMode === 'spam' ? 'Spam' : 'Inbox'));
+                back.type = 'button';
+                back.addEventListener('click', () => { mailItem = null; mailRaw = false; reloadMailView(); });
+                mailScroll.appendChild(back);
+            }
             if (!d.found) { mailState('No emails in this Gmail yet.'); return; }
 
             if (d.auth_fail) {
@@ -2542,35 +2573,116 @@
             mailScroll.appendChild(toggle);
             mailScroll.scrollTop = 0;
         }
-        async function loadMail() {
+        async function mailApi(url, payload, my) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (my !== mailReq) return null;
+            if (res.status === 401) {
+                closeMailModal(); stopPush(); stopWaiting(false);
+                dashboardSection.classList.add('hidden');
+                loginSection.classList.remove('hidden');
+                return null;
+            }
+            const data = await res.json().catch(() => ({}));
+            if (my !== mailReq) return null;
+            return { ok: res.ok, data };
+        }
+        async function loadMail(sel) {                   // sel = { folder, uid } hole oi email, nahole shesh email
             const my = ++mailReq;
             const email = mailEmail;
             hideLinkBar();
-            mailState('Reading the latest email...', true);
+            mailState(sel ? 'Reading the email...' : 'Reading the latest email...', true);
             try {
-                const res = await fetch('/api/latest-mail', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
-                });
-                if (my !== mailReq) return;
-                if (res.status === 401) {
-                    closeMailModal(); stopPush(); stopWaiting(false);
-                    dashboardSection.classList.add('hidden');
-                    loginSection.classList.remove('hidden');
-                    return;
-                }
-                const data = await res.json().catch(() => ({}));
-                if (my !== mailReq) return;
-                if (!res.ok) { mailState(data.error || 'Could not read this Gmail. Try again.'); return; }
-                renderMail(data);
+                const payload = sel ? { email, folder: sel.folder, uid: sel.uid } : { email };
+                const r = await mailApi('/api/latest-mail', payload, my);
+                if (!r) return;
+                if (!r.ok) { mailState(r.data.error || 'Could not read this Gmail. Try again.'); return; }
+                renderMail(r.data);
             } catch (err) {
                 if (my === mailReq) mailState('Could not reach the server. Try again.');
             }
         }
+        // ---- Inbox / Spam: shesh 3 ta email-er talika ----
+        function renderMailList(d, folder) {
+            mailData = null;
+            hideLinkBar();
+            clearInterval(mailAgoTimer);
+            mailScroll.textContent = '';
+            const items = d.items || [];
+            if (!items.length) { mailState('No emails in ' + (folder === 'spam' ? 'Spam' : 'Inbox') + ' yet.'); return; }
+            const list = mkEl('div', 'mail-list');
+            items.forEach(it => {
+                const row = mkEl('button', 'mail-row');
+                row.type = 'button';
+                const av = mkEl('span', 'mail-avatar');
+                av.innerHTML = avatarHTML({ code: '', email: it.from_name || it.from_addr || '?' });   // avatarHTML nijei escape kore
+                const main = mkEl('div', 'mail-row-main');
+                main.appendChild(mkEl('div', 'mail-row-name', it.from_name || it.from_addr || 'Unknown sender'));
+                main.appendChild(mkEl('div', 'mail-row-sub', it.subject || '(No subject)'));
+                const side = mkEl('div', 'mail-row-side');
+                side.appendChild(mkEl('span', null, mailAgo(it.timestamp)));
+                if (it.auth_fail) side.appendChild(mkEl('span', 'mail-row-bad', 'Suspicious'));
+                else if (it.code) side.appendChild(mkEl('span', 'mail-row-code', it.code));
+                row.title = it.time || '';
+                row.appendChild(av); row.appendChild(main); row.appendChild(side);
+                row.addEventListener('click', () => {
+                    mailItem = { folder, uid: it.uid };
+                    mailRaw = false;
+                    loadMail(mailItem);
+                });
+                list.appendChild(row);
+            });
+            mailScroll.appendChild(list);
+            mailScroll.scrollTop = 0;
+        }
+        async function loadMailList(folder) {
+            const my = ++mailReq;
+            const email = mailEmail;
+            hideLinkBar();
+            clearInterval(mailAgoTimer);
+            mailState('Loading ' + (folder === 'spam' ? 'Spam' : 'Inbox') + '...', true);
+            try {
+                const r = await mailApi('/api/mail-list', { email, folder }, my);
+                if (!r) return;
+                if (!r.ok) { mailState(r.data.error || 'Could not read this Gmail. Try again.'); return; }
+                renderMailList(r.data, folder);
+            } catch (err) {
+                if (my === mailReq) mailState('Could not reach the server. Try again.');
+            }
+        }
+        function setMailModeUI() {
+            const t = { latest: ['fa-regular fa-envelope-open', 'Latest email'], inbox: ['fa-solid fa-inbox', 'Inbox'], spam: ['fa-solid fa-ban', 'Spam'] }[mailMode];
+            const title = document.getElementById('mailTitle');
+            title.textContent = '';
+            title.appendChild(mkEl('i', t[0]));
+            title.appendChild(document.createTextNode(' ' + t[1]));
+            [['inbox', 'mailInboxBtn'], ['spam', 'mailSpamBtn']].forEach(([k, id]) => {
+                const b = document.getElementById(id);
+                b.classList.toggle('active', mailMode === k);
+                b.setAttribute('aria-pressed', mailMode === k ? 'true' : 'false');
+            });
+        }
+        function reloadMailView() {
+            if (!mailEmail) return;
+            if (mailItem) loadMail(mailItem);
+            else if (mailMode === 'latest') loadMail();
+            else loadMailList(mailMode);
+        }
+        function mailTab(k) {
+            // Ei tab-i already list-e thakle abar chaple "Latest email"-e fire jay; email khola thakle list-e fire jay.
+            mailMode = (mailMode === k && !mailItem) ? 'latest' : k;
+            mailItem = null;
+            mailRaw = false;
+            setMailModeUI();
+            reloadMailView();
+        }
         function openMailModal(email, trigger) {
             mailEmail = String(email || '');
             mailRaw = false;
+            mailMode = 'latest'; mailItem = null; setMailModeUI();
             mailReturnFocus = trigger || null;
             mailAcct.textContent = mailEmail;
             mailModal.classList.remove('hidden');
@@ -2583,7 +2695,9 @@
             if (e.target === mailModal) closeMailModal();            // bairer dark jaygay click
         });
         document.getElementById('mailCloseBtn').addEventListener('click', closeMailModal);
-        document.getElementById('mailReloadBtn').addEventListener('click', () => { if (mailEmail) loadMail(); });
+        document.getElementById('mailReloadBtn').addEventListener('click', reloadMailView);
+        document.getElementById('mailInboxBtn').addEventListener('click', () => mailTab('inbox'));
+        document.getElementById('mailSpamBtn').addEventListener('click', () => mailTab('spam'));
 
         // ======================= Ekta account refresh =======================
         async function refreshAccount(email, silent = false) {
