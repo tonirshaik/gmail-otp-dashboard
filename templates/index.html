@@ -1064,6 +1064,23 @@
         @media (max-width: 480px) { .otp-email .card-2fa { min-width: 34px; min-height: 34px; padding: 6px; } }
         .fchip.tfa-svc { margin-left: auto; white-space: nowrap; }
         .fchip.tfa-svc + .fchip.sort { margin-left: 0; }
+        .card-2fa.set { color: var(--accent-cyan); }
+        .card-2fa.on { color: var(--accent-cyan); background: rgba(6, 182, 212, 0.18); }
+        .tfa-box { margin: 4px 0 8px; }
+        .tfa-label { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; color: var(--accent-cyan); margin-bottom: 4px; }
+        .tfa-code { cursor: pointer; }
+        .tfa-time { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
+        .tfa-box.warn .tfa-label, .tfa-box.warn .tfa-time { color: var(--accent-red); }
+        .tfa-box.warn .ring-fg { stroke: var(--accent-red); }
+        .tfa-wait { opacity: 0.6; letter-spacing: 6px; }
+        .tfa-form { display: flex; flex-direction: column; gap: 10px; }
+        .tfa-form-title { font-weight: 700; font-size: 14px; color: var(--text-main); }
+        .tfa-steps { margin: 0; padding-left: 18px; font-size: 12.5px; line-height: 1.6; color: var(--text-muted); }
+        .tfa-input { width: 100%; box-sizing: border-box; background: var(--ctl-bg); border: 1px solid var(--ctl-border); color: var(--text-main); border-radius: 10px; padding: 10px 12px; font-family: inherit; font-size: 14px; }
+        .tfa-input:focus { outline: none; border-color: var(--accent-cyan); }
+        .tfa-err { color: #f87171; font-size: 12.5px; }
+        .tfa-bigcode { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-weight: 700; font-size: 30px; letter-spacing: 4px; color: var(--accent-cyan); text-align: center; padding: 8px 0; }
+        :root[data-theme="light"] .tfa-err { color: #b91c1c; }
         .tfa-empty { text-align: center; padding: 26px 10px; color: var(--text-muted); font-size: 13px; line-height: 1.6; }
         .tfa-empty i { display: block; font-size: 26px; margin-bottom: 10px; color: var(--accent-cyan); opacity: 0.8; }
     </style>
@@ -1299,6 +1316,10 @@
     </div>
 
     <script>
+        const tfaActive = new Map();                 // email -> { code, endAt, period, hideAt, busy }  (kon card-e 2FA code dekhacche)
+        const tfaSet = new Set();                    // je Gmail-gulor 2FA jora ache
+        let tfaEnabled = false, tfaStatusLoaded = false;
+        const TFA_SHOW_MS = 60000;                   // code ek minit dekhaye, tarpor abar email-code-e fire jay
         const loginSection = document.getElementById('loginSection');
         const dashboardSection = document.getElementById('dashboardSection');
         const loginForm = document.getElementById('loginForm');
@@ -1486,6 +1507,7 @@
         // Login-er por: shudhu PIN kora account gulo auto check hoy. Kono pin na thakle kichui check hoy na
         // (Refresh OTPs / card-er refresh chapte hobe).
         async function onLoggedIn() {
+            loadTfaStatus();
             otpContainer.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
@@ -1856,6 +1878,8 @@
             const usedBadge = (used && !showExpired)
                 ? `<button type="button" class="used-badge" data-used-key="${escAttr(uKey)}" title="Tap to mark as unused"><i class="fa-solid fa-check"></i> Used</button>`
                 : '';
+            const tfaOn = tfaActive.has(String(item.email).toLowerCase());
+            const tfaIsSet = tfaSet.has(String(item.email).toLowerCase());
             const card = `
                 <div class="otp-card ${suspicious ? 'is-suspicious' : ''} ${isNew && !used ? 'is-new' : ''} ${used && !showExpired ? 'is-used' : ''} ${showExpired ? 'is-expired' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''} ${opts.enter ? 'enter' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
                     ${isNew && !used ? '<div class="new-dot"></div>' : ''}
@@ -1866,14 +1890,14 @@
                         ${pinBtn}
                         ${health === 'ok' ? cardWaitHTML(item.email) : ''}
                         <button type="button" class="card-mail" data-email="${escAttr(item.email)}" title="Read the latest email in this Gmail" aria-label="Read the latest email in ${escAttr(item.email)}"><i class="fa-regular fa-envelope"></i></button>
-                        <button type="button" class="card-2fa" data-email="${escAttr(item.email)}" title="Two-factor (2FA) code of this Gmail" aria-label="2FA code of ${escAttr(item.email)}"><i class="fa-solid fa-shield-halved"></i></button>
+                        <button type="button" class="card-2fa ${tfaIsSet ? 'set' : ''} ${tfaOn ? 'on' : ''}" data-email="${escAttr(item.email)}" title="${tfaOn ? 'Back to the email code' : 'Two-factor (2FA) code of this Gmail'}" aria-label="2FA code of ${escAttr(item.email)}" aria-pressed="${tfaOn ? 'true' : 'false'}"><i class="fa-solid fa-shield-halved"></i></button>
                         <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
                     </div>
-                    ${validCode ? svcRowHTML(item) : ''}
-                    ${codeBox}
-                    ${phishNote}
-                    ${verifyNote}
-                    ${expiryRow}
+                    ${validCode && !tfaOn ? svcRowHTML(item) : ''}
+                    ${tfaOn ? tfaBoxHTML(item.email) : codeBox}
+                    ${tfaOn ? '' : phishNote}
+                    ${tfaOn ? '' : verifyNote}
+                    ${tfaOn ? '' : expiryRow}
                     <div class="otp-time">${infoLine}</div>
                 </div>`;
             if (!opts.deletable) return card;
@@ -2739,6 +2763,7 @@
             if (tfaReturnFocus && document.contains(tfaReturnFocus)) { try { tfaReturnFocus.focus(); } catch (e) {} }
             tfaReturnFocus = null;
         }
+        function tfaFmt(code) { code = String(code || ''); return code.length === 6 ? code.slice(0, 3) + ' ' + code.slice(3) : code; }
         function renderTfa() {
             const title = document.getElementById('tfaTitle');
             title.textContent = '';
@@ -2746,12 +2771,94 @@
             title.appendChild(document.createTextNode(tfaView === 'gmail' ? ' Gmail 2FA code' : ' 2FA Service'));
             document.getElementById('tfaAcct').textContent = tfaEmail || 'All Gmail accounts';
             tfaScroll.textContent = '';
+            if (tfaView === 'gmail') { renderTfaForm(); return; }
             const box = mkEl('div', 'tfa-empty');
-            box.appendChild(mkEl('i', tfaView === 'gmail' ? 'fa-solid fa-shield-halved' : 'fa-solid fa-layer-group'));
-            box.appendChild(document.createTextNode(tfaView === 'gmail'
-                ? 'The 2FA code of this Gmail will appear here.'
-                : 'Social media, websites and other services will be listed here, each with its 2FA code.'));
+            box.appendChild(mkEl('i', 'fa-solid fa-layer-group'));
+            box.appendChild(document.createTextNode('Social media, websites and other services will be listed here, each with its 2FA code.'));
             tfaScroll.appendChild(box);
+        }
+        function tfaInput(type, ph, id) {
+            const el = document.createElement('input');
+            el.type = type; el.placeholder = ph; el.id = id; el.className = 'tfa-input';
+            el.autocomplete = 'off'; el.spellcheck = false;
+            el.setAttribute('autocapitalize', 'off'); el.setAttribute('autocorrect', 'off');
+            return el;
+        }
+        function renderTfaForm() {
+            const form = mkEl('div', 'tfa-form');
+            form.appendChild(mkEl('div', 'tfa-form-title', 'Add the Authenticator key of this Gmail'));
+            const steps = mkEl('ol', 'tfa-steps');
+            ['Open Google Account \u2192 Security \u2192 2-Step Verification \u2192 Authenticator app \u2192 Set up.',
+             'Tap "Can\u2019t scan it?" and copy the secret key (or paste the otpauth:// link).',
+             'Paste it below and save. Then type the 6-digit code shown here into Google to finish.'
+            ].forEach(t => steps.appendChild(mkEl('li', null, t)));
+            form.appendChild(steps);
+            const secret = tfaInput('text', 'Secret key or otpauth:// link', 'tfaSecretInput');
+            const pwRow = mkEl('div', 'hidden');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Settings are locked. Enter the settings password.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const save = mkEl('button', 'mail-btn primary', 'Save');
+            save.type = 'button';
+            const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+            save.addEventListener('click', () => saveTfa(secret, pw, pwRow, fail, err, save));
+            [secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
+            form.appendChild(secret); form.appendChild(pwRow); form.appendChild(err); form.appendChild(save);
+            tfaScroll.appendChild(form);
+            setTimeout(() => { try { secret.focus(); } catch (e) {} }, 50);
+        }
+        async function saveTfa(secretEl, pwEl, pwRow, fail, errEl, saveBtn) {
+            errEl.classList.add('hidden');
+            const email = tfaEmail, secret = secretEl.value.trim();
+            if (!secret) { fail('Paste the secret key or the otpauth:// link'); return; }
+            saveBtn.disabled = true;
+            try {
+                let r = await tfaApi('/api/totp/add', { email, secret });
+                if (r.status === 403) {                         // settings locked -> password
+                    pwRow.classList.remove('hidden');
+                    const pw = pwEl.value.trim();
+                    if (!pw) { pwEl.focus(); return; }
+                    const u = await tfaApi('/api/settings-unlock', { password: pw });
+                    if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
+                    r = await tfaApi('/api/totp/add', { email, secret });
+                }
+                if (r.status === 401) return;
+                if (!r.ok) { if (tfaEmail === email) fail(r.data.error || 'Could not save. Try again.'); return; }
+                secretEl.value = ''; pwEl.value = '';
+                tfaEnabled = true;
+                tfaSet.add(tfaKey(email));
+                tfaActive.set(tfaKey(email), { code: r.data.code, period: r.data.period || 30, endAt: Date.now() + r.data.remaining * 1000, hideAt: Date.now() + TFA_SHOW_MS, busy: false });
+                if (tfaEmail === email) renderTfaDone();
+                rerenderCards();
+            } catch (err) {
+                fail('Could not reach the server. Try again.');
+            } finally {
+                saveBtn.disabled = false;
+            }
+        }
+        function renderTfaDone() {
+            tfaScroll.textContent = '';
+            const box = mkEl('div', 'tfa-form');
+            box.appendChild(mkEl('div', 'tfa-form-title', 'Saved. Enter this code in Google to finish:'));
+            box.appendChild(mkEl('div', 'tfa-bigcode'));
+            box.lastChild.dataset.tfaLive = 'code';
+            const left = mkEl('div', 'mail-note');
+            left.dataset.tfaLive = 'left';
+            box.appendChild(left);
+            const row = mkEl('div', 'mail-lb-row');
+            const copy = mkEl('button', 'mail-btn primary', 'Copy');
+            copy.type = 'button';
+            copy.addEventListener('click', () => { const s = tfaActive.get(tfaKey(tfaEmail)); if (s) copyQuiet(s.code).then(ok => showToast(ok ? '2FA code copied' : 'Could not copy')); });
+            const done = mkEl('button', 'mail-btn', 'Done');
+            done.type = 'button';
+            done.addEventListener('click', closeTfaModal);
+            row.appendChild(copy); row.appendChild(done);
+            box.appendChild(row);
+            tfaScroll.appendChild(box);
+            paintTfa();
         }
         function openTfaModal(view, email, trigger) {
             tfaView = view; tfaEmail = String(email || ''); tfaReturnFocus = trigger || null;
@@ -2761,10 +2868,122 @@
         }
         document.addEventListener('click', (e) => {
             const b = e.target.closest('.card-2fa');
-            if (b) { e.preventDefault(); openTfaModal('gmail', b.dataset.email, b); return; }
+            if (b) { e.preventDefault(); onTfaButton(b); return; }
+            const cb = e.target.closest('.tfa-code[data-tfa-email]');
+            if (cb) { tfaCopy(cb); return; }
             if (e.target === tfaModal) closeTfaModal();
         });
         document.getElementById('tfaCloseBtn').addEventListener('click', closeTfaModal);
+
+
+        // ---------- 2FA engine ----------
+        function tfaKey(email) { return String(email || '').toLowerCase(); }
+        async function tfaApi(url, payload) {
+            const res = await fetch(url, payload === undefined ? {} : {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            if (res.status === 401) {
+                closeTfaModal(); tfaActive.clear(); stopPush(); stopWaiting(false);
+                dashboardSection.classList.add('hidden');
+                loginSection.classList.remove('hidden');
+            }
+            const data = await res.json().catch(() => ({}));
+            return { ok: res.ok, status: res.status, data };
+        }
+        function rerenderCards() { renderHome(); if (accountsModalOpen()) renderAll(); }
+        async function loadTfaStatus() {
+            try {
+                const res = await fetch('/api/totp/status');
+                if (!res.ok) return;
+                const d = await res.json();
+                tfaEnabled = !!d.enabled;
+                tfaSet.clear();
+                (d.emails || []).forEach(em => tfaSet.add(tfaKey(em)));
+                tfaStatusLoaded = true;
+                rerenderCards();
+            } catch (e) {}
+        }
+        function tfaBoxHTML(email) {
+            const s = tfaActive.get(tfaKey(email));
+            return `<div class="tfa-box" data-tfa-email="${escAttr(email)}">
+                <div class="tfa-label"><i class="fa-solid fa-shield-halved"></i> 2FA code</div>
+                <div class="otp-code-box has-cells tfa-code" role="button" tabindex="0" data-tfa-email="${escAttr(email)}" data-code="${escAttr(s.code || '')}" title="Click to copy" aria-label="2FA code. Press to copy">${s.code ? codeCellsHTML(s.code, false) : '<span class="tfa-wait">&bull;&bull;&bull;</span>'}</div>
+                <div class="tfa-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg> <span class="tfa-left"></span></div>
+            </div>`;
+        }
+        function paintTfa() {
+            const now = Date.now();
+            document.querySelectorAll('.tfa-box[data-tfa-email]').forEach(box => {
+                const s = tfaActive.get(tfaKey(box.dataset.tfaEmail));
+                if (!s) return;
+                const leftMs = Math.max(0, s.endAt - now), left = Math.ceil(leftMs / 1000);
+                box.classList.toggle('warn', !!s.code && left <= 5);
+                const codeEl = box.querySelector('.tfa-code');
+                if (codeEl && codeEl.dataset.code !== (s.code || '')) {
+                    codeEl.dataset.code = s.code || '';
+                    codeEl.innerHTML = s.code ? codeCellsHTML(s.code, false) : '<span class="tfa-wait">&bull;&bull;&bull;</span>';
+                }
+                const ring = box.querySelector('.ring-fg');
+                if (ring) ring.style.strokeDashoffset = s.code ? RING_C * (1 - Math.min(1, leftMs / (s.period * 1000))) : RING_C;
+                const t = box.querySelector('.tfa-left');
+                if (t) t.textContent = s.code ? left + 's' : '';
+            });
+            if (tfaModalOpen()) {
+                const s = tfaActive.get(tfaKey(tfaEmail));
+                tfaScroll.querySelectorAll('[data-tfa-live]').forEach(el => {
+                    if (!s) { el.textContent = ''; return; }
+                    el.textContent = el.dataset.tfaLive === 'code' ? tfaFmt(s.code) : 'Changes in ' + Math.max(0, Math.ceil((s.endAt - now) / 1000)) + 's';
+                });
+            }
+        }
+        async function tfaFetch(key) {
+            const s = tfaActive.get(key);
+            if (!s || s.busy) return;
+            s.busy = true;
+            try {
+                const r = await tfaApi('/api/totp/code', { email: key });
+                if (tfaActive.get(key) !== s) return;
+                if (!r.ok) {
+                    tfaActive.delete(key);
+                    if (r.data && r.data.not_set) tfaSet.delete(key);
+                    if (r.status !== 401) showToast((r.data && r.data.error) || 'Could not get the 2FA code');
+                    rerenderCards();
+                    return;
+                }
+                s.code = r.data.code; s.period = r.data.period || 30; s.endAt = Date.now() + r.data.remaining * 1000;
+                paintTfa();
+            } catch (e) {
+                if (tfaActive.get(key) === s) { tfaActive.delete(key); showToast('Could not reach the server'); rerenderCards(); }
+            } finally {
+                s.busy = false;
+            }
+        }
+        async function onTfaButton(btn) {
+            const email = btn.dataset.email, key = tfaKey(email);
+            if (tfaActive.has(key)) { tfaActive.delete(key); rerenderCards(); return; }          // abar chaple email-code-e fire
+            if (!tfaStatusLoaded) await loadTfaStatus();
+            if (!tfaEnabled) { showToast('2FA is not set up on the server yet (TOTP_ENC_KEY)'); return; }
+            if (!tfaSet.has(key)) { openTfaModal('gmail', email, btn); return; }
+            tfaActive.set(key, { code: '', period: 30, endAt: 0, hideAt: Date.now() + TFA_SHOW_MS, busy: false });
+            rerenderCards();
+            tfaFetch(key);
+        }
+        function tfaCopy(box) {
+            const key = tfaKey(box.dataset.tfaEmail), s = tfaActive.get(key);
+            if (!s || !s.code) return;
+            s.hideAt = Date.now() + TFA_SHOW_MS;
+            copyQuiet(s.code).then(ok => { showToast(ok ? '2FA code copied' : 'Could not copy'); if (ok) flashCopied(box); });
+        }
+        setInterval(() => {
+            if (!tfaActive.size) return;
+            const now = Date.now();
+            let hide = false;
+            tfaActive.forEach((s, k) => {
+                if (now >= s.hideAt) { tfaActive.delete(k); hide = true; return; }
+                if (s.endAt && now >= s.endAt + 300 && !s.busy) tfaFetch(k);     // notun 30s-er code
+            });
+            if (hide) rerenderCards(); else paintTfa();
+        }, 1000);
 
         // ======================= Ekta account refresh =======================
         async function refreshAccount(email, silent = false) {
@@ -3280,7 +3499,7 @@
                 settingsPopup.classList.remove('active');
                 resetSettingsPopup();
                 closeDeleteModal();
-                closeMailModal(); closeTfaModal();
+                closeMailModal(); closeTfaModal(); tfaActive.clear();
                 otpContainer.innerHTML = '';
                 allContainer.innerHTML = '';
                 await logout();
@@ -3343,7 +3562,7 @@
             updateHealthBadge();
             stopPush();
             stopWaiting(false);
-            closeMailModal(); closeTfaModal();
+            closeMailModal(); closeTfaModal(); tfaActive.clear();
             closeAccountsModal();
             closePalette();
         }
@@ -3411,7 +3630,7 @@
             const t = e.target;
             if ((e.key === 'Enter' || e.key === ' ') && t && t.classList && t.classList.contains('otp-code-box') && t.getAttribute('role') === 'button') {
                 e.preventDefault();
-                onCodeTap(t);
+                if (t.classList.contains('tfa-code')) tfaCopy(t); else onCodeTap(t);
             }
         });
 
