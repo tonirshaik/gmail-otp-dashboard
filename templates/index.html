@@ -1242,9 +1242,6 @@
             <div class="dash-grid">
             <div class="dash-side">
             <div class="btn-row">
-                <button type="button" class="btn btn-refresh" id="refreshBtn">
-                    <i class="fa-solid fa-rotate-right" id="refreshIcon"></i> Refresh OTPs
-                </button>
                 <button type="button" class="btn btn-wait" id="waitBtn">
                     <i class="fa-solid fa-hourglass-start"></i> Wait for new code
                 </button>
@@ -1396,7 +1393,6 @@
         const otpContainer = document.getElementById('otpContainer');
         const allContainer = document.getElementById('allContainer');
         const accountsModal = document.getElementById('accountsModal');
-        const refreshBtn = document.getElementById('refreshBtn');
         const addAccountForm = document.getElementById('addAccountForm');
         const statusMsg = document.getElementById('statusMsg');
 
@@ -1595,10 +1591,6 @@
 
             if (!silent) {
                 loadAccountCount();
-                refreshBtn.disabled = true;
-                refreshBtn.style.opacity = '0.75';
-                refreshBtn.style.cursor = 'not-allowed';
-                refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right rotating"></i> Checking Gmail...`;
 
                 otpContainer.innerHTML = skeletonHTML(2);
             }
@@ -1634,12 +1626,6 @@
                 }
             } finally {
                 isFetching = false;
-                if (!silent) {
-                    refreshBtn.disabled = false;
-                    refreshBtn.style.opacity = '1';
-                    refreshBtn.style.cursor = 'pointer';
-                    refreshBtn.innerHTML = `<i class="fa-solid fa-rotate-right"></i> Refresh OTPs`;
-                }
             }
         }
 
@@ -3717,8 +3703,6 @@
                 showMessage("Connection error", true);
             }
         });
-
-        refreshBtn.addEventListener('click', () => fetchOTPs());
 
         // ---------- Fingerprint / Face (Passkey) ----------
         const passkeyLoginBtn = document.getElementById('passkeyLoginBtn');
