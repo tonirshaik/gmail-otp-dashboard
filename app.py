@@ -15,6 +15,7 @@ import unicodedata
 import select
 import queue
 import uuid
+import gzip
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime, parseaddr
 from email.header import decode_header, make_header
@@ -1470,6 +1471,50 @@ def enforce_idle_timeout():
     if path not in _IDLE_BACKGROUND:
         _mark_active()                            # purono session-e last_active na thakleo ekhane boshe jabe
     return None
+
+# ---------------- Response compression (gzip) -- page ~450 KB theke ~100 KB hoye nambe ----------------
+_GZIP_TYPES = ('text/html', 'text/css', 'text/plain', 'text/javascript', 'application/javascript', 'application/json',
+               'application/manifest+json', 'image/svg+xml')
+_GZIP_CACHE = {}      # sha1(body) -> gzip bytes  (boro page ekbar-i compress hoy, protibar na)
+
+@app.after_request
+def gzip_response(resp):
+    try:
+        if resp.status_code != 200:
+            return resp
+        if resp.direct_passthrough:
+            if request.path.startswith('/static/') and request.path.endswith(('.js', '.css', '.svg')):
+                resp.direct_passthrough = False                                         # chhoto static file -- compress kora jay
+                resp.make_sequence()
+            else:
+                return resp
+        if resp.is_streamed:                                                            # SSE / stream-e hat dei na
+            return resp
+        if 'gzip' not in request.headers.get('Accept-Encoding', '').lower():
+            return resp
+        if resp.headers.get('Content-Encoding'):                                        # proxy age-i compress korle skip
+            return resp
+        ctype = (resp.headers.get('Content-Type') or '').split(';')[0].strip().lower()
+        if ctype not in _GZIP_TYPES:
+            return resp
+        data = resp.get_data()
+        if len(data) < 700:
+            return resp
+        key = hashlib.sha1(data).hexdigest() if len(data) > 50000 else None
+        packed = _GZIP_CACHE.get(key) if key else None
+        if packed is None:
+            packed = gzip.compress(data, compresslevel=6, mtime=0)
+            if key:
+                if len(_GZIP_CACHE) > 8:
+                    _GZIP_CACHE.clear()
+                _GZIP_CACHE[key] = packed
+        resp.set_data(packed)
+        resp.headers['Content-Encoding'] = 'gzip'
+        resp.headers['Content-Length'] = str(len(packed))
+        resp.headers.add('Vary', 'Accept-Encoding')
+    except Exception as e:
+        print(f"[GZIP] skipped: {type(e).__name__}")
+    return resp
 
 @app.route('/')
 def home():
