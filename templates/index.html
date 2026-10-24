@@ -1111,19 +1111,17 @@
         .svc-bar .mail-btn { white-space: nowrap; }
         .svc-list { display: flex; flex-direction: column; gap: 10px; }
         .svc-list .otp-swipe { margin-bottom: 0; }
-        .svc-item.otp-card { padding: 12px 14px 12px 18px; }
-        .svc-row { display: flex; align-items: center; gap: 12px; }
+        .svc-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
         .svc-av { width: 38px; height: 38px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #fff; }
         .svc-info { flex: 1; min-width: 0; }
         .svc-name { font-weight: 700; font-size: 14px; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .svc-label { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .svc-code { display: inline-block; margin-top: 2px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 24px; font-weight: 800; letter-spacing: 3px; color: var(--accent-cyan); cursor: pointer; line-height: 1.25; }
-        .svc-time { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: none; font-size: 11px; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
-        .svc-item.warn .svc-code, .svc-item.warn .svc-time { color: var(--accent-red); }
+        .svc-code { cursor: pointer; }
+        .svc-time { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 12px; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
+        .svc-item.warn .svc-time { color: var(--accent-red); }
         .svc-item.warn .ring-fg { stroke: var(--accent-red); }
         .swipe-tfa .swipe-svc-edit { background: rgba(6, 182, 212, 0.92); }
         .swipe-tfa .swipe-svc-del { background: rgba(239, 68, 68, 0.92); }
-        :root[data-theme="light"] .svc-code { color: #0369a1; }
         .tfa-qr-row { display: flex; gap: 8px; }
         .tfa-qr-row .mail-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; }
         .tfa-cam { display: flex; flex-direction: column; gap: 8px; }
@@ -3147,10 +3145,17 @@
             tfaScroll.appendChild(bar); tfaScroll.appendChild(list);
             renderSvcItems();
         }
+        function svcUpdateTitle() {                     // "2FA Service (5)" -- koita service add ache
+            if (tfaView !== 'services' || !svcLoaded) return;
+            const t = document.getElementById('tfaTitle');
+            const n = t && t.lastChild;
+            if (n && n.nodeType === 3) n.nodeValue = ' 2FA Service (' + svcList.length + ')';
+        }
         function renderSvcItems() {
             const list = document.getElementById('svcList');
             if (!list) return;
             if (!svcLoaded) { list.innerHTML = '<div class="mail-state">Loading...</div>'; return; }
+            svcUpdateTitle();
             if (!svcList.length) {
                 list.innerHTML = '<div class="tfa-empty"><i class="fa-solid fa-layer-group"></i>No service added yet. Tap <b>Add</b> to add Facebook, GitHub, any website or app.</div>';
                 return;
@@ -3166,15 +3171,15 @@
                         <button type="button" class="swipe-svc-del" data-id="${id}" title="Remove" aria-label="Remove ${nm}"><i class="fa-regular fa-trash-can"></i></button>
                     </div>
                     <div class="otp-card svc-item" data-svc="${id}">
-                        <div class="svc-row">
+                        <div class="svc-head">
                             ${svcAvatar(x.name)}
                             <div class="svc-info">
                                 <div class="svc-name">${nm}</div>
                                 ${x.label ? `<div class="svc-label">${escAttr(x.label)}</div>` : ''}
-                                <div class="svc-code" role="button" tabindex="0" data-id="${id}" title="Click to copy" aria-label="2FA code of ${nm}. Press to copy"></div>
                             </div>
-                            <div class="svc-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg><span class="svc-left"></span></div>
                         </div>
+                        <div class="otp-code-box has-cells svc-code" role="button" tabindex="0" data-id="${id}" title="Click to copy" aria-label="2FA code of ${nm}. Press to copy"></div>
+                        <div class="svc-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg><span class="svc-left"></span></div>
                     </div>
                 </div>`;
             }).join('');
@@ -3188,8 +3193,11 @@
                 const leftMs = Math.max(0, x.endAt - now), left = Math.ceil(leftMs / 1000);
                 el.classList.toggle('warn', !!x.code && left <= 5);
                 const c = el.querySelector('.svc-code');
-                const txt = x.code ? svcFmt(x.code) : '------';
-                if (c && c.textContent !== txt) c.textContent = txt;
+                const cur = x.code || '';
+                if (c && c.dataset.code !== cur) {
+                    c.dataset.code = cur;
+                    c.innerHTML = cur ? codeCellsHTML(cur, false) : '<span class="tfa-wait">------</span>';
+                }
                 const ring = el.querySelector('.ring-fg');
                 if (ring) ring.style.strokeDashoffset = x.code ? RING_C * (1 - Math.min(1, leftMs / (x.period * 1000))) : RING_C;
                 const t = el.querySelector('.svc-left');
