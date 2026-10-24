@@ -1,0 +1,3619 @@
+        const tfaActive = new Map();                 // email -> { code, endAt, period, hideAt, busy }  (kon card-e 2FA code dekhacche)
+        const tfaSet = new Set();                    // je Gmail-gulor 2FA jora ache
+        let tfaEnabled = false, tfaStatusLoaded = false;
+        const TFA_SHOW_MS = 60000;                   // code ek minit dekhaye, tarpor abar email-code-e fire jay
+        const loginSection = document.getElementById('loginSection');
+        const dashboardSection = document.getElementById('dashboardSection');
+        const loginForm = document.getElementById('loginForm');
+        const loginError = document.getElementById('loginError');
+
+        const settingsToggle = document.getElementById('settingsToggle');
+        const settingsPopup = document.getElementById('settingsPopup');
+        const otpContainer = document.getElementById('otpContainer');
+        const allContainer = document.getElementById('allContainer');
+        const accountsModal = document.getElementById('accountsModal');
+        const addAccountForm = document.getElementById('addAccountForm');
+        const statusMsg = document.getElementById('statusMsg');
+
+        const settingsAuth = document.getElementById('settingsAuth');
+        const settingsContent = document.getElementById('settingsContent');
+        const settingsAuthForm = document.getElementById('settingsAuthForm');
+        const settingsPasswordInput = document.getElementById('settingsPasswordInput');
+        const settingsAuthError = document.getElementById('settingsAuthError');
+
+        // আগের কোডগুলো মনে রাখার জন্য
+        let previousCodes = [];
+        let waiting = null;            // "Wait for new code" mode
+        let es = null, pushEnabled = null, pushConnected = false, pushRetry = null;
+        let helloCount = 0, lastDisconnectAt = 0;
+        const WAIT_SECONDS = 120;
+
+        function resetSettingsPopup() {
+            settingsAuth.classList.remove('hidden');
+            settingsContent.classList.add('hidden');
+            settingsPasswordInput.value = '';
+            settingsAuthError.style.display = 'none';
+            settingsAuthError.innerText = '';
+        }
+
+        settingsToggle.addEventListener('click', (e) => {
+            e.stopPropagation();
+            settingsPopup.classList.toggle('active');
+            if (!settingsPopup.classList.contains('active')) {
+                resetSettingsPopup();
+            }
+        });
+
+        function openSettingsContent() {
+            settingsAuth.classList.add('hidden');
+            settingsContent.classList.remove('hidden');
+            settingsAuthError.style.display = 'none';
+        }
+
+        function showSettingsError(msg) {
+            settingsAuthError.innerText = msg;
+            settingsAuthError.style.display = 'block';
+        }
+
+        settingsAuthForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = settingsPasswordInput.value.trim();
+            try {
+                const res = await fetch('/api/settings-unlock', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+                if (res.ok) {
+                    openSettingsContent();
+                } else {
+                    let msg = 'Incorrect password. Please try again.';
+                    try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (e2) {}
+                    showSettingsError(msg);
+                }
+            } catch (err) {
+                showSettingsError('Server Error!');
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!settingsPopup.contains(e.target) && !settingsToggle.contains(e.target)) {
+                settingsPopup.classList.remove('active');
+                resetSettingsPopup();
+            }
+        });
+
+        function showMessage(msg, isError = false) {
+            statusMsg.style.display = 'block';
+            statusMsg.style.color = isError ? 'var(--accent-red)' : 'var(--accent-green)';
+            statusMsg.innerText = msg;
+            setTimeout(() => {
+                statusMsg.style.display = 'none';
+            }, 4000);
+        }
+
+        function lightVibrate() {
+            try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) {}   // halka ekta tap
+        }
+
+        function fallbackCopy(text) {
+            // clipboard API na thakle / block hole purono poddhoti
+            const ta = document.createElement('textarea');
+            ta.value = text;
+            ta.setAttribute('readonly', '');
+            ta.style.cssText = 'position:fixed;top:-1000px;opacity:0;';
+            document.body.appendChild(ta);
+            ta.select();
+            let ok = false;
+            try { ok = document.execCommand('copy'); } catch (e) {}
+            document.body.removeChild(ta);
+            return ok;
+        }
+
+        function copyOTP(code, onSuccess) {
+            if (!code || code === 'Code not found' || code === 'No emails found') return;
+            const done = () => { showToast(`Copied: ${code}`); lightVibrate(); if (onSuccess) onSuccess(); };
+            const fail = () => { if (fallbackCopy(code)) done(); else showToast('Could not copy'); };
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+                navigator.clipboard.writeText(code).then(done).catch(fail);
+            } else {
+                fail();
+            }
+        }
+
+        let toastTimer = null;
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toastMsg.innerText = message;
+            toast.classList.add('show');
+            clearTimeout(toastTimer);   // poroborti toast age bondho na hoy
+            toastTimer = setTimeout(() => { toast.classList.remove('show'); }, Math.max(2000, String(message).length * 60));
+        }
+
+        loginForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const password = document.getElementById('masterPasswordInput').value;
+
+            try {
+                const res = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password })
+                });
+
+                if (res.ok) {
+                    loginSection.classList.add('hidden');
+                    dashboardSection.classList.remove('hidden');
+                    onLoggedIn();
+                } else {
+                    let msg = "Wrong Master Password!";
+                    try { const d = await res.json(); if (d && d.error) msg = d.error; } catch (e2) {}
+                    loginError.style.display = 'block';
+                    loginError.innerText = msg;
+                }
+            } catch (err) {
+                loginError.style.display = 'block';
+                loginError.innerText = "Server Error!";
+            }
+        });
+
+        async function loadAccountCount() {
+            try {
+                const res = await fetch('/api/accounts-count');
+                if (res.ok) {
+                    const data = await res.json();
+                    document.getElementById('accountCount').innerText = data.count;
+                    document.getElementById('accountCountBar').title = 'All Gmail accounts (' + data.count + ')';
+                }
+            } catch (err) {}
+        }
+
+        let isFetching = false;
+
+        // Shudhu account-er email-er list (kono Gmail check hoy na) -- check na kora account "Not checked yet" hishebe dekhate
+        let accountList = [];
+        let accountListLoaded = false;
+        async function loadAccountList() {
+            try {
+                const res = await fetch('/api/accounts-list');
+                if (!res.ok) return;
+                accountList = ((await res.json()).emails || []).map(x => String(x).toLowerCase());
+                window._accountList = accountList;   // bulk preview needs this
+                accountListLoaded = true;
+                renderHome();
+                if (accountsModalOpen()) renderAll();
+            } catch (e) {}
+        }
+
+        // Login-er por: shudhu PIN kora account gulo auto check hoy. Kono pin na thakle kichui check hoy na
+        // (Refresh OTPs / card-er refresh chapte hobe).
+        let launchAction = '';
+        async function onLoggedIn() {
+            loadTfaStatus();
+            otpContainer.innerHTML = '';
+            loadAccountCount();
+            ensurePush();
+            loadAccountList();
+            await syncPins();
+            renderHome();
+            initAppFeatures();
+            if (launchAction === 'find') { launchAction = ''; openPalette(); }
+        }
+
+        function escAttr(s) {
+            return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        }
+
+        // Home-e code tar nijer meyad porjonto dekhabe (server email theke pore, na thakle 2 min). expiresAt = kokhon home theke soribe.
+        // (Total Gmail list-e shesh code always thake)
+        function normalizeExpiry(item) {
+            if (!isValidItem(item)) return item;
+            const ttl = item.ttl_seconds ?? 120;
+            const age = item.age_seconds ?? 0;
+            return { ...item, expiresAt: Date.now() + (ttl - age) * 1000, ttlMs: ttl * 1000 };
+        }
+
+        // Bar kome 1s-e smoothly: porer second-er mane-te transition, notun code ele (jump) lafiye full hoy
+        function setTbar(root, leftMs, periodMs, active) {
+            const f = root.querySelector('.tbar-fill');
+            if (!f) return;
+            const pc = (v) => Math.max(0, Math.min(1, v)) * 100;
+            const cur = active ? pc(leftMs / periodMs) : 0;
+            const nxt = active ? pc((leftMs - 1000) / periodMs) : 0;
+            const prev = parseFloat(f.dataset.pct);
+            if (isNaN(prev) || Math.abs(cur - prev) > 8) {
+                f.style.transition = 'none';
+                f.style.width = cur + '%';
+                void f.offsetWidth;
+                f.style.transition = '';
+            }
+            f.style.width = nxt + '%';
+            f.dataset.pct = nxt;
+        }
+        function updateCardTimer(card) {
+            const left = Number(card.dataset.expires) - Date.now();
+            if (left <= 0) return false;
+            const el = card.querySelector('.otp-expiry-time');
+            if (el) el.textContent = fmtLeft(Math.ceil(left / 1000));
+            const ttlMs = Number(card.dataset.ttl) || 120000;
+            const frac = Math.max(0, Math.min(1, left / ttlMs));
+            const expiring = left <= Math.min(20000, ttlMs * 0.25);     // chhoto meyade shobshomoy lal na hoy
+            card.classList.toggle('expiring', expiring);
+            card.classList.toggle('ring-warn', !expiring && frac <= 0.5);
+            setTbar(card, left, ttlMs, true);
+            return true;
+        }
+        function syncTimers() {
+            document.querySelectorAll('#otpContainer .otp-card[data-expires]').forEach(updateCardTimer);
+        }
+        function tickExpiry() {
+            let homeExpired = false;
+            document.querySelectorAll('#otpContainer .otp-card[data-expires]').forEach(card => {
+                if (!updateCardTimer(card)) homeExpired = true;
+            });
+            if (homeExpired) renderHome();   // code-er nijer meyad shesh -> home theke sore jabe
+        }
+        setInterval(tickExpiry, 1000);
+
+        // ---- state ----
+        let allItems = [];          // shob account (code thak ba na thak)
+        let newCardEmails = [];     // home-e "new" dot dekhabe jegulo-te
+        let hasLoaded = false;
+        const HOME_MAX = 2;         // home-e maximum koyta card
+
+        function isValidItem(item) {
+            return !!(item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error');
+        }
+
+        // email-er tarikh (Dhaka somoy), jemon ", 12 Oct 2026". timestamp na thakle khali.
+        function fmtDate(ts) {
+            if (!ts) return '';
+            try {
+                return ', ' + new Date(ts * 1000).toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Dhaka'
+                });
+            } catch (e) { return ''; }
+        }
+
+        function fmtLeft(sec) {
+            if (sec >= 3600) {
+                return Math.floor(sec / 3600) + ':' + String(Math.floor((sec % 3600) / 60)).padStart(2, '0') + ':' + String(sec % 60).padStart(2, '0');
+            }
+            return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+        }
+
+        // ---------- mask / ring / health helpers ----------
+        const MASK_CODES = true;          // true: code "•••" thake, tap korle dekha jay
+        const REVEAL_MS = 15000;          // dekhano code koto ms por abar lukabe
+        const RING_C = 2 * Math.PI * 10;  // countdown ring-er poridhi (r = 10)
+        const revealedAt = new Map();     // codeKey -> kokhon dekhano hoyechhe
+
+        function healthOf(item) {
+            if (item.code === 'Error') return /login failed/i.test(item.sender || '') ? 'bad' : 'warn';
+            return 'ok';
+        }
+        const HEALTH_TITLE = { ok: 'Connected', warn: 'Connection problem - try refresh', bad: 'Login failed - check App Password' };
+
+        function codeKey(item) { return item.email + '|' + item.code; }
+        function isRevealed(item) {
+            if (!MASK_CODES) return true;
+            const ts = revealedAt.get(codeKey(item));
+            return !!ts && (Date.now() - ts) < REVEAL_MS;
+        }
+        function maskText(code) { return '•'.repeat(Math.min(String(code).length, 10)); }
+
+        function setBoxRevealed(box, revealed) {
+            box.classList.toggle('masked', !revealed);
+            box.innerHTML = codeCellsHTML(box.dataset.code, !revealed);
+            box.title = revealed ? 'Click to copy' : 'Tap to reveal & copy';
+            box.setAttribute('aria-label', codeAria(box.dataset.code, revealed));
+        }
+
+        // ---------- Used code (copy korle "used" hoye jay) ----------
+        // Key = email + email-er timestamp. Code-er maan kothao save hoy na (shudhu kon mail-er code).
+        const USED_KEY = 'otpDash.used';
+        const USED_KEEP_MS = 48 * 3600 * 1000;
+        function loadUsed() {
+            try {
+                const o = JSON.parse(localStorage.getItem(USED_KEY) || '{}');
+                const now = Date.now(), out = {};
+                if (o && typeof o === 'object') Object.keys(o).forEach(k => { if (now - o[k] < USED_KEEP_MS) out[k] = o[k]; });
+                return out;
+            } catch (e) { return {}; }
+        }
+        let usedMap = loadUsed();
+        function saveUsed() { try { localStorage.setItem(USED_KEY, JSON.stringify(usedMap)); } catch (e) {} }
+        function usedKey(item) { return String(item.email).toLowerCase() + '|' + (item.timestamp || 0); }
+        function isUsed(item) { return isValidItem(item) && !!usedMap[usedKey(item)]; }
+
+        let reorderTimer = null;
+        function setUsed(key, used) {
+            if (used) usedMap[key] = Date.now(); else delete usedMap[key];
+            saveUsed();
+            // card-ta sathe sathe "used" dekhai; ektu pore home-er ordering thik kori (notun code age)
+            document.querySelectorAll('.otp-code-box[data-used-key]').forEach(box => {
+                if (box.dataset.usedKey !== key) return;
+                const card = box.closest('.otp-card');
+                if (!card) return;
+                card.classList.toggle('is-used', used);
+                if (used) {
+                    card.classList.add('just-used');
+                    card.querySelector('.new-dot')?.remove();
+                    if (!card.querySelector('.used-badge')) {      // badge sathe sathe dekhai
+                        const holder = card.querySelector('.otp-email > span:not(.health-dot)');
+                        if (holder) holder.insertAdjacentHTML('afterend',
+                            `<button type="button" class="used-badge" data-used-key="${escAttr(key)}" title="Tap to mark as unused"><i class="fa-solid fa-check"></i> Used</button>`);
+                    }
+                }
+            });
+            clearTimeout(reorderTimer);
+            reorderTimer = setTimeout(() => { renderHome(); if (accountsModalOpen()) renderAll(); }, used ? 900 : 0);
+        }
+
+        function onCodeTap(box) {
+            const code = box.dataset.code;
+            if (!code) return;
+            if (box.classList.contains('link-box')) {              // magic link: copy na, notun tab-e khule
+                const url = box.dataset.url || '';
+                if (/^https:\/\//i.test(url)) {
+                    window.open(url, '_blank', 'noopener,noreferrer');
+                    markAccountUsed(String(box.dataset.key || '').split('|')[0]);
+                    const k = box.dataset.usedKey;
+                    if (k && !usedMap[k]) setUsed(k, true);
+                }
+                return;
+            }
+            if (box.classList.contains('masked')) {
+                revealedAt.set(box.dataset.key, Date.now());
+                setBoxRevealed(box, true);
+            }
+            const uk = box.dataset.usedKey;
+            copyOTP(code, () => { flashCopied(box); markAccountUsed(String(box.dataset.key || '').split('|')[0]); if (uk && !usedMap[uk]) setUsed(uk, true); });
+        }
+
+        // "Used" badge-e tap korle abar unused (vul kore copy hole)
+        document.addEventListener('click', (e) => {
+            const b = e.target.closest('.used-badge');
+            if (!b) return;
+            e.stopPropagation();
+            setUsed(b.dataset.usedKey, false);
+            showToast('Marked as unused');
+        });
+
+        // dekhano code REVEAL_MS por nije abar lukiye jabe
+        setInterval(() => {
+            if (!MASK_CODES) return;
+            const now = Date.now();
+            document.querySelectorAll('.otp-code-box[data-key]:not(.masked):not(.link-box)').forEach(box => {
+                const ts = revealedAt.get(box.dataset.key);
+                if (!ts || now - ts >= REVEAL_MS) setBoxRevealed(box, false);
+            });
+            revealedAt.forEach((ts, k) => { if (now - ts > REVEAL_MS) revealedAt.delete(k); });
+        }, 1000);
+
+        // tab theke soresh gele sathe sathe shob code lukiye felo
+        document.addEventListener('visibilitychange', () => {
+            if (!MASK_CODES || document.visibilityState !== 'hidden') return;
+            revealedAt.clear();
+            document.querySelectorAll('.otp-code-box[data-key]:not(.masked):not(.link-box)').forEach(box => setBoxRevealed(box, false));
+        });
+
+        function updateHealthBadge() {
+            const el = document.getElementById('healthBadge');
+            if (!el) return;
+            const bad = allItems.filter(i => healthOf(i) === 'bad').length;
+            const warn = allItems.filter(i => healthOf(i) === 'warn').length;
+            const n = bad + warn;
+            if (!n) { el.className = 'health-flag hidden'; return; }
+            el.className = 'health-flag ' + (bad ? 'bad' : 'warn');
+            el.textContent = '!';
+            el.title = n + ' account(s) need attention';
+        }
+
+        function skeletonHTML(n) {
+            return Array.from({ length: n || 2 }, () => `
+                <div class="skeleton-card">
+                    <div class="sk sk-line w60"></div>
+                    <div class="sk sk-box"></div>
+                    <div class="sk sk-line w40"></div>
+                </div>`).join('');
+        }
+
+        // ---------- UI refresh helpers (service avatar, code cells, enter animation) ----------
+        const entered = new Set();            // je code card ekbar animate hoyeche, abar hobe na
+        // Kon account kokhon shesh check hoyeche (shudhu ei page khola thakar somoy-er jonno)
+        const checkedAt = new Map();
+        const BN_DIGITS = ['\u09e6', '\u09e7', '\u09e8', '\u09e9', '\u09ea', '\u09eb', '\u09ec', '\u09ed', '\u09ee', '\u09ef'];
+        function bnNum(n) { return String(n).replace(/\d/g, d => BN_DIGITS[+d]); }
+        function checkedAgoText(email) {
+            const t = checkedAt.get(String(email).toLowerCase());
+            if (!t) return '';
+            const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+            let ago;
+            if (sec < 10) ago = '\u098f\u0987\u09ae\u09be\u09a4\u09cd\u09b0';
+            else if (sec < 60) ago = bnNum(sec) + ' \u09b8\u09c7\u0995\u09c7\u09a8\u09cd\u09a1 \u0986\u0997\u09c7';
+            else if (sec < 3600) ago = bnNum(Math.floor(sec / 60)) + ' \u09ae\u09bf\u09a8\u09bf\u099f \u0986\u0997\u09c7';
+            else if (sec < 86400) ago = bnNum(Math.floor(sec / 3600)) + ' \u0998\u09a8\u09cd\u099f\u09be \u0986\u0997\u09c7';
+            else ago = bnNum(Math.floor(sec / 86400)) + ' \u09a6\u09bf\u09a8 \u0986\u0997\u09c7';
+            return '\u09b6\u09c7\u09b7 \u099a\u09c7\u0995: ' + ago;
+        }
+        // Shesh kon account kokhon byabohar kora hoyeche (refresh / wait / code copy) -- ei device-e thake
+        const LASTUSED_KEY = 'otpDash.lastUsed';
+        let lastUsed = {};
+        try { lastUsed = JSON.parse(localStorage.getItem(LASTUSED_KEY) || '{}') || {}; } catch (e) { lastUsed = {}; }
+        let usedOrder = Object.assign({}, lastUsed);      // popup khola-r somoy-er snapshot, jate card lafiye na othe
+        function markAccountUsed(email) {
+            if (!email) return;
+            lastUsed[String(email).toLowerCase()] = Date.now();
+            const keys = Object.keys(lastUsed);
+            if (keys.length > 300) keys.sort((a, b) => lastUsed[a] - lastUsed[b]).slice(0, keys.length - 300).forEach(k => delete lastUsed[k]);
+            try { localStorage.setItem(LASTUSED_KEY, JSON.stringify(lastUsed)); } catch (e) {}
+        }
+        setInterval(() => {
+            document.querySelectorAll('.checked-ago').forEach(el => { el.textContent = checkedAgoText(el.dataset.email); });
+        }, 15000);
+        function homeMax() { return window.matchMedia('(min-width: 1024px)').matches ? 6 : HOME_MAX; }
+
+        const BRAND_ICONS = {
+            github: ['fa-brands fa-github', '#6e7681'], google: ['fa-brands fa-google', '#4285f4'],
+            facebook: ['fa-brands fa-facebook-f', '#1877f2'], instagram: ['fa-brands fa-instagram', '#d6249f'],
+            telegram: ['fa-brands fa-telegram', '#26a5e4'], whatsapp: ['fa-brands fa-whatsapp', '#25a85a'],
+            linkedin: ['fa-brands fa-linkedin-in', '#0a66c2'], microsoft: ['fa-brands fa-microsoft', '#2563eb'],
+            apple: ['fa-brands fa-apple', '#6b7280'], amazon: ['fa-brands fa-amazon', '#c2710c'],
+            paypal: ['fa-brands fa-paypal', '#1d4ed8'], discord: ['fa-brands fa-discord', '#5865f2'],
+            tiktok: ['fa-brands fa-tiktok', '#374151'], youtube: ['fa-brands fa-youtube', '#dc2626'],
+            spotify: ['fa-brands fa-spotify', '#16a34a'], twitter: ['fa-brands fa-twitter', '#1d9bf0'],
+            steam: ['fa-brands fa-steam', '#1e3a5f'], dropbox: ['fa-brands fa-dropbox', '#0061ff'],
+            slack: ['fa-brands fa-slack', '#7c3aed'], reddit: ['fa-brands fa-reddit-alien', '#ea580c'],
+            snapchat: ['fa-brands fa-snapchat', '#ca8a04'], twitch: ['fa-brands fa-twitch', '#7c3aed']
+        };
+        function hueOf(str) { let h = 0; for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; }
+        function avatarHTML(item) {
+            const name = String(item.service || item.sender || '').trim();
+            const real = isValidItem(item) && !!name;
+            const low = name.toLowerCase();
+            const key = real ? Object.keys(BRAND_ICONS).find(k => low === k || low.startsWith(k + ' ')) : null;
+            if (key) return `<span class="svc-avatar" style="--c:${BRAND_ICONS[key][1]}" aria-hidden="true"><i class="${BRAND_ICONS[key][0]}"></i></span>`;
+            const base = real ? low : String(item.email || '?').toLowerCase();
+            const letter = (real ? name : String(item.email || '?')).charAt(0).toUpperCase() || '?';
+            const dom = real && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(item.domain || '') ? item.domain.toLowerCase() : '';
+            // site-er asol favicon; na ashle (ba load na hole) akkhor-ta-i thake
+            const img = dom
+                ? `<img src="https://icons.duckduckgo.com/ip3/${dom}.ico" alt="" loading="lazy" referrerpolicy="no-referrer" onload="this.parentNode.classList.add('img-ok')" onerror="this.remove()">`
+                : '';
+            return `<span class="svc-avatar" style="--c:hsl(${hueOf(base)} 52% 42%)" aria-hidden="true">${escAttr(letter)}${img}</span>`;
+        }
+        function svcRowHTML(item) {
+            const name = String(item.service || item.sender || 'Unknown').trim();
+            return `<div class="svc-row">${avatarHTML(item)}<div class="svc-text"><div class="svc-name">${escAttr(name)}</div><div class="svc-sub">${escAttr(item.subject || '')}</div></div></div>`;
+        }
+        function codeCellsHTML(code, masked) {
+            const str = String(code || '');
+            const chars = masked ? Array.from({ length: Math.min(str.length, 10) }, () => '•') : Array.from(str);
+            const n = chars.length;
+            const cls = (n > 8 ? ' sm' : '') + (n === 6 ? ' g3' : n === 8 ? ' g4' : '');
+            return `<span class="cells${cls}">` + chars.map(c => `<span class="ch">${escAttr(c)}</span>`).join('') + '</span>'
+                + (masked ? '<i class="fa-regular fa-eye reveal-eye" aria-hidden="true"></i>' : '');
+        }
+        function codeAria(code, revealed) {
+            return revealed ? 'Code ' + String(code).split('').join(' ') + '. Press to copy' : 'Code hidden. Press to reveal and copy';
+        }
+        function flashCopied(box) {
+            box.classList.add('copied');
+            setTimeout(() => box.classList.remove('copied'), 900);
+        }
+
+        function cardHTML(item, opts) {
+            const validCode = isValidItem(item);
+            const isNew = !!opts.isNew;
+            const withTimer = validCode && !!opts.showExpiry;
+            const leftMs = withTimer ? Math.max(0, item.expiresAt - Date.now()) : 0;
+            const ttlMs = item.ttlMs || 120000;
+            const leftSec = Math.ceil(leftMs / 1000);
+            const ringOffset = RING_C * (1 - Math.max(0, Math.min(1, leftMs / ttlMs)));
+            const revealed = validCode && isRevealed(item);
+            const used = validCode && isUsed(item);
+            const uKey = validCode ? usedKey(item) : '';
+            const health = healthOf(item);
+            const pinned = isPinned(item.email);
+            const pinBtn = opts.pinnable
+                ? `<button type="button" class="card-pin ${pinned ? 'pinned' : ''}" data-email="${escAttr(item.email)}" title="${pinned ? 'Unpin' : 'Pin to top'}"><i class="fa-${pinned ? 'solid' : 'regular'} fa-star"></i></button>`
+                : '';
+            const healthDot = opts.pinnable
+                ? `<span class="health-dot ${health}" title="${escAttr(HEALTH_TITLE[health])}"></span>`
+                : '';
+            const infoLine = item.placeholder
+                ? `<i class="fa-regular fa-clock"></i> Not checked yet`
+                : health === 'ok'
+                ? `<i class="fa-regular fa-clock"></i> Time: ${item.time || 'N/A'}${fmtDate(item.timestamp)}${validCode ? '' : ' | ' + (item.service ? 'Service' : 'Sender') + ': ' + escAttr(item.service || item.sender || 'N/A')}`
+                : `<span class="health-msg ${health}"><i class="fa-solid fa-triangle-exclamation"></i> ${escAttr(item.sender || HEALTH_TITLE[health])}</span>`;
+            const isLink = validCode && item.kind === 'link';
+            const linkBox = `<div class="otp-code-box link-box" role="button" tabindex="0" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" data-url="${escAttr(item.url || '')}" onclick="onCodeTap(this)" title="Open link in new tab"><i class="fa-solid fa-arrow-up-right-from-square"></i> Open verify link</div>`;
+            const showExpired = !!opts.expired && validCode;
+            const expiredBox = `<div class="otp-code-box expired-box"><i class="fa-regular fa-clock"></i> Code expired</div>`;
+            const codeBox = showExpired ? expiredBox : isLink ? linkBox : validCode
+                ? `<div class="otp-code-box has-cells ${revealed ? '' : 'masked'}" role="button" tabindex="0" aria-label="${escAttr(codeAria(item.code, revealed))}" data-code="${escAttr(item.code)}" data-key="${escAttr(codeKey(item))}" data-used-key="${escAttr(uKey)}" onclick="onCodeTap(this)" title="${revealed ? 'Click to copy' : 'Tap to reveal & copy'}">${codeCellsHTML(item.code, !revealed)}</div>`
+                : `<div class="otp-code-box" style="cursor: default; opacity: 0.6; font-size: 14px; letter-spacing: normal;">${escAttr(item.placeholder ? 'Not checked yet - tap refresh' : (item.code || 'Code not found'))}</div>`;
+            const suspicious = validCode && !showExpired && !!item.auth_fail;
+            const phishNote = suspicious
+                ? `<div class="verify-note danger" role="alert"><i class="fa-solid fa-triangle-exclamation"></i><span>এই কোডের ইমেইল সন্দেহজনক<small>ফিশিং সতর্কতা: ${escAttr(item.auth_detail || 'SPF/DKIM')} - ব্যবহার করবেন না</small></span></div>`
+                : '';
+            const verifyNote = (!validCode || showExpired) ? '' : isLink
+                ? `<div class="verify-note link"><i class="fa-solid fa-link"></i><span>Link from <b>${escAttr(item.service || item.sender || 'sender')}</b> &middot; ${escAttr(item.subject || '')}<br>Open it only if you just requested it.</span></div>`
+                : (item.confidence === 'low'
+                    ? `<div class="verify-note"><i class="fa-solid fa-circle-exclamation"></i><span>Please verify this code &middot; Subject: ${escAttr(item.subject || '')}</span></div>`
+                    : '');
+            const expiryRow = withTimer
+                ? `<div class="otp-expiry"><span class="tbar" aria-hidden="true"><i class="tbar-fill" style="width:${(100 - ringOffset / RING_C * 100).toFixed(1)}%"></i></span><span class="otp-expiry-lbl">Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></span></div>`
+                : '';
+            const usedBadge = (used && !showExpired)
+                ? `<button type="button" class="used-badge" data-used-key="${escAttr(uKey)}" title="Tap to mark as unused"><i class="fa-solid fa-check"></i> Used</button>`
+                : '';
+            const tfaOn = tfaActive.has(String(item.email).toLowerCase());
+            const tfaIsSet = tfaSet.has(String(item.email).toLowerCase());
+            const card = `
+                <div class="otp-card ${suspicious ? 'is-suspicious' : ''} ${isNew && !used ? 'is-new' : ''} ${used && !showExpired ? 'is-used' : ''} ${showExpired ? 'is-expired' : ''} ${opts.pinnable && pinned ? 'is-pinned' : ''} ${opts.enter ? 'enter' : ''}" ${withTimer ? `data-expires="${item.expiresAt}" data-ttl="${ttlMs}"` : ''}>
+                    ${isNew && !used ? '<div class="new-dot"></div>' : ''}
+                    <div class="otp-email">
+                        ${healthDot}
+                        <span>${escAttr(item.email)}</span>
+                        ${usedBadge}
+                        ${pinBtn}
+                        ${health === 'ok' ? cardWaitHTML(item.email) : ''}
+                        <button type="button" class="card-mail" data-email="${escAttr(item.email)}" title="Read the latest email in this Gmail" aria-label="Read the latest email in ${escAttr(item.email)}"><i class="fa-regular fa-envelope"></i></button>
+                        <button type="button" class="card-2fa ${tfaIsSet ? 'set' : ''} ${tfaOn ? 'on' : ''}" data-email="${escAttr(item.email)}" title="${tfaOn ? 'Back to the email code' : 'Two-factor (2FA) code of this Gmail'}" aria-label="2FA code of ${escAttr(item.email)}" aria-pressed="${tfaOn ? 'true' : 'false'}"><i class="fa-solid fa-shield-halved"></i></button>
+                        <button type="button" class="card-refresh" data-email="${escAttr(item.email)}" title="Refresh only this account"><i class="fa-solid fa-rotate-right"></i></button>
+                    </div>
+                    ${validCode && !tfaOn ? svcRowHTML(item) : ''}
+                    ${tfaOn ? tfaBoxHTML(item.email) : codeBox}
+                    ${tfaOn ? '' : phishNote}
+                    ${tfaOn ? '' : verifyNote}
+                    ${tfaOn ? '' : expiryRow}
+                    <div class="otp-time">${infoLine}${!item.placeholder && checkedAt.has(String(item.email).toLowerCase()) ? ` <span class="checked-ago-sep">&middot;</span> <span class="checked-ago" data-email="${escAttr(String(item.email).toLowerCase())}">${checkedAgoText(item.email)}</span>` : ''}</div>
+                </div>`;
+            const tfaActions = tfaOn
+                ? `<div class="swipe-tfa">
+                        <button type="button" class="swipe-tfa-edit" data-email="${escAttr(item.email)}" title="Set a new 2FA key" aria-label="Set a new 2FA key for ${escAttr(item.email)}"><i class="fa-solid fa-pencil"></i></button>
+                        <button type="button" class="swipe-tfa-del" data-email="${escAttr(item.email)}" title="Remove the 2FA key" aria-label="Remove the 2FA key of ${escAttr(item.email)}"><i class="fa-regular fa-trash-can"></i></button>
+                    </div>`
+                : '';
+            if (!opts.deletable) {
+                return tfaOn ? `<div class="otp-swipe tfa">${tfaActions}${card}</div>` : card;
+            }
+            return `
+                <div class="otp-swipe ${tfaOn ? 'tfa' : ''}">
+                    <button type="button" class="swipe-delete" data-email="${escAttr(item.email)}" title="Remove this Gmail"><i class="fa-solid fa-trash"></i></button>
+                    ${tfaActions}
+                    ${card}
+                </div>`;
+        }
+
+        // Home: shudhu PIN kora account gulo. Kono Gmail auto check hoy na -- card-er refresh chapte hobe.
+        // Pin na thakle faka.
+        function renderHome() {
+            updateHealthBadge();
+            const now = Date.now();
+            const pinnedList = pinnedEmails.filter(em => !accountListLoaded || accountList.includes(em));
+            if (pinnedList.length === 0) {
+                otpContainer.innerHTML = '';
+                return;
+            }
+            const items = pinnedList.map(em =>
+                allItems.find(i => String(i.email).toLowerCase() === em) || { email: em, code: '', placeholder: true });
+            const html = items.map(item => {
+                const valid = isValidItem(item);
+                const live = valid && item.expiresAt > now;
+                return cardHTML(item, {
+                    isNew: newCardEmails.includes(item.email),
+                    deletable: false,
+                    showExpiry: live,
+                    expired: valid && !live,
+                    enter: live && !entered.has(codeKey(item))
+                });
+            }).join('');
+            otpContainer.innerHTML = html;
+            items.forEach(i => { if (isValidItem(i) && i.expiresAt > now) entered.add(codeKey(i)); });
+            syncTimers();
+        }
+
+        // ---------- Pin (priyo account) ----------
+        const PIN_KEY = 'otpDash.pinnedEmails';
+        const PIN_MIGRATED = 'otpDash.pinsMigrated';
+        function loadPins() {
+            try { const a = JSON.parse(localStorage.getItem(PIN_KEY) || '[]'); return Array.isArray(a) ? a : []; }
+            catch (e) { return []; }
+        }
+        let pinnedEmails = loadPins();      // server theke ashe; localStorage shudhu offline cache
+        function savePins() { try { localStorage.setItem(PIN_KEY, JSON.stringify(pinnedEmails)); } catch (e) {} }
+        function isPinned(email) { return pinnedEmails.includes(String(email).toLowerCase()); }
+
+        function setPinsFromServer(list) {
+            const next = (Array.isArray(list) ? list : []).map(x => String(x).toLowerCase()).sort();
+            const same = next.length === pinnedEmails.length && next.every((x, i) => x === [...pinnedEmails].sort()[i]);
+            pinnedEmails = next;
+            savePins();
+            if (!same) renderHome();
+            if (!same && accountsModalOpen()) renderAll();
+        }
+
+        // Pin server-e (Mongo) thake -> phone/computer-e eki. 401 hole login-e ferot jay na (fetchOTPs oita dekhe).
+        async function syncPins() {
+            try {
+                const res = await fetch('/api/pins');
+                if (!res.ok) return;
+                let list = (await res.json()).pins || [];
+                // Ek-bar: ei browser-er purono local pin server-e tule dei
+                let migrated = false;
+                try { migrated = localStorage.getItem(PIN_MIGRATED) === '1'; } catch (e) {}
+                if (!migrated) {
+                    const local = loadPins();
+                    if (local.length) {
+                        const r2 = await fetch('/api/pins/merge', {
+                            method: 'POST', headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ emails: local })
+                        });
+                        if (!r2.ok) return;                       // porer bar abar chesta korbe
+                        list = (await r2.json()).pins || list;
+                    }
+                    try { localStorage.setItem(PIN_MIGRATED, '1'); } catch (e) {}
+                }
+                setPinsFromServer(list);
+            } catch (e) {}                                        // offline: local cache-i thakbe
+        }
+
+        async function togglePin(email) {
+            const k = String(email).toLowerCase();
+            const wasPinned = pinnedEmails.includes(k);
+            // sathe sathe dekhai (optimistic); server fail korle ferot
+            if (wasPinned) pinnedEmails = pinnedEmails.filter(x => x !== k); else pinnedEmails.push(k);
+            savePins();
+            renderAll();
+            renderHome();
+            try {
+                const res = await fetch('/api/pins/toggle', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: k, pinned: !wasPinned })
+                });
+                if (!res.ok) throw new Error('save failed');
+                setPinsFromServer((await res.json()).pins);       // onno device-er poriborton-o chole ashe
+            } catch (e) {
+                if (wasPinned) { if (!pinnedEmails.includes(k)) pinnedEmails.push(k); }
+                else pinnedEmails = pinnedEmails.filter(x => x !== k);
+                savePins();
+                renderAll();
+                renderHome();
+                showToast('Could not save pin. Try again.');
+            }
+        }
+
+        // ---------- Search ----------
+        const accSearchInput = document.getElementById('accSearchInput');
+        const accSearchWrap = document.getElementById('accSearchWrap');
+        function searchQuery() { return accSearchInput.value.trim().toLowerCase(); }
+        accSearchInput.addEventListener('input', () => {
+            accSearchWrap.classList.toggle('has-text', accSearchInput.value.length > 0);
+            renderAll();
+        });
+        document.getElementById('accSearchClear').addEventListener('click', () => {
+            accSearchInput.value = '';
+            accSearchWrap.classList.remove('has-text');
+            renderAll();
+            accSearchInput.focus();
+        });
+
+        // Popup: shob Gmail account (delete kora jay). Pin kora gulo upore, search e filter.
+        function renderAll() {
+            if (openWrap) openWrap = null;
+            // check kora account gulo + je gulo check hoyni (placeholder card)
+            const checked = new Set(allItems.map(i => String(i.email).toLowerCase()));
+            const baseItems = allItems.concat(accountList.filter(em => !checked.has(em))
+                .map(em => ({ email: em, code: '', placeholder: true })));
+            document.getElementById('allCount').innerText = baseItems.length;
+            if (!hasLoaded && isFetching) {
+                allContainer.innerHTML = skeletonHTML(3);
+                return;
+            }
+            if (baseItems.length === 0) {
+                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>${hasLoaded || accountListLoaded ? 'No Gmail accounts added yet.' : 'Loading accounts...'}</div>`;
+                return;
+            }
+            const q = searchQuery();
+            renderFilterRow(baseItems);
+            let list = q ? baseItems.filter(i => String(i.email).toLowerCase().includes(q)) : baseItems;
+            list = list.filter(FILTERS[accFilter] || FILTERS.all);
+            if (accSort === 'az') list = [...list].sort((a, b) => String(a.email).localeCompare(String(b.email)));
+            else list = [...list].sort((a, b) => (usedOrder[String(b.email).toLowerCase()] || 0) - (usedOrder[String(a.email).toLowerCase()] || 0));
+            if (list.length === 0) {
+                allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-magnifying-glass" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>${q ? 'No Gmail matches "' + escAttr(accSearchInput.value.trim()) + '".' : 'No accounts match this filter.'}</div>`;
+                return;
+            }
+            const pinned = list.filter(i => isPinned(i.email));
+            const others = list.filter(i => !isPinned(i.email));
+            const opts = { isNew: false, deletable: true, pinnable: true };
+            let html = '';
+            if (pinned.length) {
+                html += `<div class="acc-section pinned-label"><i class="fa-solid fa-star"></i> Pinned (${pinned.length})</div>`;
+                html += pinned.map(item => cardHTML(item, opts)).join('');
+            }
+            if (others.length) {
+                if (pinned.length) html += `<div class="acc-section"><i class="fa-solid fa-envelope"></i> All accounts (${others.length})</div>`;
+                html += others.map(item => cardHTML(item, opts)).join('');
+            }
+            allContainer.innerHTML = html;
+        }
+
+        function accountsModalOpen() { return !accountsModal.classList.contains('hidden'); }
+
+        // Envelope button / "/" shortcut: ekhon shora-shori Gmail list khule (password lage na)
+        function openAccountsModal() {
+            if (accountsModalOpen()) return;
+            showAccountsModal();
+        }
+
+        function showAccountsModal() {
+            loadAccountCount();
+            usedOrder = Object.assign({}, lastUsed);
+            renderAll();
+            accountsModal.classList.remove('hidden');
+            if (!accountListLoaded) loadAccountList();
+        }
+
+        function closeAccountsModal() {
+            if (openWrap) setSwipe(openWrap, false);
+            accountsModal.classList.add('hidden');
+            resetAccFilters();
+            if (accSearchInput) {
+                accSearchInput.value = '';
+                accSearchWrap.classList.remove('has-text');
+            }
+        }
+
+        document.getElementById('accountCountBar').addEventListener('click', openAccountsModal);
+        document.getElementById('accountCountBar').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openAccountsModal(); }
+        });
+        document.getElementById('accountsCloseBtn').addEventListener('click', closeAccountsModal);
+        accountsModal.addEventListener('click', (e) => { if (e.target === accountsModal) closeAccountsModal(); });
+
+        function renderOTPs(otps) {
+            hasLoaded = true;
+            allItems = (otps || []).map(normalizeExpiry);
+            allItems.forEach(i => checkedAt.set(String(i.email).toLowerCase(), Date.now()));
+
+            // kon kon card notun ta check kora
+            newCardEmails = [];
+            if (previousCodes.length > 0) {
+                allItems.forEach(item => {
+                    if (isValidItem(item) && item.expiresAt > Date.now()) {
+                        const prev = previousCodes.find(p => p.email === item.email);
+                        if (!prev || (prev.code !== item.code && !prev.ph)) newCardEmails.push(item.email);
+                    }
+                });
+            } else if (allItems[0] && isValidItem(allItems[0]) && allItems[0].expiresAt > Date.now()) {
+                newCardEmails.push(allItems[0].email);
+            }
+
+            previousCodes = allItems.map(item => ({ email: item.email, code: item.code }));
+            // je account ekhono check hoyni, tar pore pawa code "notun" dhora hobe na
+            accountList.forEach(em => {
+                if (!previousCodes.some(p => String(p.email).toLowerCase() === em)) previousCodes.push({ email: em, code: '', ph: true });
+            });
+
+            renderHome();
+            if (accountsModalOpen()) renderAll();
+            if (waiting) {
+                const hit = newCardEmails.find(waitMatches);
+                if (hit) stopWaiting(true, hit);
+            }
+        }
+
+        // ======================= alert (sound + vibration) =======================
+        let audioCtx = null;
+        function initAudio() {
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+            } catch (e) {}
+        }
+        document.addEventListener('click', initAudio);       // browser sound chalate user-er ekta click lage
+
+        function beep() {
+            try {
+                if (!audioCtx) return;
+                [[880, 0], [1175, 0.22]].forEach(([freq, delay]) => {
+                    const t0 = audioCtx.currentTime + delay;
+                    const o = audioCtx.createOscillator(), g = audioCtx.createGain();
+                    o.type = 'sine'; o.frequency.value = freq; g.gain.value = 0.08;
+                    o.connect(g); g.connect(audioCtx.destination);
+                    o.start(t0); o.stop(t0 + 0.18);
+                });
+            } catch (e) {}
+        }
+
+        async function copyQuiet(text) {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    await navigator.clipboard.writeText(text);
+                    return true;
+                }
+            } catch (e) {}
+            return fallbackCopy(text);
+        }
+
+        function alertNewCode(email) {
+            try { if (navigator.vibrate) navigator.vibrate([120, 80, 120]); } catch (e) {}
+            beep();
+            const it = allItems.find(x => x.email === email);
+            if (it && isValidItem(it) && it.auth_fail) {
+                showToast('Suspicious email - code NOT copied: ' + email);
+            } else if (autoCopyOn && it && isValidItem(it) && it.kind !== 'link' && document.visibilityState === 'visible') {
+                copyQuiet(it.code).then(ok => showToast(ok ? 'New code copied: ' + email : 'New code: ' + email));
+            } else {
+                showToast((it && it.kind === 'link' ? 'New link: ' : 'New code: ') + email);
+            }
+        }
+
+        // ======================= ekta account-er item merge kora =======================
+        function applyItem(raw, fromPush) {
+            const item = normalizeExpiry(raw);
+            checkedAt.set(String(item.email).toLowerCase(), Date.now());
+            const i = allItems.findIndex(x => x.email === item.email);
+            const prev = i >= 0 ? allItems[i] : null;
+            // temporary error diye thik code muche felbo na
+            if (item.code === 'Error' && prev && isValidItem(prev)) return;
+
+            const isNewCode = isValidItem(item) && item.expiresAt > Date.now() && (!prev || prev.code !== item.code);
+            if (i >= 0) allItems[i] = item; else allItems.push(item);
+            allItems.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+            const pi = previousCodes.findIndex(x => x.email === item.email);
+            if (pi >= 0) previousCodes[pi].code = item.code;
+            else previousCodes.push({ email: item.email, code: item.code });
+
+            if (isNewCode && !newCardEmails.includes(item.email)) newCardEmails.push(item.email);
+
+            renderHome();
+            if (accountsModalOpen()) renderAll();
+
+            if (isNewCode) {
+                if (waiting && waitMatches(item.email)) stopWaiting(true, item.email);
+                else if (fromPush) alertNewCode(item.email);
+            }
+        }
+
+        // ======================= Wait for new code =======================
+
+        function waitMatches(email) {
+            // target / pin kora account-er code-i "notun code" hishebe dhora hoy; pin na thakle shob account
+            return !waiting || !waiting.emails || waiting.emails.includes(String(email).toLowerCase());
+        }
+        function waitLeft() { return waiting ? Math.max(0, Math.ceil((waiting.endsAt - Date.now()) / 1000)) : 0; }
+        function waitCardInner(on, left) {
+            return on
+                ? `<i class="fa-solid fa-spinner rotating"></i><span class="wtime">${fmtLeft(left)}</span>`
+                : '<i class="fa-solid fa-hourglass-start"></i>';
+        }
+        function cardWaitHTML(email) {
+            const on = !!(waiting && waiting.email && waiting.email === String(email).toLowerCase());
+            return `<button type="button" class="card-wait${on ? ' active' : ''}" data-email="${escAttr(email)}" aria-pressed="${on}" title="${on ? 'Waiting for a new code. Tap to cancel' : 'Wait for a new code on this account'}" aria-label="Wait for a new code on ${escAttr(email)}">${waitCardInner(on, waitLeft())}</button>`;
+        }
+        function syncWaitCards() {
+            const left = waitLeft();
+            document.querySelectorAll('.card-wait').forEach(b => {
+                const on = !!(waiting && waiting.email && waiting.email === String(b.dataset.email).toLowerCase());
+                b.classList.toggle('active', on);
+                b.setAttribute('aria-pressed', on ? 'true' : 'false');
+                b.title = on ? 'Waiting for a new code. Tap to cancel' : 'Wait for a new code on this account';
+                b.innerHTML = waitCardInner(on, left);
+            });
+        }
+        // Card-er \u23f3: server shudhu oi ekta account-e live connection (IMAP IDLE) khole. Polling / bar bar login hoy na.
+        // Notun code ashle server SSE diye pathay (applyItem -> stopWaiting).
+        async function startWaiting(email) {
+            initAudio();
+            if (waiting) stopWaiting(false);                 // onno target-e jaowar somoy age-ta bondho
+            if (!email) return;
+            const target = String(email).toLowerCase();
+            markAccountUsed(target);
+            const w = { email: target, emails: [target], endsAt: Date.now() + WAIT_SECONDS * 1000, tick: null, poll: null, live: false, conn: null };
+            waiting = w;
+            syncWaitCards();
+            w.tick = setInterval(() => {
+                if (waiting !== w) return;
+                const left = Math.ceil((w.endsAt - Date.now()) / 1000);
+                if (left <= 0) {
+                    stopWaiting(false);
+                    showToast('No new code arrived on ' + target);
+                    return;
+                }
+                syncWaitCards();
+            }, 1000);
+            try {
+                const res = await fetch('/api/watch-start', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: target, seconds: WAIT_SECONDS })
+                });
+                if (waiting !== w) {                          // ei majhe cancel hoye gele server-er watch-o bondho
+                    if (res.ok) fetch('/api/watch-stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: target }) }).catch(() => {});
+                    return;
+                }
+                if (res.status === 401) { stopWaiting(false); return; }
+                if (!res.ok) {
+                    let msg = 'Could not start live watch';
+                    try { msg = (await res.json()).error || msg; } catch (e) {}
+                    stopWaiting(false, null, false);
+                    showToast(msg);
+                    return;
+                }
+                w.live = true;
+                ensurePush(true);
+                // live stream ashe nai -> bar bar login na kore bondho kore dei
+                w.conn = setTimeout(() => {
+                    if (waiting === w && !pushConnected) {
+                        stopWaiting(false);
+                        showToast('Live connection unavailable. Use the refresh button.');
+                    }
+                }, 10000);
+            } catch (e) {
+                if (waiting === w) { stopWaiting(false, null, false); showToast('Connection error'); }
+            }
+        }
+        function stopWaiting(found, email, notifyServer = true) {
+            if (!waiting) return;
+            const w = waiting;
+            clearInterval(w.tick);
+            clearTimeout(w.poll);
+            clearTimeout(w.conn);
+            waiting = null;
+            syncWaitCards();
+            if (w.live && notifyServer) {
+                fetch('/api/watch-stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: w.email }), keepalive: true }).catch(() => {});
+            }
+            if (w.live && pushEnabled !== true) stopPush();      // ENABLE_PUSH=0 hole stream shudhu wait-er somoy
+            if (found) alertNewCode(email);
+        }
+        document.addEventListener('click', (e) => {
+            const b = e.target.closest('.card-wait');
+            if (!b) return;
+            const email = b.dataset.email;
+            if (waiting && waiting.email === String(email).toLowerCase()) { stopWaiting(false); return; }
+            startWaiting(email);
+            showToast('Waiting for a new code on ' + email);
+        });
+
+        // ======================= Card-er "Read latest email" popup =======================
+        // Shob text textContent diye boshano hoy (innerHTML na) -- email-er kono HTML/script cholbe na.
+        const mailModal = document.getElementById('mailModal');
+        const mailAcct = document.getElementById('mailAcct');
+        const mailScroll = document.getElementById('mailScroll');
+        let mailEmail = '', mailReq = 0, mailReturnFocus = null, mailAgoTimer = null;
+        let mailMode = 'latest', mailItem = null;      // mailMode: latest | inbox | spam ; mailItem: list theke khola email
+
+        function mailModalOpen() { return !mailModal.classList.contains('hidden'); }
+        function closeMailModal() {
+            mailReq++;                                  // cholte thaka request-er uttor ar dekhabe na
+            clearInterval(mailAgoTimer);
+            mailModal.classList.add('hidden');
+            mailScroll.textContent = '';
+            mailAcct.textContent = '';
+            mailEmail = '';
+            mailData = null;
+            mailMode = 'latest'; mailItem = null; setMailModeUI();
+            hideLinkBar();
+            if (mailReturnFocus && document.contains(mailReturnFocus)) { try { mailReturnFocus.focus(); } catch (e) {} }
+            mailReturnFocus = null;
+        }
+        function mkEl(tag, cls, text) {
+            const el = document.createElement(tag);
+            if (cls) el.className = cls;
+            if (text != null) el.textContent = text;
+            return el;
+        }
+        function mailAgo(ts) {
+            const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+            if (s < 60) return 'just now';
+            if (s < 3600) return Math.floor(s / 60) + ' min ago';
+            if (s < 86400) return Math.floor(s / 3600) + ' h ago';
+            return Math.floor(s / 86400) + ' d ago';
+        }
+        function mailState(text, spinning) {
+            mailScroll.textContent = '';
+            const box = mkEl('div', 'mail-state');
+            if (spinning) { box.appendChild(mkEl('i', 'fa-solid fa-spinner rotating')); box.appendChild(document.createTextNode(' ')); }
+            box.appendChild(document.createTextNode(text));
+            mailScroll.appendChild(box);
+        }
+        // ---- header: avatar, "Verified sender" badge, "8 hours ago" ----
+        function mailAgoLong(ts) {
+            const s = Math.max(0, Math.round(Date.now() / 1000 - ts));
+            const u = (n, w) => n + ' ' + w + (n === 1 ? '' : 's') + ' ago';
+            if (s < 45) return 'Just now';
+            if (s < 3600) return u(Math.max(1, Math.floor(s / 60)), 'minute');
+            if (s < 86400) return u(Math.floor(s / 3600), 'hour');
+            return u(Math.floor(s / 86400), 'day');
+        }
+        function mailTrust(d) {
+            const a = d.auth || {};
+            if (d.auth_fail) return { cls: 'bad', icon: 'fa-triangle-exclamation', label: 'Suspicious sender' };
+            if (!a.status || a.status === 'unknown') return { cls: 'none', icon: 'fa-circle-question', label: 'Not checked' };
+            if (a.dmarc === 'pass' || (a.spf === 'pass' && a.dkim === 'pass')) return { cls: 'ok', icon: 'fa-circle-check', label: 'Verified sender' };
+            return { cls: 'warn', icon: 'fa-circle-exclamation', label: 'Not fully verified' };
+        }
+        function authPill(name, val) {
+            const bad = ['fail', 'softfail', 'permerror'].includes(val);
+            return mkEl('span', 'mail-pill' + (val === 'pass' ? ' ok' : bad ? ' bad' : ''), name + ' ' + (val || 'n/a'));
+        }
+        function mailAvatar(d) {
+            // Logo / favicon shudhu VERIFIED sender-er. Nokol email "PayPal" nam diye asol logo dekhate na pare, tai
+            // sondehojonok -> shotorkota-chinho, ar ajana/adhura -> shudhu akkhor.
+            const wrap = mkEl('span', 'mail-avatar');
+            const name = d.from_name || d.from_addr || '?';
+            const t = mailTrust(d);
+            if (t.cls === 'bad') {
+                wrap.classList.add('bad');
+                wrap.innerHTML = '<span class="svc-avatar" style="--c:#b91c1c" aria-hidden="true"><i class="fa-solid fa-triangle-exclamation"></i></span>';
+            } else if (t.cls === 'ok') {
+                wrap.innerHTML = avatarHTML({ code: 'x', service: name, sender: name, domain: d.sender_domain || '', email: d.from_addr || '' });   // avatarHTML nijei escape kore
+            } else {
+                wrap.innerHTML = avatarHTML({ code: '', email: name });                // code nai -> brand/favicon chhara shudhu akkhor
+            }
+            return wrap;
+        }
+        function mailTrustText(d, t) {
+            const dom = String(d.from_addr || '').split('@')[1] || 'the sender';
+            if (t.cls === 'ok') return 'Gmail checked this email and confirmed it was sent by ' + dom + '.';
+            if (t.cls === 'bad') return 'This email failed the sender check (' + (d.auth_detail || 'SPF/DKIM') + '). It may be pretending to be ' + dom + '. Do not use its codes or links.';
+            if (t.cls === 'warn') return 'Some sender checks are missing, so we cannot be sure this really comes from ' + dom + '. Be careful with links and codes.';
+            return 'Gmail did not include sender check results for this email.';
+        }
+        function mailHeader(d) {
+            const t = mailTrust(d), a = d.auth || {};
+            const box = mkEl('div', 'mail-header');
+
+            const top = mkEl('div', 'mail-from');
+            top.appendChild(mailAvatar(d));
+            const who = mkEl('div', 'mail-who');
+            who.appendChild(mkEl('div', 'mail-who-name', d.from_name || d.from_addr || 'Unknown sender'));
+            if (d.from_addr) who.appendChild(mkEl('div', 'mail-who-addr', d.from_addr));
+            top.appendChild(who);
+            const badge = mkEl('button', 'mail-trust ' + t.cls);
+            badge.type = 'button';
+            badge.setAttribute('aria-expanded', 'false');
+            badge.title = 'Tap for details';
+            badge.appendChild(mkEl('i', 'fa-solid ' + t.icon));
+            badge.appendChild(document.createTextNode(t.label));
+            top.appendChild(badge);
+            box.appendChild(top);
+
+            box.appendChild(mkEl('div', 'mail-subject', d.subject || '(No subject)'));
+
+            const when = mkEl('div', 'mail-when');
+            const ago = mkEl('span', 'mail-ago' + (Date.now() / 1000 - d.timestamp < 300 ? ' fresh' : ''), mailAgoLong(d.timestamp));
+            ago.dataset.ts = String(d.timestamp);
+            when.appendChild(ago);
+            when.appendChild(mkEl('span', 'mail-date', d.time));
+            when.appendChild(mkEl('span', 'mail-badge' + (d.folder === 'SPAM' ? ' spam' : ''), d.folder === 'SPAM' ? 'Spam' : 'Inbox'));
+            box.appendChild(when);
+
+            const det = mkEl('div', 'mail-trust-details hidden');
+            const pills = mkEl('div', 'mail-pills');
+            [['SPF', a.spf], ['DKIM', a.dkim], ['DMARC', a.dmarc]].forEach(([n, v]) => pills.appendChild(authPill(n, v)));
+            det.appendChild(pills);
+            det.appendChild(mkEl('div', null, mailTrustText(d, t)));
+            box.appendChild(det);
+            badge.addEventListener('click', () => {
+                const open = det.classList.contains('hidden');
+                det.classList.toggle('hidden', !open);
+                badge.setAttribute('aria-expanded', open ? 'true' : 'false');
+            });
+
+            if (d.attachments && d.attachments.length) {
+                const at = mkEl('div', 'mail-attach');
+                at.appendChild(mkEl('i', 'fa-solid fa-paperclip'));
+                at.appendChild(document.createTextNode(' ' + d.attachments.join(', ')));
+                box.appendChild(at);
+            }
+            return box;
+        }
+        function startMailAgoTimer() {                     // popup khola thakle "2 minutes ago" nijei bodlay
+            clearInterval(mailAgoTimer);
+            mailAgoTimer = setInterval(() => {
+                const el = mailScroll.querySelector('[data-ts]');
+                if (!el) return;
+                const ts = Number(el.dataset.ts);
+                el.textContent = mailAgoLong(ts);
+                el.classList.toggle('fresh', Date.now() / 1000 - ts < 300);
+            }, 15000);
+        }
+        // ---- email body poriskar kora: [image:] bad, footer chhoto, link -> domain chip ----
+        const MAIL_ALIAS = { 'googlemail.com': 'google.com', 'facebookmail.com': 'facebook.com', 'microsoftonline.com': 'microsoft.com' };
+        const MAIL_SLD = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'or', 'ne']);
+        const MAIL_IMG_LINE = /^\s*\[(?:image|img|logo|photo|picture)\b[^\]]*\]\s*$/i;
+        const MAIL_IMG_INLINE = /\[(?:image|img|logo)\s*:[^\]]*\]/gi;
+        const MAIL_FOOT_START = /^\s*(?:you received this (?:email|message)|this (?:email|message) (?:was|is) sent|to stop receiving|unsubscribe|manage (?:your )?(?:email )?preferences|view (?:this email )?in (?:your )?browser|copyright\b|all rights reserved)/i;
+        const MAIL_URL_RE = /<?(https?:\/\/[^\s<>"'\u27e8\u27e9]+)>?/gi;
+        let mailData = null, mailRaw = false;
+
+        function regDomain(host) {
+            const p = String(host).toLowerCase().replace(/\.$/, '').split('.').filter(Boolean);
+            let r = String(host).toLowerCase();
+            if (p.length >= 2) {
+                const n = (p.length >= 3 && MAIL_SLD.has(p[p.length - 2]) && p[p.length - 1].length === 2) ? 3 : 2;
+                r = p.slice(-n).join('.');
+            }
+            return MAIL_ALIAS[r] || r;
+        }
+        function parseMailLink(u, d) {
+            let url;
+            try { url = new URL(u); } catch (e) { return null; }
+            if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+            const host = url.hostname.replace(/^www\./, '');
+            const sender = d && d.sender_domain ? regDomain(d.sender_domain) : '';
+            return {
+                href: u, host, sender,
+                secure: url.protocol === 'https:',
+                idn: /(^|\.)xn--/.test(host),
+                mismatch: !!sender && regDomain(host) !== sender
+            };
+        }
+        function hideLinkBar() {
+            const bar = document.getElementById('mailLinkBar');
+            bar.classList.add('hidden');
+            bar.textContent = '';
+        }
+        function showLinkBar(info) {
+            const bar = document.getElementById('mailLinkBar');
+            bar.textContent = '';
+            bar.appendChild(mkEl('div', 'mail-lb-title', 'Open this link?'));
+            bar.appendChild(mkEl('div', 'mail-lb-url', info.href));
+            const notes = [];
+            if (mailData && mailData.auth_fail) notes.push('This email failed the sender check (' + (mailData.auth_detail || 'SPF/DKIM') + ').');
+            if (info.mismatch) notes.push('This link goes to ' + info.host + ', but the email is from ' + info.sender + '.');
+            if (!info.secure) notes.push('This link is not secure (http).');
+            if (info.idn) notes.push('The web address has unusual characters.');
+            notes.forEach(n => {
+                const w = mkEl('div', 'mail-lb-warn');
+                w.appendChild(mkEl('i', 'fa-solid fa-triangle-exclamation'));
+                w.appendChild(document.createTextNode(' ' + n));
+                bar.appendChild(w);
+            });
+            const row = mkEl('div', 'mail-lb-row');
+            const open = mkEl('button', 'mail-btn ' + (notes.length ? 'danger' : 'primary'), notes.length ? 'Open anyway' : 'Open');
+            open.type = 'button';
+            open.addEventListener('click', () => { window.open(info.href, '_blank', 'noopener,noreferrer'); hideLinkBar(); });
+            const copy = mkEl('button', 'mail-btn', 'Copy link');
+            copy.type = 'button';
+            copy.addEventListener('click', () => copyQuiet(info.href).then(ok => showToast(ok ? 'Link copied' : 'Could not copy')));
+            const cancel = mkEl('button', 'mail-btn', 'Cancel');
+            cancel.type = 'button';
+            cancel.addEventListener('click', hideLinkBar);
+            [open, copy, cancel].forEach(b => row.appendChild(b));
+            bar.appendChild(row);
+            bar.classList.remove('hidden');
+        }
+        function mailChip(info) {
+            const warn = info.mismatch || !info.secure || info.idn || !!(mailData && mailData.auth_fail);
+            const b = mkEl('button', 'mail-link' + (warn ? ' warn' : ''));
+            b.type = 'button';
+            b.title = info.href;
+            b.appendChild(mkEl('i', 'fa-solid ' + (warn ? 'fa-triangle-exclamation' : 'fa-arrow-up-right-from-square')));
+            b.appendChild(document.createTextNode(info.host));
+            b.addEventListener('click', () => showLinkBar(info));
+            return b;
+        }
+        function appendMailText(parent, text) {
+            let last = 0, m;
+            MAIL_URL_RE.lastIndex = 0;
+            while ((m = MAIL_URL_RE.exec(text)) !== null) {
+                let url = m[1];
+                const trail = (url.match(/[.,;:!?)\]]+$/) || [''])[0];
+                if (trail) url = url.slice(0, url.length - trail.length);
+                if (m.index > last) parent.appendChild(document.createTextNode(text.slice(last, m.index)));
+                const info = parseMailLink(url, mailData);
+                parent.appendChild(info ? mailChip(info) : document.createTextNode(url));
+                if (trail) parent.appendChild(document.createTextNode(trail));
+                last = m.index + m[0].length;
+            }
+            if (last < text.length) parent.appendChild(document.createTextNode(text.slice(last)));
+        }
+        function splitMailBody(body) {
+            let lines = String(body || '').split('\n').map(l => l.replace(MAIL_IMG_INLINE, '').replace(/\s+$/, ''));
+            lines = lines.filter(l => !MAIL_IMG_LINE.test(l));
+            let cut = -1;
+            for (let i = Math.floor(lines.length * 0.4); i < lines.length; i++) {
+                if (MAIL_FOOT_START.test(lines[i]) || lines[i].includes('\u00a9')) { cut = i; break; }
+            }
+            // "Check activity" + porer line-e shudhu link -> ek line-e jora (chip text-er pashe boshe)
+            const paras = arr => arr.join('\n')
+                .replace(/([^\n])\n[ \t]*(<?https?:\/\/\S+>?)[ \t]*(?=\n|$)/g, '$1 $2')
+                .split(/\n{2,}/).map(p => p.trim()).filter(Boolean);
+            return { main: paras(cut >= 0 ? lines.slice(0, cut) : lines), foot: paras(cut >= 0 ? lines.slice(cut) : []) };
+        }
+        function renderMailBody(d) {
+            const wrap = mkEl('div', 'mail-body');
+            let { main, foot } = splitMailBody(d.body);
+            if (!main.length) { main = foot; foot = []; }
+            if (!main.length) { wrap.appendChild(mkEl('div', 'mail-state', '(This email has no readable text)')); return wrap; }
+            main.forEach(p => { const el = mkEl('div', 'mail-p'); appendMailText(el, p); wrap.appendChild(el); });
+            if (foot.length) {
+                const f = mkEl('div', 'mail-foot');
+                foot.forEach(p => { const el = mkEl('div', 'mail-p'); appendMailText(el, p); f.appendChild(el); });
+                wrap.appendChild(f);
+            }
+            return wrap;
+        }
+        function mailCodeBox(d) {
+            const box = mkEl('div', 'mail-code');
+            const main = mkEl('div', 'mail-code-main');
+            main.appendChild(mkEl('div', 'mail-code-lbl', 'Verification code found in this email'));
+            main.appendChild(mkEl('div', 'mail-code-val', d.code));
+            if (d.code_confidence === 'low') main.appendChild(mkEl('div', 'mail-code-hint', 'Not fully sure - please check the email below.'));
+            const btn = mkEl('button', 'mail-btn primary');
+            btn.type = 'button';
+            btn.appendChild(mkEl('i', 'fa-regular fa-copy'));
+            btn.appendChild(document.createTextNode(' Copy'));
+            btn.addEventListener('click', () => copyQuiet(d.code).then(ok => showToast(ok ? 'Code copied' : 'Could not copy')));
+            box.appendChild(main);
+            box.appendChild(btn);
+            return box;
+        }
+
+        function renderMail(d) {
+            mailData = d;
+            hideLinkBar();
+            mailScroll.textContent = '';
+            if (mailItem) {
+                const back = mkEl('button', 'mail-back', '\u2190 Back to ' + (mailMode === 'spam' ? 'Spam' : 'Inbox'));
+                back.type = 'button';
+                back.addEventListener('click', () => { mailItem = null; mailRaw = false; reloadMailView(); });
+                mailScroll.appendChild(back);
+            }
+            if (!d.found) { mailState('No emails in this Gmail yet.'); return; }
+
+            if (d.auth_fail) {
+                const note = mkEl('div', 'verify-note danger');
+                note.setAttribute('role', 'alert');
+                note.appendChild(mkEl('i', 'fa-solid fa-triangle-exclamation'));
+                const sp = mkEl('span', null, 'এই ইমেইলটি সন্দেহজনক');
+                sp.appendChild(mkEl('small', null, 'ফিশিং সতর্কতা: ' + (d.auth_detail || 'SPF/DKIM') + ' - লিংকে ক্লিক বা কোড ব্যবহার করবেন না'));
+                note.appendChild(sp);
+                mailScroll.appendChild(note);
+            }
+
+            mailScroll.appendChild(mailHeader(d));
+            startMailAgoTimer();
+
+            if (d.code && !d.auth_fail) mailScroll.appendChild(mailCodeBox(d));   // sondehojonok email-er code copy-te uthsaho dei na
+
+            const holder = mkEl('div');
+            const toggle = mkEl('button', 'mail-toggle');
+            toggle.type = 'button';
+            const paint = () => {
+                holder.textContent = '';
+                holder.appendChild(mailRaw ? mkEl('pre', 'mail-text', d.body || '') : renderMailBody(d));
+                toggle.textContent = mailRaw ? 'Show clean view' : 'Show original text';
+                hideLinkBar();
+            };
+            toggle.addEventListener('click', () => { mailRaw = !mailRaw; paint(); });
+            paint();
+            mailScroll.appendChild(holder);
+            if (d.truncated) mailScroll.appendChild(mkEl('div', 'mail-note', 'Long email - only the first part is shown.'));
+            mailScroll.appendChild(toggle);
+            mailScroll.scrollTop = 0;
+        }
+        async function mailApi(url, payload, my) {
+            const res = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            if (my !== mailReq) return null;
+            if (res.status === 401) {
+                closeMailModal(); stopPush(); stopWaiting(false);
+                dashboardSection.classList.add('hidden');
+                loginSection.classList.remove('hidden');
+                return null;
+            }
+            const data = await res.json().catch(() => ({}));
+            if (my !== mailReq) return null;
+            return { ok: res.ok, data };
+        }
+        async function loadMail(sel) {                   // sel = { folder, uid } hole oi email, nahole shesh email
+            const my = ++mailReq;
+            const email = mailEmail;
+            hideLinkBar();
+            mailState(sel ? 'Reading the email...' : 'Reading the latest email...', true);
+            try {
+                const payload = sel ? { email, folder: sel.folder, uid: sel.uid } : { email };
+                const r = await mailApi('/api/latest-mail', payload, my);
+                if (!r) return;
+                if (!r.ok) { mailState(r.data.error || 'Could not read this Gmail. Try again.'); return; }
+                renderMail(r.data);
+            } catch (err) {
+                if (my === mailReq) mailState('Could not reach the server. Try again.');
+            }
+        }
+        // ---- Inbox / Spam: shesh 3 ta email-er talika ----
+        function renderMailList(d, folder) {
+            mailData = null;
+            hideLinkBar();
+            clearInterval(mailAgoTimer);
+            mailScroll.textContent = '';
+            const items = d.items || [];
+            if (!items.length) { mailState('No emails in ' + (folder === 'spam' ? 'Spam' : 'Inbox') + ' yet.'); return; }
+            const list = mkEl('div', 'mail-list');
+            items.forEach(it => {
+                const row = mkEl('button', 'mail-row');
+                row.type = 'button';
+                const av = mkEl('span', 'mail-avatar');
+                av.innerHTML = avatarHTML({ code: '', email: it.from_name || it.from_addr || '?' });   // avatarHTML nijei escape kore
+                const main = mkEl('div', 'mail-row-main');
+                main.appendChild(mkEl('div', 'mail-row-name', it.from_name || it.from_addr || 'Unknown sender'));
+                main.appendChild(mkEl('div', 'mail-row-sub', it.subject || '(No subject)'));
+                const side = mkEl('div', 'mail-row-side');
+                side.appendChild(mkEl('span', null, mailAgo(it.timestamp)));
+                if (it.auth_fail) side.appendChild(mkEl('span', 'mail-row-bad', 'Suspicious'));
+                else if (it.code) side.appendChild(mkEl('span', 'mail-row-code', it.code));
+                row.title = it.time || '';
+                row.appendChild(av); row.appendChild(main); row.appendChild(side);
+                row.addEventListener('click', () => {
+                    mailItem = { folder, uid: it.uid };
+                    mailRaw = false;
+                    loadMail(mailItem);
+                });
+                list.appendChild(row);
+            });
+            mailScroll.appendChild(list);
+            mailScroll.scrollTop = 0;
+        }
+        async function loadMailList(folder) {
+            const my = ++mailReq;
+            const email = mailEmail;
+            hideLinkBar();
+            clearInterval(mailAgoTimer);
+            mailState('Loading ' + (folder === 'spam' ? 'Spam' : 'Inbox') + '...', true);
+            try {
+                const r = await mailApi('/api/mail-list', { email, folder }, my);
+                if (!r) return;
+                if (!r.ok) { mailState(r.data.error || 'Could not read this Gmail. Try again.'); return; }
+                renderMailList(r.data, folder);
+            } catch (err) {
+                if (my === mailReq) mailState('Could not reach the server. Try again.');
+            }
+        }
+        function setMailModeUI() {
+            const t = { latest: ['fa-regular fa-envelope-open', 'Latest email'], inbox: ['fa-solid fa-inbox', 'Inbox'], spam: ['fa-solid fa-ban', 'Spam'] }[mailMode];
+            const title = document.getElementById('mailTitle');
+            title.textContent = '';
+            title.appendChild(mkEl('i', t[0]));
+            title.appendChild(document.createTextNode(' ' + t[1]));
+            [['inbox', 'mailInboxBtn'], ['spam', 'mailSpamBtn']].forEach(([k, id]) => {
+                const b = document.getElementById(id);
+                b.classList.toggle('active', mailMode === k);
+                b.setAttribute('aria-pressed', mailMode === k ? 'true' : 'false');
+            });
+        }
+        function reloadMailView() {
+            if (!mailEmail) return;
+            if (mailItem) loadMail(mailItem);
+            else if (mailMode === 'latest') loadMail();
+            else loadMailList(mailMode);
+        }
+        function mailTab(k) {
+            // Ei tab-i already list-e thakle abar chaple "Latest email"-e fire jay; email khola thakle list-e fire jay.
+            mailMode = (mailMode === k && !mailItem) ? 'latest' : k;
+            mailItem = null;
+            mailRaw = false;
+            setMailModeUI();
+            reloadMailView();
+        }
+        function openMailModal(email, trigger) {
+            mailEmail = String(email || '');
+            mailRaw = false;
+            mailMode = 'latest'; mailItem = null; setMailModeUI();
+            mailReturnFocus = trigger || null;
+            mailAcct.textContent = mailEmail;
+            mailModal.classList.remove('hidden');
+            document.getElementById('mailCloseBtn').focus();
+            loadMail();
+        }
+        document.addEventListener('click', (e) => {
+            const btn = e.target.closest('.card-mail');
+            if (btn) { e.preventDefault(); openMailModal(btn.dataset.email, btn); return; }
+            if (e.target === mailModal) closeMailModal();            // bairer dark jaygay click
+        });
+        document.getElementById('mailCloseBtn').addEventListener('click', closeMailModal);
+        document.getElementById('mailReloadBtn').addEventListener('click', reloadMailView);
+        document.getElementById('mailInboxBtn').addEventListener('click', () => mailTab('inbox'));
+        document.getElementById('mailSpamBtn').addEventListener('click', () => mailTab('spam'));
+
+
+        // ======================= Card-er "2FA" ar "Services" popup (Step 1: shudhu khola/bondho) =======================
+        const tfaModal = document.getElementById('tfaModal');
+        const tfaScroll = document.getElementById('tfaScroll');
+        let tfaEmail = '', tfaView = '', tfaReturnFocus = null;
+        let svcList = [], svcLoaded = false, svcQuery = '', svcEditId = '', svcBusy = false;
+        function tfaModalOpen() { return !tfaModal.classList.contains('hidden'); }
+        function closeTfaModal() {
+            stopQrCamera();
+            svcList = []; svcLoaded = false; svcQuery = ''; svcEditId = '';       // code memory-te rakhi na
+            tfaModal.classList.add('hidden');
+            tfaScroll.textContent = '';
+            tfaEmail = ''; tfaView = '';
+            if (tfaReturnFocus && document.contains(tfaReturnFocus)) { try { tfaReturnFocus.focus(); } catch (e) {} }
+            tfaReturnFocus = null;
+        }
+        function tfaFmt(code) { code = String(code || ''); return code.length === 6 ? code.slice(0, 3) + ' ' + code.slice(3) : code; }
+        function renderTfa() {
+            const title = document.getElementById('tfaTitle');
+            title.textContent = '';
+            const T = {
+                remove: ['fa-regular fa-trash-can', ' Remove 2FA'],
+                edit: ['fa-solid fa-pencil', ' Change 2FA key'],
+                gmail: ['fa-solid fa-shield-halved', ' Gmail 2FA code'],
+                'svc-add': ['fa-solid fa-plus', ' Add a service'],
+                'svc-edit': ['fa-solid fa-pencil', ' Edit service'],
+                'svc-del': ['fa-regular fa-trash-can', ' Remove service']
+            }[tfaView] || ['fa-solid fa-layer-group', ' 2FA Service'];
+            title.appendChild(mkEl('i', T[0]));
+            title.appendChild(document.createTextNode(T[1]));
+            const isSvc = tfaView === 'services' || tfaView.indexOf('svc-') === 0;
+            document.getElementById('tfaAcct').textContent = tfaEmail || (isSvc ? 'Social media, websites and apps' : 'All Gmail accounts');
+            stopQrCamera();
+            tfaScroll.textContent = '';
+            if (tfaView === 'remove') { renderTfaRemove(); return; }
+            if (tfaView === 'edit') { renderTfaEdit(); return; }
+            if (tfaView === 'gmail') { renderTfaForm(); return; }
+            if (tfaView === 'svc-add' || tfaView === 'svc-edit') { renderSvcForm(); return; }
+            if (tfaView === 'svc-del') { renderSvcDelete(); return; }
+            renderSvcList();
+            svcLoad(true);
+        }
+        function renderTfaRemove() {
+            const box = mkEl('div', 'tfa-form');
+            box.appendChild(mkEl('div', 'tfa-form-title', 'Remove the 2FA key of this Gmail?'));
+            box.appendChild(mkEl('div', 'tfa-steps', 'This only deletes the key from this dashboard. Google still has the Authenticator turned on for this account, so make sure you can sign in another way (your phone app or backup codes) before you remove it.'));
+            const pwRow = mkEl('div');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to remove it.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const row = mkEl('div', 'mail-lb-row');
+            const del = mkEl('button', 'mail-btn danger', 'Remove');
+            del.type = 'button';
+            const cancel = mkEl('button', 'mail-btn', 'Cancel');
+            cancel.type = 'button';
+            cancel.addEventListener('click', closeTfaModal);
+            del.addEventListener('click', () => removeTfa(pw, pwRow, err, del));
+            pw.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); del.click(); } });
+            row.appendChild(del); row.appendChild(cancel);
+            [pwRow, err, row].forEach(n => box.appendChild(n));
+            tfaScroll.appendChild(box);
+            setTimeout(() => { try { pw.focus(); } catch (e) {} }, 50);
+        }
+        async function removeTfa(pwEl, pwRow, errEl, btn) {
+            errEl.classList.add('hidden');
+            const email = tfaEmail, key = tfaKey(email);
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            const pw = pwEl.value.trim();
+            if (!pw) { fail('Enter the settings password'); try { pwEl.focus(); } catch (e) {} return; }
+            btn.disabled = true;
+            try {
+                const u = await tfaApi('/api/settings-unlock', { password: pw });      // password sob shomoy lagbe
+                if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
+                const r = await tfaApi('/api/totp/delete', { email, password: pw });   // server nijeo password jachai kore
+                if (r.loggedOut) return;
+                if (!r.ok && r.status !== 404) { if (tfaEmail === email) fail(r.data.error || 'Could not remove. Try again.'); return; }
+                pwEl.value = '';
+                tfaSet.delete(key);
+                tfaActive.delete(key);
+                if (tfaEmail === email) closeTfaModal();
+                rerenderCards();
+                showToast('2FA key removed');
+            } catch (err) {
+                fail('Could not reach the server. Try again.');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        function renderTfaEdit() {
+            const form = mkEl('div', 'tfa-form');
+            form.appendChild(mkEl('div', 'tfa-form-title', 'Set a new Authenticator key for this Gmail'));
+            form.appendChild(mkEl('div', 'tfa-steps', 'Paste the new secret key (or the otpauth:// link). It replaces the old key. The settings password is needed to save.'));
+            const secret = tfaInput('text', 'New secret key or otpauth:// link', 'tfaSecretInput');
+            const pwRow = mkEl('div');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to save.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const row = mkEl('div', 'mail-lb-row');
+            const save = mkEl('button', 'mail-btn primary', 'Save');
+            save.type = 'button';
+            const cancel = mkEl('button', 'mail-btn', 'Cancel');
+            cancel.type = 'button';
+            cancel.addEventListener('click', closeTfaModal);
+            save.addEventListener('click', () => saveTfaEdit(secret, pw, err, save));
+            [secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
+            row.appendChild(save); row.appendChild(cancel);
+            const qr = tfaQrTools(secret, err);
+            [qr, secret, pwRow, err, row].forEach(n => form.appendChild(n));
+            tfaScroll.appendChild(form);
+            setTimeout(() => { try { secret.focus(); } catch (e) {} }, 50);
+        }
+        async function saveTfaEdit(secretEl, pwEl, errEl, btn) {
+            errEl.classList.add('hidden');
+            const email = tfaEmail, secret = secretEl.value.trim(), pw = pwEl.value.trim();
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            if (!secret) { fail('Paste the new secret key or the otpauth:// link'); return; }
+            if (!pw) { fail('Enter the settings password'); try { pwEl.focus(); } catch (e) {} return; }
+            btn.disabled = true;
+            try {
+                const u = await tfaApi('/api/settings-unlock', { password: pw });
+                if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
+                const r = await tfaApi('/api/totp/add', { email, secret, password: pw });      // purono key bodlate server password chay
+                if (r.loggedOut) return;
+                if (!r.ok) { if (tfaEmail === email) fail(r.data.error || 'Could not save. Try again.'); return; }
+                secretEl.value = ''; pwEl.value = '';
+                tfaEnabled = true;
+                tfaSet.add(tfaKey(email));
+                tfaActive.set(tfaKey(email), { code: r.data.code, period: r.data.period || 30, endAt: Date.now() + r.data.remaining * 1000, hideAt: Date.now() + TFA_SHOW_MS, busy: false });
+                if (tfaEmail === email) closeTfaModal();
+                rerenderCards();
+                showToast('2FA key updated');
+            } catch (err) {
+                fail('Could not reach the server. Try again.');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+        // ---------- QR: chobi upload / camera scan ----------
+        let qrStream = null, qrRaf = 0;
+        function stopQrCamera() {
+            if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = 0; }
+            if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
+            const b = document.getElementById('tfaCamBox');
+            if (b) b.remove();
+        }
+        let jsQRPromise = null;
+        function loadJsQR() {
+            // alada file (/static/jsQR.min.js) -- shudhu QR scan/upload korle tokhon-i namay. Na pele CDN theke.
+            if (window.jsQR) return Promise.resolve(window.jsQR);
+            if (jsQRPromise) return jsQRPromise;
+            const tryLoad = (src) => new Promise((res, rej) => {
+                const sc = document.createElement('script');
+                sc.src = src;
+                sc.onload = () => window.jsQR ? res(window.jsQR) : rej(new Error('bad file'));
+                sc.onerror = () => { sc.remove(); rej(new Error('load failed')); };
+                document.head.appendChild(sc);
+            });
+            jsQRPromise = tryLoad('/static/jsQR.min.js')
+                .catch(() => tryLoad('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'))
+                .catch(() => { jsQRPromise = null; throw new Error('Could not load the QR reader. Check your internet, or that static/jsQR.min.js is on the server.'); });
+            return jsQRPromise;
+        }
+        function qrToInput(text, secretEl, errEl) {
+            text = String(text || '').trim();
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); return false; };
+            if (/^otpauth-migration:\/\//i.test(text)) return fail('This is a Google Authenticator export QR. Use the original setup QR from Google instead.');
+            if (!/^otpauth:\/\/totp\//i.test(text) && !/^[A-Za-z2-7\s-]{16,}=*$/.test(text)) return fail('This QR is not a 2FA (TOTP) setup code.');
+            secretEl.value = text;
+            errEl.classList.add('hidden');
+            showToast('QR read. Now enter the password and save.');
+            return true;
+        }
+        async function qrDecodeFile(file) {
+            const jsQR = await loadJsQR();
+            let src, w0, h0, revoke = null;
+            try { src = await createImageBitmap(file); w0 = src.width; h0 = src.height; }
+            catch (e) {
+                const url = URL.createObjectURL(file); revoke = url;
+                src = await new Promise((res, rej) => { const im = new Image(); im.onload = () => res(im); im.onerror = () => rej(new Error('Could not open this image')); im.src = url; });
+                w0 = src.naturalWidth; h0 = src.naturalHeight;
+            }
+            try {
+                const cv = document.createElement('canvas');
+                const ctx = cv.getContext('2d', { willReadFrequently: true });
+                for (const maxSide of [1000, 600, 1600]) {            // bivinno size-e cheshta
+                    const sc = Math.min(1, maxSide / Math.max(w0, h0));
+                    cv.width = Math.max(1, Math.round(w0 * sc)); cv.height = Math.max(1, Math.round(h0 * sc));
+                    ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+                    ctx.drawImage(src, 0, 0, cv.width, cv.height);
+                    const im = ctx.getImageData(0, 0, cv.width, cv.height);
+                    const r = jsQR(im.data, im.width, im.height, { inversionAttempts: 'attemptBoth' });
+                    if (r && r.data) return r.data;
+                }
+                return null;
+            } finally { if (revoke) URL.revokeObjectURL(revoke); }
+        }
+        async function startQrCamera(secretEl, errEl, host, onRead) {
+            stopQrCamera();
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            errEl.classList.add('hidden');
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { fail('Camera works only on HTTPS (or localhost). Upload a QR image instead.'); return; }
+            try {
+                const jsQR = await loadJsQR();
+                qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+                const box = mkEl('div', 'tfa-cam'); box.id = 'tfaCamBox';
+                const v = document.createElement('video');
+                v.setAttribute('playsinline', ''); v.muted = true; v.srcObject = qrStream;
+                const stop = mkEl('button', 'mail-btn', 'Stop camera'); stop.type = 'button';
+                stop.addEventListener('click', stopQrCamera);
+                box.appendChild(v); box.appendChild(stop);
+                host.appendChild(box);
+                await v.play();
+                const cv = document.createElement('canvas');
+                const ctx = cv.getContext('2d', { willReadFrequently: true });
+                const tick = () => {
+                    if (!qrStream) return;
+                    if (v.readyState >= 2 && v.videoWidth) {
+                        const sc = Math.min(1, 640 / v.videoWidth);
+                        cv.width = Math.round(v.videoWidth * sc); cv.height = Math.round(v.videoHeight * sc);
+                        ctx.drawImage(v, 0, 0, cv.width, cv.height);
+                        const im = ctx.getImageData(0, 0, cv.width, cv.height);
+                        const r = jsQR(im.data, im.width, im.height, { inversionAttempts: 'dontInvert' });
+                        if (r && r.data) { stopQrCamera(); if (qrToInput(r.data, secretEl, errEl) && onRead) onRead(r.data); return; }
+                    }
+                    qrRaf = requestAnimationFrame(tick);
+                };
+                qrRaf = requestAnimationFrame(tick);
+            } catch (e) {
+                stopQrCamera();
+                fail(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'Camera permission was denied.' :
+                     e && e.name === 'NotFoundError' ? 'No camera found on this device.' : (e && e.message) || 'Could not start the camera.');
+            }
+        }
+        function tfaQrTools(secretEl, errEl, onRead) {
+            const wrap = mkEl('div');
+            const row = mkEl('div', 'tfa-qr-row');
+            const up = mkEl('button', 'mail-btn'); up.type = 'button';
+            up.appendChild(mkEl('i', 'fa-regular fa-image')); up.appendChild(document.createTextNode(' Upload QR'));
+            const cam = mkEl('button', 'mail-btn'); cam.type = 'button';
+            cam.appendChild(mkEl('i', 'fa-solid fa-camera')); cam.appendChild(document.createTextNode(' Scan QR'));
+            const file = document.createElement('input');
+            file.type = 'file'; file.accept = 'image/*'; file.className = 'hidden';
+            up.addEventListener('click', () => { stopQrCamera(); file.value = ''; file.click(); });
+            file.addEventListener('change', async () => {
+                const f = file.files && file.files[0];
+                if (!f) return;
+                errEl.classList.add('hidden');
+                up.disabled = true;
+                try {
+                    const text = await qrDecodeFile(f);
+                    if (!text) { errEl.textContent = 'No QR code found in this image. Try a clearer or cropped screenshot.'; errEl.classList.remove('hidden'); }
+                    else if (qrToInput(text, secretEl, errEl) && onRead) onRead(text);
+                } catch (e) {
+                    errEl.textContent = (e && e.message) || 'Could not read this image.'; errEl.classList.remove('hidden');
+                } finally { up.disabled = false; }
+            });
+            cam.addEventListener('click', () => startQrCamera(secretEl, errEl, wrap, onRead));
+            row.appendChild(up); row.appendChild(cam);
+            wrap.appendChild(row); wrap.appendChild(file);
+            return wrap;
+        }
+        // ======================= 2FA Services (social media / website / app) =======================
+        // ---- Service logo: brand icons (simple-icons, CC0) -- alada file (/static/brands.js), 2FA Service khulle tokhon-i namay ----
+        // [keys, title, brandHex, svgPath(24x24)]  -- path khali hole shudhu brand-er rong-e prothom akkhor dekhay
+        // File na pele / load na hole kono kharap hoy na: shudhu logo-r jaygay prothom akkhor dekhay.
+        let svcBrandsPromise = null;
+        function loadBrands() {
+            if (window.SVC_BRANDS) return Promise.resolve(true);
+            if (!svcBrandsPromise) {
+                svcBrandsPromise = new Promise((res) => {
+                    const sc = document.createElement('script');
+                    sc.src = '/static/brands.js';
+                    sc.onload = () => res(!!window.SVC_BRANDS);
+                    sc.onerror = () => { svcBrandsPromise = null; res(false); };
+                    document.head.appendChild(sc);
+                });
+            }
+            return svcBrandsPromise;
+        }
+        let svcBrandIdx = null;
+        function svcBrand(name) {
+            if (!svcBrandIdx) {
+                svcBrandIdx = {};
+                (window.SVC_BRANDS || []).forEach(b => b[0].split('|').forEach(k => { svcBrandIdx[k] = b; }));
+            }
+            const n = String(name || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+            if (!n) return null;
+            if (svcBrandIdx[n]) return svcBrandIdx[n];
+            let best = null, bl = 0;                                   // "My Binance acc" -> Binance (shudhu 4+ akkhor-er key)
+            for (const k in svcBrandIdx) if (k.length >= 4 && k.length > bl && n.indexOf(k) > -1) { best = svcBrandIdx[k]; bl = k.length; }
+            return best;
+        }
+        function svcAvatar(name) {
+            const b = svcBrand(name);
+            const letter = escAttr((Array.from(String(name))[0] || '?').toUpperCase());
+            if (!b) return '<div class="svc-av" style="background:' + svcColor(name) + '">' + letter + '</div>';
+            const hex = b[2], r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), bl = parseInt(hex.slice(4, 6), 16);
+            const lum = (0.2126 * r + 0.7152 * g + 0.0722 * bl) / 255;
+            const dark = lum < 0.12;                                   // kalo logo (GitHub, X, Apple...) dark UI-te mishe jay
+            const bg = dark ? '#2b3342' : '#' + hex;
+            const fg = lum > 0.72 ? '#111' : '#fff';
+            const style = 'background:' + bg + (dark ? ';border:1px solid rgba(255,255,255,.14)' : '');
+            if (!b[3]) return '<div class="svc-av" style="' + style + ';color:' + fg + '">' + letter + '</div>';
+            return '<div class="svc-av" style="' + style + '"><svg viewBox="0 0 24 24" width="22" height="22" fill="' + fg + '" aria-hidden="true"><path d="' + b[3] + '"/></svg></div>';
+        }
+        function svcColor(name) {
+            let hh = 0;
+            for (const c of String(name)) hh = (hh * 31 + c.charCodeAt(0)) >>> 0;
+            return 'hsl(' + (hh % 360) + ' 55% 42%)';
+        }
+        function svcFmt(code) {
+            code = String(code || '');
+            return code.length === 6 ? code.slice(0, 3) + ' ' + code.slice(3) : code.length === 8 ? code.slice(0, 4) + ' ' + code.slice(4) : code;
+        }
+        async function svcLoad(showErr) {
+            if (svcBusy) return;
+            svcBusy = true;
+            try {
+                const r = await tfaApi('/api/svc/list');
+                if (r.loggedOut) return;
+                if (!r.ok) { if (showErr) showToast(r.data.error || 'Could not load services'); if (!svcLoaded) { svcLoaded = true; if (tfaView === 'services') renderSvcItems(); } return; }
+                const now = Date.now();
+                const next = (r.data.services || []).map(x => Object.assign({}, x, { endAt: now + (x.remaining || 0) * 1000 }));
+                const same = svcLoaded && next.length === svcList.length &&
+                    next.every((x, i) => svcList[i] && svcList[i].id === x.id && svcList[i].name === x.name && svcList[i].label === x.label);
+                svcList = next; svcLoaded = true;
+                if (tfaModalOpen() && tfaView === 'services') { if (same) svcPaint(); else renderSvcItems(); }
+            } catch (e) {
+                if (showErr) showToast('Could not reach the server');
+            } finally { svcBusy = false; }
+        }
+        function renderSvcList() {
+            tfaScroll.textContent = '';
+            const bar = mkEl('div', 'svc-bar');
+            const q = tfaInput('search', 'Search services...', 'svcSearch');
+            q.value = svcQuery;
+            q.addEventListener('input', () => { svcQuery = q.value; renderSvcItems(); });
+            const add = mkEl('button', 'mail-btn primary'); add.type = 'button';
+            add.appendChild(mkEl('i', 'fa-solid fa-plus')); add.appendChild(document.createTextNode(' Add'));
+            add.addEventListener('click', () => openSvcForm('add'));
+            bar.appendChild(q); bar.appendChild(add);
+            const list = mkEl('div', 'svc-list'); list.id = 'svcList';
+            tfaScroll.appendChild(bar); tfaScroll.appendChild(list);
+            renderSvcItems();
+            if (!window.SVC_BRANDS) loadBrands().then((ok) => {          // logo ashle abar ankbe
+                if (ok) { svcBrandIdx = null; if (tfaModalOpen() && tfaView === 'services') renderSvcItems(); }
+            });
+        }
+        function svcUpdateTitle() {                     // "2FA Service (5)" -- koita service add ache
+            if (tfaView !== 'services' || !svcLoaded) return;
+            const t = document.getElementById('tfaTitle');
+            const n = t && t.lastChild;
+            if (n && n.nodeType === 3) n.nodeValue = ' 2FA Service (' + svcList.length + ')';
+        }
+        function renderSvcItems() {
+            const list = document.getElementById('svcList');
+            if (!list) return;
+            if (!svcLoaded) { list.innerHTML = '<div class="mail-state">Loading...</div>'; return; }
+            svcUpdateTitle();
+            if (!svcList.length) {
+                list.innerHTML = '<div class="tfa-empty"><i class="fa-solid fa-layer-group"></i>No service added yet. Tap <b>Add</b> to add Facebook, GitHub, any website or app.</div>';
+                return;
+            }
+            const q = svcQuery.trim().toLowerCase();
+            const items = svcList.filter(x => !q || (x.name + ' ' + (x.label || '')).toLowerCase().includes(q));
+            if (!items.length) { list.innerHTML = '<div class="mail-state">No service matches.</div>'; return; }
+            list.innerHTML = items.map(x => {
+                const id = escAttr(x.id), nm = escAttr(x.name);
+                return `<div class="otp-swipe tfa">
+                    <div class="swipe-tfa">
+                        <button type="button" class="swipe-svc-edit" data-id="${id}" title="Edit" aria-label="Edit ${nm}"><i class="fa-solid fa-pencil"></i></button>
+                        <button type="button" class="swipe-svc-del" data-id="${id}" title="Remove" aria-label="Remove ${nm}"><i class="fa-regular fa-trash-can"></i></button>
+                    </div>
+                    <div class="otp-card svc-item" data-svc="${id}">
+                        <div class="svc-head">
+                            ${svcAvatar(x.name)}
+                            <div class="svc-info">
+                                <div class="svc-name">${nm}</div>
+                                ${x.label ? `<div class="svc-label">${escAttr(x.label)}</div>` : ''}
+                            </div>
+                        </div>
+                        <div class="otp-code-box has-cells svc-code" role="button" tabindex="0" data-id="${id}" title="Click to copy" aria-label="2FA code of ${nm}. Press to copy"></div>
+                        <div class="svc-time"><span class="tbar" aria-hidden="true"><i class="tbar-fill"></i></span><span class="svc-left"></span></div>
+                    </div>
+                </div>`;
+            }).join('');
+            svcPaint();
+        }
+        function svcPaint() {
+            const now = Date.now();
+            document.querySelectorAll('#svcList .svc-item').forEach(el => {
+                const x = svcList.find(v => v.id === el.dataset.svc);
+                if (!x) return;
+                const leftMs = Math.max(0, x.endAt - now), left = Math.ceil(leftMs / 1000);
+                el.classList.toggle('warn', !!x.code && left <= 5);
+                const c = el.querySelector('.svc-code');
+                const cur = x.code || '';
+                if (c && c.dataset.code !== cur) {
+                    c.dataset.code = cur;
+                    c.innerHTML = cur ? codeCellsHTML(cur, false) : '<span class="tfa-wait">------</span>';
+                }
+                setTbar(el, leftMs, x.period * 1000, !!x.code);
+                const t = el.querySelector('.svc-left');
+                if (t) t.textContent = x.code ? left + 's' : '';
+            });
+        }
+        setInterval(() => {
+            if (!tfaModalOpen() || tfaView !== 'services' || !svcLoaded) return;
+            svcPaint();
+            const now = Date.now();
+            if (!svcBusy && svcList.some(x => now >= x.endAt + 300)) svcLoad(false);        // notun code
+        }, 1000);
+        tfaScroll.addEventListener('click', (e) => {
+            const c = e.target.closest('.svc-code');
+            if (!c) return;
+            const x = svcList.find(v => v.id === c.dataset.id);
+            if (!x || !x.code) return;
+            copyQuiet(x.code).then(ok => showToast(ok ? 'Code copied' : 'Could not copy'));
+        });
+        function openSvcForm(mode, id) {
+            tfaView = { add: 'svc-add', edit: 'svc-edit', del: 'svc-del' }[mode] || 'services';
+            svcEditId = id || '';
+            renderTfa();
+        }
+        function svcBack() { tfaView = 'services'; svcEditId = ''; renderTfa(); }
+        function svcPrefill(text, nameEl, labelEl) {                 // otpauth://totp/Issuer:account?issuer=X theke nam/account bosay
+            try {
+                if (!/^otpauth:\/\/totp\//i.test(text)) return;
+                const u = new URL(text);
+                const path = decodeURIComponent(u.pathname.replace(/^\/+/, ''));
+                const i = path.indexOf(':');
+                const issuer = (u.searchParams.get('issuer') || (i > -1 ? path.slice(0, i) : '')).trim();
+                const account = (i > -1 ? path.slice(i + 1) : path).trim();
+                if (issuer && !nameEl.value.trim()) nameEl.value = issuer.slice(0, 40);
+                if (account && !labelEl.value.trim()) labelEl.value = account.slice(0, 60);
+            } catch (e) {}
+        }
+        function renderSvcForm() {
+            const edit = tfaView === 'svc-edit';
+            const cur = edit ? svcList.find(v => v.id === svcEditId) : null;
+            if (edit && !cur) { svcBack(); return; }
+            const form = mkEl('div', 'tfa-form');
+            form.appendChild(mkEl('div', 'tfa-form-title', edit ? 'Edit this service' : 'Add a service'));
+            form.appendChild(mkEl('div', 'tfa-steps', edit
+                ? 'Leave the key empty to keep the current one. The settings password is needed to save.'
+                : 'Open the service\u2019s security settings \u2192 Authenticator app, then paste the secret key or the otpauth:// link, or upload / scan its QR code.'));
+            const name = tfaInput('text', 'Service name (e.g. Facebook, GitHub)', 'svcName');
+            name.maxLength = 40; name.setAttribute('list', 'svcNames');
+            const dl = document.createElement('datalist'); dl.id = 'svcNames';
+            const fillNames = () => {
+                dl.textContent = '';
+                (window.SVC_BRANDS || []).map(x => x[1]).forEach(n => { const o = document.createElement('option'); o.value = n; dl.appendChild(o); });
+            };
+            fillNames();
+            if (!window.SVC_BRANDS) loadBrands().then((ok) => { if (ok) fillNames(); });
+            const label = tfaInput('text', 'Account name (username or email) - optional', 'svcLabel');
+            label.maxLength = 60;
+            const secret = tfaInput('text', edit ? 'New secret key or otpauth:// link (optional)' : 'Secret key or otpauth:// link', 'tfaSecretInput');
+            if (cur) { name.value = cur.name; label.value = cur.label || ''; }
+            const pwRow = mkEl('div');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to save.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const qr = tfaQrTools(secret, err, (text) => svcPrefill(text, name, label));
+            const row = mkEl('div', 'mail-lb-row');
+            const save = mkEl('button', 'mail-btn primary', 'Save'); save.type = 'button';
+            const cancel = mkEl('button', 'mail-btn', 'Cancel'); cancel.type = 'button';
+            cancel.addEventListener('click', svcBack);
+            save.addEventListener('click', () => saveSvc(edit, name, label, secret, pw, err, save));
+            [name, label, secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
+            row.appendChild(save); row.appendChild(cancel);
+            [dl, name, label, qr, secret, pwRow, err, row].forEach(n => form.appendChild(n));
+            tfaScroll.appendChild(form);
+            setTimeout(() => { try { (edit ? label : name).focus(); } catch (e) {} }, 50);
+        }
+        async function saveSvc(edit, nameEl, labelEl, secretEl, pwEl, errEl, btn) {
+            errEl.classList.add('hidden');
+            const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
+            const name = nameEl.value.trim(), label = labelEl.value.trim(), secret = secretEl.value.trim(), pw = pwEl.value.trim();
+            if (!name) { fail('Enter the service name'); nameEl.focus(); return; }
+            if (!edit && !secret) { fail('Paste the secret key or the otpauth:// link'); secretEl.focus(); return; }
+            if (!pw) { fail('Enter the settings password'); pwEl.focus(); return; }
+            btn.disabled = true;
+            try {
+                const payload = edit ? { id: svcEditId, name, label, password: pw } : { name, label, secret, password: pw };
+                if (edit && secret) payload.secret = secret;
+                const r = await tfaApi(edit ? '/api/svc/update' : '/api/svc/add', payload);
+                if (r.loggedOut) return;
+                if (!r.ok) { fail(r.data.error || 'Could not save. Try again.'); return; }
+                secretEl.value = ''; pwEl.value = '';
+                showToast(edit ? 'Service updated' : 'Service added');
+                svcLoaded = false;
+                svcBack();
+            } catch (err) {
+                fail('Could not reach the server. Try again.');
+            } finally { btn.disabled = false; }
+        }
+        function renderSvcDelete() {
+            const cur = svcList.find(v => v.id === svcEditId);
+            if (!cur) { svcBack(); return; }
+            const box = mkEl('div', 'tfa-form');
+            box.appendChild(mkEl('div', 'tfa-form-title', 'Remove ' + cur.name + (cur.label ? ' (' + cur.label + ')' : '') + '?'));
+            box.appendChild(mkEl('div', 'tfa-steps', 'This only deletes the key from this dashboard. Make sure you can still sign in to the service another way (your phone app or backup codes) before you remove it.'));
+            const pwRow = mkEl('div');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to remove it.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const row = mkEl('div', 'mail-lb-row');
+            const del = mkEl('button', 'mail-btn danger', 'Remove'); del.type = 'button';
+            const cancel = mkEl('button', 'mail-btn', 'Cancel'); cancel.type = 'button';
+            cancel.addEventListener('click', svcBack);
+            del.addEventListener('click', async () => {
+                err.classList.add('hidden');
+                const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+                const p = pw.value.trim();
+                if (!p) { fail('Enter the settings password'); pw.focus(); return; }
+                del.disabled = true;
+                try {
+                    const r = await tfaApi('/api/svc/delete', { id: cur.id, password: p });
+                    if (r.loggedOut) return;
+                    if (!r.ok && r.status !== 404) { fail(r.data.error || 'Could not remove. Try again.'); return; }
+                    pw.value = '';
+                    showToast('Service removed');
+                    svcLoaded = false;
+                    svcBack();
+                } catch (e) {
+                    fail('Could not reach the server. Try again.');
+                } finally { del.disabled = false; }
+            });
+            pw.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); del.click(); } });
+            row.appendChild(del); row.appendChild(cancel);
+            [pwRow, err, row].forEach(n => box.appendChild(n));
+            tfaScroll.appendChild(box);
+            setTimeout(() => { try { pw.focus(); } catch (e) {} }, 50);
+        }
+
+        function tfaInput(type, ph, id) {
+            const el = document.createElement('input');
+            el.type = type; el.placeholder = ph; el.id = id; el.className = 'tfa-input';
+            el.autocomplete = 'off'; el.spellcheck = false;
+            el.setAttribute('autocapitalize', 'off'); el.setAttribute('autocorrect', 'off');
+            return el;
+        }
+        function renderTfaForm() {
+            const form = mkEl('div', 'tfa-form');
+            form.appendChild(mkEl('div', 'tfa-form-title', 'Add the Authenticator key of this Gmail'));
+            const steps = mkEl('ol', 'tfa-steps');
+            ['Open Google Account \u2192 Security \u2192 2-Step Verification \u2192 Authenticator app \u2192 Set up.',
+             'Tap "Can\u2019t scan it?" and copy the secret key (or paste the otpauth:// link).',
+             'Paste it below, or upload / scan the QR code, then save. Then type the 6-digit code shown here into Google to finish.'
+            ].forEach(t => steps.appendChild(mkEl('li', null, t)));
+            form.appendChild(steps);
+            const secret = tfaInput('text', 'Secret key or otpauth:// link', 'tfaSecretInput');
+            const pwRow = mkEl('div', 'hidden');
+            pwRow.appendChild(mkEl('div', 'mail-note', 'Settings are locked. Enter the settings password.'));
+            const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
+            pw.autocomplete = 'current-password';
+            pwRow.appendChild(pw);
+            const err = mkEl('div', 'tfa-err hidden');
+            err.setAttribute('role', 'alert');
+            const save = mkEl('button', 'mail-btn primary', 'Save');
+            save.type = 'button';
+            const fail = (m) => { err.textContent = m; err.classList.remove('hidden'); };
+            save.addEventListener('click', () => saveTfa(secret, pw, pwRow, fail, err, save));
+            [secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
+            const qr = tfaQrTools(secret, err);
+            form.appendChild(qr); form.appendChild(secret); form.appendChild(pwRow); form.appendChild(err); form.appendChild(save);
+            tfaScroll.appendChild(form);
+            setTimeout(() => { try { secret.focus(); } catch (e) {} }, 50);
+        }
+        async function saveTfa(secretEl, pwEl, pwRow, fail, errEl, saveBtn) {
+            errEl.classList.add('hidden');
+            const email = tfaEmail, secret = secretEl.value.trim();
+            if (!secret) { fail('Paste the secret key or the otpauth:// link'); return; }
+            saveBtn.disabled = true;
+            try {
+                let r = await tfaApi('/api/totp/add', { email, secret });
+                if (r.status === 403) {                         // settings locked -> password
+                    pwRow.classList.remove('hidden');
+                    const pw = pwEl.value.trim();
+                    if (!pw) { pwEl.focus(); return; }
+                    const u = await tfaApi('/api/settings-unlock', { password: pw });
+                    if (!u.ok) { fail(u.data.error || 'Incorrect password'); return; }
+                    r = await tfaApi('/api/totp/add', { email, secret });
+                }
+                if (r.loggedOut) return;
+                if (!r.ok) { if (tfaEmail === email) fail(r.data.error || 'Could not save. Try again.'); return; }
+                secretEl.value = ''; pwEl.value = '';
+                tfaEnabled = true;
+                tfaSet.add(tfaKey(email));
+                tfaActive.set(tfaKey(email), { code: r.data.code, period: r.data.period || 30, endAt: Date.now() + r.data.remaining * 1000, hideAt: Date.now() + TFA_SHOW_MS, busy: false });
+                if (tfaEmail === email) renderTfaDone();
+                rerenderCards();
+            } catch (err) {
+                fail('Could not reach the server. Try again.');
+            } finally {
+                saveBtn.disabled = false;
+            }
+        }
+        function renderTfaDone() {
+            tfaScroll.textContent = '';
+            const box = mkEl('div', 'tfa-form');
+            box.appendChild(mkEl('div', 'tfa-form-title', 'Saved. Enter this code in Google to finish:'));
+            box.appendChild(mkEl('div', 'tfa-bigcode'));
+            box.lastChild.dataset.tfaLive = 'code';
+            const left = mkEl('div', 'mail-note');
+            left.dataset.tfaLive = 'left';
+            box.appendChild(left);
+            const row = mkEl('div', 'mail-lb-row');
+            const copy = mkEl('button', 'mail-btn primary', 'Copy');
+            copy.type = 'button';
+            copy.addEventListener('click', () => { const s = tfaActive.get(tfaKey(tfaEmail)); if (s) copyQuiet(s.code).then(ok => showToast(ok ? '2FA code copied' : 'Could not copy')); });
+            const done = mkEl('button', 'mail-btn', 'Done');
+            done.type = 'button';
+            done.addEventListener('click', closeTfaModal);
+            row.appendChild(copy); row.appendChild(done);
+            box.appendChild(row);
+            tfaScroll.appendChild(box);
+            paintTfa();
+        }
+        function openTfaModal(view, email, trigger) {
+            tfaView = view; tfaEmail = String(email || ''); tfaReturnFocus = trigger || null;
+            renderTfa();
+            tfaModal.classList.remove('hidden');
+            document.getElementById('tfaCloseBtn').focus();
+        }
+        document.addEventListener('click', (e) => {
+            const b = e.target.closest('.card-2fa');
+            if (b) { e.preventDefault(); onTfaButton(b); return; }
+            const cb = e.target.closest('.tfa-code[data-tfa-email]');
+            if (cb) { tfaCopy(cb); return; }
+            if (e.target === tfaModal) closeTfaModal();
+        });
+        document.getElementById('tfaCloseBtn').addEventListener('click', closeTfaModal);
+
+
+        // ---------- 2FA engine ----------
+        function tfaKey(email) { return String(email || '').toLowerCase(); }
+        async function tfaApi(url, payload) {
+            const res = await fetch(url, payload === undefined ? {} : {
+                method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+            });
+            const data = await res.json().catch(() => ({}));
+            // settings-unlock-e vul password dile server 401 dey (\"Incorrect password\") -- eta logout na, shudhu vul password.
+            const wrongPw = (url === '/api/settings-unlock' || url === '/api/totp/delete' || url === '/api/totp/add' || String(url).indexOf('/api/svc/') === 0) && data.error && data.error !== 'Unauthorized Access';
+            const loggedOut = res.status === 401 && !wrongPw;
+            if (loggedOut) {
+                closeTfaModal(); tfaActive.clear(); stopPush(); stopWaiting(false);
+                dashboardSection.classList.add('hidden');
+                loginSection.classList.remove('hidden');
+            }
+            return { ok: res.ok, status: res.status, data, loggedOut };
+        }
+        function rerenderCards() { renderHome(); if (accountsModalOpen()) renderAll(); }
+        async function loadTfaStatus() {
+            try {
+                const res = await fetch('/api/totp/status');
+                if (!res.ok) return;
+                const d = await res.json();
+                tfaEnabled = !!d.enabled;
+                tfaSet.clear();
+                (d.emails || []).forEach(em => tfaSet.add(tfaKey(em)));
+                tfaStatusLoaded = true;
+                rerenderCards();
+            } catch (e) {}
+        }
+        function tfaBoxHTML(email) {
+            const s = tfaActive.get(tfaKey(email));
+            return `<div class="tfa-box" data-tfa-email="${escAttr(email)}">
+                <div class="tfa-label"><i class="fa-solid fa-shield-halved"></i> 2FA code</div>
+                <div class="otp-code-box has-cells tfa-code" role="button" tabindex="0" data-tfa-email="${escAttr(email)}" data-code="${escAttr(s.code || '')}" title="Click to copy" aria-label="2FA code. Press to copy">${s.code ? codeCellsHTML(s.code, false) : '<span class="tfa-wait">&bull;&bull;&bull;</span>'}</div>
+                <div class="tfa-time"><span class="tbar" aria-hidden="true"><i class="tbar-fill"></i></span><span class="tfa-left"></span></div>
+            </div>`;
+        }
+        function paintTfa() {
+            const now = Date.now();
+            document.querySelectorAll('.tfa-box[data-tfa-email]').forEach(box => {
+                const s = tfaActive.get(tfaKey(box.dataset.tfaEmail));
+                if (!s) return;
+                const leftMs = Math.max(0, s.endAt - now), left = Math.ceil(leftMs / 1000);
+                box.classList.toggle('warn', !!s.code && left <= 5);
+                const codeEl = box.querySelector('.tfa-code');
+                if (codeEl && codeEl.dataset.code !== (s.code || '')) {
+                    codeEl.dataset.code = s.code || '';
+                    codeEl.innerHTML = s.code ? codeCellsHTML(s.code, false) : '<span class="tfa-wait">&bull;&bull;&bull;</span>';
+                }
+                setTbar(box, leftMs, s.period * 1000, !!s.code);
+                const t = box.querySelector('.tfa-left');
+                if (t) t.textContent = s.code ? left + 's' : '';
+            });
+            if (tfaModalOpen()) {
+                const s = tfaActive.get(tfaKey(tfaEmail));
+                tfaScroll.querySelectorAll('[data-tfa-live]').forEach(el => {
+                    if (!s) { el.textContent = ''; return; }
+                    el.textContent = el.dataset.tfaLive === 'code' ? tfaFmt(s.code) : 'Changes in ' + Math.max(0, Math.ceil((s.endAt - now) / 1000)) + 's';
+                });
+            }
+        }
+        async function tfaFetch(key) {
+            const s = tfaActive.get(key);
+            if (!s || s.busy) return;
+            s.busy = true;
+            try {
+                const r = await tfaApi('/api/totp/code', { email: key });
+                if (tfaActive.get(key) !== s) return;
+                if (!r.ok) {
+                    tfaActive.delete(key);
+                    if (r.data && r.data.not_set) tfaSet.delete(key);
+                    if (r.status !== 401) showToast((r.data && r.data.error) || 'Could not get the 2FA code');
+                    rerenderCards();
+                    return;
+                }
+                s.code = r.data.code; s.period = r.data.period || 30; s.endAt = Date.now() + r.data.remaining * 1000;
+                paintTfa();
+            } catch (e) {
+                if (tfaActive.get(key) === s) { tfaActive.delete(key); showToast('Could not reach the server'); rerenderCards(); }
+            } finally {
+                s.busy = false;
+            }
+        }
+        async function onTfaButton(btn) {
+            const email = btn.dataset.email, key = tfaKey(email);
+            if (tfaActive.has(key)) { tfaActive.delete(key); rerenderCards(); return; }          // abar chaple email-code-e fire
+            if (!tfaStatusLoaded) await loadTfaStatus();
+            if (!tfaEnabled) { showToast('2FA is not set up on the server yet (TOTP_ENC_KEY)'); return; }
+            if (!tfaSet.has(key)) { openTfaModal('gmail', email, btn); return; }
+            tfaActive.set(key, { code: '', period: 30, endAt: 0, hideAt: Date.now() + TFA_SHOW_MS, busy: false });
+            rerenderCards();
+            tfaFetch(key);
+        }
+        function tfaCopy(box) {
+            const key = tfaKey(box.dataset.tfaEmail), s = tfaActive.get(key);
+            if (!s || !s.code) return;
+            s.hideAt = Date.now() + TFA_SHOW_MS;
+            copyQuiet(s.code).then(ok => { showToast(ok ? '2FA code copied' : 'Could not copy'); if (ok) flashCopied(box); });
+        }
+        setInterval(() => {
+            if (!tfaActive.size) return;
+            const now = Date.now();
+            let hide = false;
+            tfaActive.forEach((s, k) => {
+                if (now >= s.hideAt) { tfaActive.delete(k); hide = true; return; }
+                if (s.endAt && now >= s.endAt + 300 && !s.busy) tfaFetch(k);     // notun 30s-er code
+            });
+            if (hide) rerenderCards(); else paintTfa();
+        }, 1000);
+
+        // ======================= Ekta account refresh =======================
+        async function refreshAccount(email, silent = false) {
+            if (!silent) markAccountUsed(email);
+            try {
+                const res = await fetch('/api/refresh-one', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                if (res.status === 401) {
+                    stopPush(); stopWaiting(false);
+                    dashboardSection.classList.add('hidden');
+                    loginSection.classList.remove('hidden');
+                    return;
+                }
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || 'Failed');
+                applyItem(data, false);
+                if (!silent) {
+                    if (data.code === 'Error') showToast(data.sender || 'Error');
+                    else if (!isValidItem(data)) showToast('No code found for ' + email);
+                    else showToast('Refreshed');
+                }
+            } catch (err) {
+                if (!silent) showToast('Could not refresh this account');
+            }
+        }
+        document.addEventListener('click', async (e) => {
+            const btn = e.target.closest('.card-refresh');
+            if (!btn || btn.dataset.busy === '1') return;
+            btn.dataset.busy = '1';
+            const icon = btn.querySelector('i');
+            if (icon) icon.classList.add('rotating');
+            try { await refreshAccount(btn.dataset.email); }
+            finally {
+                btn.dataset.busy = '0';
+                if (icon) icon.classList.remove('rotating');
+            }
+        });
+
+        // ======================= Live push (SSE) =======================
+        function updateLive() {
+            const el = document.getElementById('liveStatus');
+            if (pushConnected) {
+                el.style.display = 'block';
+                el.innerHTML = '<i class="fa-solid fa-circle" style="font-size:7px; vertical-align:middle;"></i> Live &middot; new codes appear automatically';
+            } else {
+                el.style.display = 'none';
+            }
+        }
+
+        async function ensurePush(force = false) {
+            if (es || pushRetry) return;
+            if (!force) {
+                if (pushEnabled === null) {
+                    try {
+                        const r = await fetch('/api/push-status');
+                        const d = await r.json();
+                        pushEnabled = !!d.enabled;
+                    } catch (e) { return; }
+                }
+                if (!pushEnabled) return;
+            }
+            if (!dashboardIsOpen()) return;
+
+            es = new EventSource('/api/stream');
+            es.addEventListener('hello', () => {
+                pushConnected = true;
+                updateLive();
+                helloCount++;
+                lastDisconnectAt = 0;
+            });
+            es.addEventListener('otp', (ev) => {
+                try { applyItem(JSON.parse(ev.data), true); } catch (e) {}
+            });
+            es.addEventListener('expired', () => autoLock('Session expired. Please login again.'));
+            es.onerror = () => {
+                pushConnected = false;
+                updateLive();
+                if (!lastDisconnectAt) lastDisconnectAt = Date.now();
+                if (es && es.readyState === EventSource.CLOSED) {      // browser ar nije reconnect korbe na
+                    es.close(); es = null;
+                    pushRetry = setTimeout(() => { pushRetry = null; ensurePush(); }, 15000);
+                }
+            };
+        }
+
+        function stopPush() {
+            if (es) { es.close(); es = null; }
+            clearTimeout(pushRetry); pushRetry = null;
+            pushConnected = false; helloCount = 0; lastDisconnectAt = 0;
+            updateLive();
+        }
+
+        addAccountForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('accEmail').value;
+            const password = document.getElementById('accPassword').value;
+
+            try {
+                const res = await fetch('/api/add-account', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const result = await res.json();
+
+                if (res.ok) {
+                    showMessage(result.message || "Account added!");
+                    addAccountForm.reset();
+                    settingsPopup.classList.remove('active');
+                    loadAccountList();
+                } else {
+                    showMessage(result.error || "Failed", true);
+                }
+            } catch (err) {
+                showMessage("Connection error", true);
+            }
+        });
+
+        // ---------- Backup & Import ----------
+        const backupModal = document.getElementById('backupModal');
+        const bkResult = document.getElementById('bkResult');
+        function bkSay(lines, isError, extra) {
+            bkResult.textContent = '';
+            (lines || []).forEach((t, i) => {
+                const d = document.createElement('div');
+                d.textContent = t;
+                d.className = i === 0 ? (isError ? 'bk-err' : 'bk-ok') : 'bk-dim';
+                bkResult.appendChild(d);
+            });
+            (extra || []).forEach((t) => { const d = document.createElement('div'); d.className = 'bk-err'; d.textContent = t; bkResult.appendChild(d); });
+        }
+        function bkSummary(d) {
+            const lines = ['Added ' + (d.added || 0) + (d.total != null ? ' of ' + d.total : '') + ' account(s)'];
+            if (d.skipped && d.skipped.length) lines.push(d.skipped.length + ' already existed (skipped)');
+            if (d.invalid) lines.push(d.invalid + ' invalid entr' + (d.invalid === 1 ? 'y' : 'ies') + ' skipped');
+            if (d.bad_lines && d.bad_lines.length) lines.push('Could not read line(s): ' + d.bad_lines.join(', '));
+            const extra = (d.failed || []).map((f) => f.email + ' - ' + f.reason);
+            return { lines, extra };
+        }
+        async function bkPost(url, payload) {
+            const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json().catch(() => ({}));
+            return { ok: res.ok, data };
+        }
+        document.getElementById('openBackupBtn').addEventListener('click', () => {
+            settingsPopup.classList.remove('active');
+            bkResult.textContent = '';
+            backupModal.classList.remove('hidden');
+        });
+        function closeBackupModal() {
+            backupModal.classList.add('hidden');
+            ['bkSettingsPw', 'bkFilePw', 'bkImportPw', 'bkText'].forEach((id) => { document.getElementById(id).value = ''; });
+            document.getElementById('bkFile').value = '';
+            document.getElementById('bkPreviewBox').style.display = 'none';
+            document.getElementById('bkBulkPreviewBox').style.display = 'none';
+            bkBulkParsed = [];
+            bkPreviewFileText = null; bkPreviewPw = null;
+            bkResult.textContent = '';
+        }
+        document.getElementById('backupCloseBtn').addEventListener('click', closeBackupModal);
+        backupModal.addEventListener('click', (e) => { if (e.target === backupModal) closeBackupModal(); });
+
+        document.getElementById('bkExportBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkExportBtn');
+            const pw = document.getElementById('bkSettingsPw').value.trim();
+            const fp = document.getElementById('bkFilePw').value;
+            if (!pw) return bkSay(['Enter the settings password'], true);
+            if (fp.length < 8) return bkSay(['Backup password must be at least 8 characters'], true);
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/backup/export', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw, backup_password: fp })
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    return bkSay([d.error || 'Export failed'], true);
+                }
+                const count = res.headers.get('X-Backup-Count');
+                const blob = await res.blob();
+                const cd = res.headers.get('Content-Disposition') || '';
+                const name = (cd.match(/filename="([^"]+)"/) || [])[1] || 'otp-backup.otpbak';
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                document.getElementById('bkSettingsPw').value = '';
+                document.getElementById('bkFilePw').value = '';
+                bkSay(['Backup downloaded (' + (count || '?') + ' accounts)', 'Keep the file and its password safe. Without the password it cannot be opened.']);
+            } catch (err) {
+                bkSay(['Connection error'], true);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // ---- Import: Preview then Confirm ----
+        let bkPreviewFileText = null, bkPreviewPw = null;
+
+        function bkRenderChecklist(items) {
+            const box = document.getElementById('bkChecklist');
+            box.innerHTML = '';
+            items.forEach((item, i) => {
+                const row = document.createElement('label');
+                row.className = 'bk-check-row';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.dataset.idx = i;
+                cb.checked = !item.exists;
+                const em = document.createElement('span');
+                em.className = 'bk-em';
+                em.textContent = item.email;
+                const badge = document.createElement('span');
+                badge.className = 'bk-badge ' + (item.exists ? 'bk-badge-exists' : 'bk-badge-new');
+                badge.textContent = item.exists ? 'Already added' : 'New';
+                row.append(cb, em, badge);
+                box.appendChild(row);
+            });
+        }
+
+        function bkChecklistItems() {
+            return Array.from(document.querySelectorAll('#bkChecklist input[type=checkbox]'));
+        }
+
+        document.getElementById('bkChkAll').addEventListener('click', () => {
+            bkChecklistItems().forEach((cb) => { cb.checked = true; });
+        });
+        document.getElementById('bkChkNone').addEventListener('click', () => {
+            bkChecklistItems().forEach((cb) => { cb.checked = false; });
+        });
+        document.getElementById('bkChkNew').addEventListener('click', () => {
+            document.querySelectorAll('#bkChecklist .bk-check-row').forEach((row) => {
+                const cb = row.querySelector('input');
+                const badge = row.querySelector('.bk-badge');
+                cb.checked = badge && badge.classList.contains('bk-badge-new');
+            });
+        });
+
+        document.getElementById('bkPreviewBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkPreviewBtn');
+            const f = document.getElementById('bkFile').files[0];
+            const pw = document.getElementById('bkImportPw').value;
+            if (!f) return bkSay(['Choose a backup file first'], true);
+            if (f.size > 1.5 * 1024 * 1024) return bkSay(['This file is too big to be a backup'], true);
+            if (!pw) return bkSay(['Enter the backup password'], true);
+            btn.disabled = true; bkSay(['Reading backup file...']);
+            try {
+                const text = await f.text();
+                const r = await bkPost('/api/backup/preview', { file: text, backup_password: pw });
+                if (!r.ok) { bkSay([r.data.error || 'Could not read backup'], true); return; }
+                bkPreviewFileText = text;
+                bkPreviewPw = pw;
+                const items = r.data.items || [];
+                const newCount = items.filter((x) => !x.exists).length;
+                const meta = document.getElementById('bkPreviewMeta');
+                const dt = r.data.exported_at ? new Date(r.data.exported_at).toLocaleString() : '';
+                meta.textContent = items.length + ' account(s) in backup' +
+                    (dt ? ' · exported ' + dt : '') +
+                    ' · ' + newCount + ' new, ' + (items.length - newCount) + ' already added';
+                bkRenderChecklist(items);
+                document.getElementById('bkPreviewBox').style.display = 'block';
+                bkSay([]);
+            } catch (err) {
+                bkSay(['Connection error'], true);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('bkImportBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkImportBtn');
+            if (!bkPreviewFileText || !bkPreviewPw) return bkSay(['Click "Preview accounts" first'], true);
+            const rows = Array.from(document.querySelectorAll('#bkChecklist .bk-check-row'));
+            const selected = rows.filter((row) => row.querySelector('input').checked)
+                                 .map((row) => row.querySelector('.bk-em').textContent.trim());
+            if (!selected.length) return bkSay(['Select at least one account'], true);
+            btn.disabled = true; bkSay(['Restoring ' + selected.length + ' account(s)...']);
+            try {
+                const r = await bkPost('/api/backup/import', {
+                    file: bkPreviewFileText, backup_password: bkPreviewPw, selected_emails: selected
+                });
+                if (!r.ok) { bkSay([r.data.error || 'Import failed'], true); return; }
+                const s = bkSummary(r.data);
+                bkSay(s.lines, false, s.extra);
+                document.getElementById('bkFile').value = '';
+                document.getElementById('bkImportPw').value = '';
+                document.getElementById('bkPreviewBox').style.display = 'none';
+                bkPreviewFileText = null; bkPreviewPw = null;
+                loadAccountList(); loadAccountCount();
+            } catch (err) {
+                bkSay(['Connection error'], true);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // ---- Bulk add: preview then verify ----
+        let bkBulkParsed = [];   // [{email, password, exists}]
+
+        function bkBulkRender(items) {
+            const box = document.getElementById('bkBulkChecklist');
+            box.innerHTML = '';
+            items.forEach((item, i) => {
+                const row = document.createElement('label');
+                row.className = 'bk-check-row';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.dataset.idx = i;
+                cb.checked = !item.exists;
+                const em = document.createElement('span');
+                em.className = 'bk-em';
+                em.textContent = item.email;
+                const badge = document.createElement('span');
+                badge.className = 'bk-badge ' + (item.exists ? 'bk-badge-exists' : 'bk-badge-new');
+                badge.textContent = item.exists ? 'Already added' : 'New';
+                row.append(cb, em, badge);
+                box.appendChild(row);
+            });
+        }
+
+        function bkBulkSelected() {
+            return Array.from(document.querySelectorAll('#bkBulkChecklist input[type=checkbox]'))
+                        .filter((cb) => cb.checked)
+                        .map((cb) => parseInt(cb.dataset.idx));
+        }
+
+        document.getElementById('bkBulkChkAll').addEventListener('click', () => {
+            document.querySelectorAll('#bkBulkChecklist input').forEach((cb) => { cb.checked = true; });
+        });
+        document.getElementById('bkBulkChkNone').addEventListener('click', () => {
+            document.querySelectorAll('#bkBulkChecklist input').forEach((cb) => { cb.checked = false; });
+        });
+        document.getElementById('bkBulkChkNew').addEventListener('click', () => {
+            document.querySelectorAll('#bkBulkChecklist .bk-check-row').forEach((row) => {
+                const cb = row.querySelector('input');
+                const badge = row.querySelector('.bk-badge');
+                cb.checked = badge && badge.classList.contains('bk-badge-new');
+            });
+        });
+
+        document.getElementById('bkBulkPreviewBtn').addEventListener('click', () => {
+            const box = document.getElementById('bkText');
+            const raw = box.value;
+            if (!raw.trim()) return bkSay(['Paste at least one line: Gmail address and App Password'], true);
+            const lineRe = /^\s*([^\s,;:|]+@[^\s,;:|]+)[\s,;:|]+(.+?)\s*$/;
+            const existing = new Set((window._accountList || []).map((e) => String(e).toLowerCase()));
+            const parsed = [], badLines = [];
+            raw.split('\n').forEach((line, i) => {
+                if (!line.trim()) return;
+                const m = lineRe.exec(line);
+                if (m) parsed.push({ email: m[1].toLowerCase(), password: m[2], exists: existing.has(m[1].toLowerCase()), lineIdx: i + 1 });
+                else badLines.push(i + 1);
+            });
+            if (!parsed.length) {
+                bkSay(['No valid lines found. Format: email  app-password' + (badLines.length ? ' (bad lines: ' + badLines.join(', ') + ')' : '')], true);
+                return;
+            }
+            if (parsed.length > 30) return bkSay(['Too many accounts. Paste up to 30 at a time.'], true);
+            bkBulkParsed = parsed;
+            const newCount = parsed.filter((x) => !x.exists).length;
+            document.getElementById('bkBulkMeta').textContent =
+                parsed.length + ' line(s) · ' + newCount + ' new, ' + (parsed.length - newCount) + ' already added' +
+                (badLines.length ? ' · could not read line(s): ' + badLines.join(', ') : '');
+            bkBulkRender(parsed);
+            document.getElementById('bkBulkPreviewBox').style.display = 'block';
+            bkSay([]);
+        });
+
+        document.getElementById('bkBulkBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkBulkBtn');
+            const idxs = bkBulkSelected();
+            if (!idxs.length) return bkSay(['Select at least one account'], true);
+            const toAdd = idxs.map((i) => bkBulkParsed[i]).filter((x) => !x.exists);
+            if (!toAdd.length) return bkSay(['All selected accounts are already added'], true);
+            btn.disabled = true;
+            bkSay(['Checking ' + toAdd.length + ' account(s) with Gmail, please wait...']);
+            try {
+                const lines = toAdd.map((x) => x.email + ' ' + x.password).join('\n');
+                const r = await bkPost('/api/bulk-add', { text: lines });
+                if (!r.ok) { bkSay([r.data.error || 'Failed'], true); return; }
+                const su = bkSummary(r.data);
+                bkSay(su.lines, false, su.extra);
+                const allOk = !(r.data.failed && r.data.failed.length) && !(r.data.bad_lines && r.data.bad_lines.length);
+                if (allOk) {
+                    document.getElementById('bkText').value = '';
+                    document.getElementById('bkBulkPreviewBox').style.display = 'none';
+                    bkBulkParsed = [];
+                }
+                loadAccountList(); loadAccountCount();
+            } catch (err) {
+                bkSay(['Connection error'], true);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        // ---------- Fingerprint / Face (Passkey) ----------
+        const passkeyLoginBtn = document.getElementById('passkeyLoginBtn');
+        const passkeySettingsBtn = document.getElementById('passkeySettingsBtn');
+        const registerPasskeyBtn = document.getElementById('registerPasskeyBtn');
+
+        if (window.PublicKeyCredential) {
+            [passkeyLoginBtn, passkeySettingsBtn, registerPasskeyBtn].forEach(b => b.classList.remove('hidden'));
+        }
+
+        function b64uToBuf(s) {
+            s = s.replace(/-/g, '+').replace(/_/g, '/');
+            s += '='.repeat((4 - (s.length % 4)) % 4);
+            return Uint8Array.from(atob(s), c => c.charCodeAt(0)).buffer;
+        }
+        function bufToB64u(buf) {
+            let bin = '';
+            new Uint8Array(buf).forEach(b => bin += String.fromCharCode(b));
+            return btoa(bin).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+
+        async function passkeyRegister() {
+            const optRes = await fetch('/api/passkey/register/options', { method: 'POST' });
+            const opts = await optRes.json();
+            if (!optRes.ok) throw new Error(opts.error || 'Failed');
+            opts.challenge = b64uToBuf(opts.challenge);
+            opts.user.id = b64uToBuf(opts.user.id);
+            (opts.excludeCredentials || []).forEach(c => c.id = b64uToBuf(c.id));
+
+            const cred = await navigator.credentials.create({ publicKey: opts });
+            const payload = {
+                id: cred.id,
+                rawId: bufToB64u(cred.rawId),
+                type: cred.type,
+                response: {
+                    clientDataJSON: bufToB64u(cred.response.clientDataJSON),
+                    attestationObject: bufToB64u(cred.response.attestationObject),
+                    transports: cred.response.getTransports ? cred.response.getTransports() : []
+                },
+                clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {}
+            };
+            const res = await fetch('/api/passkey/register/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+        }
+
+        async function passkeyAuth(purpose) {
+            const optRes = await fetch('/api/passkey/auth/options', { method: 'POST' });
+            const opts = await optRes.json();
+            if (!optRes.ok) throw new Error(opts.error || 'Failed');
+            opts.challenge = b64uToBuf(opts.challenge);
+            // transports:['internal'] = shudhu ei device-er passkey. Tahole Chrome "phone/security key"
+            // bachai-er list na dekhiye shora-shori PIN / fingerprint / face chay.
+            (opts.allowCredentials || []).forEach(c => { c.id = b64uToBuf(c.id); c.transports = ['internal']; });
+
+            const cred = await navigator.credentials.get({ publicKey: opts });
+            const credential = {
+                id: cred.id,
+                rawId: bufToB64u(cred.rawId),
+                type: cred.type,
+                response: {
+                    clientDataJSON: bufToB64u(cred.response.clientDataJSON),
+                    authenticatorData: bufToB64u(cred.response.authenticatorData),
+                    signature: bufToB64u(cred.response.signature),
+                    userHandle: cred.response.userHandle ? bufToB64u(cred.response.userHandle) : null
+                },
+                clientExtensionResults: cred.getClientExtensionResults ? cred.getClientExtensionResults() : {}
+            };
+            const res = await fetch('/api/passkey/auth/verify', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ purpose, credential })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+        }
+
+        passkeyLoginBtn.addEventListener('click', async () => {
+            try {
+                await passkeyAuth('login');
+                loginError.style.display = 'none';
+                loginSection.classList.add('hidden');
+                dashboardSection.classList.remove('hidden');
+                onLoggedIn();
+            } catch (err) {
+                loginError.style.display = 'block';
+                loginError.innerText = err.message || 'Fingerprint login failed';
+            }
+        });
+
+        passkeySettingsBtn.addEventListener('click', async () => {
+            try {
+                await passkeyAuth('settings');
+                openSettingsContent();
+            } catch (err) {
+                showSettingsError(err.message || 'Fingerprint unlock failed');
+            }
+        });
+
+        registerPasskeyBtn.addEventListener('click', async () => {
+            try {
+                await passkeyRegister();
+                showToast('Fingerprint / Face enabled!');
+            } catch (err) {
+                showToast(err.message || 'Could not enable');
+            }
+        });
+
+        // ---------- Swipe: dan dike = Gmail delete (age-er moto), bam dike = 2FA edit/delete ----------
+        const OPEN_W = 76;       // Gmail delete button
+        const TFA_W = 136;       // 2FA edit + delete buttons
+        let swipe = null;
+        let openWrap = null;
+
+        function setSwipe(wrap, open) {            // open: false | 'del' | 'tfa'
+            if (open === true) open = 'del';
+            const card = wrap.querySelector('.otp-card');
+            const del = wrap.querySelector('.swipe-delete');
+            const tfa = wrap.querySelector('.swipe-tfa');
+            card.style.transform = open === 'del' ? `translateX(${OPEN_W}px)` : open === 'tfa' ? `translateX(${-TFA_W}px)` : '';
+            if (del) del.style.opacity = open === 'del' ? '1' : '0';
+            if (tfa) tfa.style.opacity = open === 'tfa' ? '1' : '0';
+            wrap.classList.toggle('open', open === 'del');
+            wrap.classList.toggle('open-tfa', open === 'tfa');
+            openWrap = open ? wrap : (openWrap === wrap ? null : openWrap);
+        }
+        function wrapIsOpen(wrap) { return wrap.classList.contains('open') || wrap.classList.contains('open-tfa'); }
+
+        function attachSwipe(container) {
+            container.addEventListener('pointerdown', (e) => {
+                // Button (refresh / pin / used) chaple swipe shuru hobe na -- nahole phone-e angul-er
+                // halka nora-te pointer capture hoy ar click button-e pouchay na (refresh kaj korto na).
+                if (e.target.closest('button')) return;
+                const card = e.target.closest('.otp-card');
+                if (!card) return;
+                const wrap = card.parentElement;
+                if (!wrap || !wrap.classList.contains('otp-swipe')) return;
+                if (openWrap && openWrap !== wrap) setSwipe(openWrap, false);
+                swipe = {
+                    wrap, card, id: e.pointerId,
+                    startX: e.clientX, startY: e.clientY,
+                    base: wrap.classList.contains('open') ? OPEN_W : wrap.classList.contains('open-tfa') ? -TFA_W : 0,
+                    minX: wrap.querySelector('.swipe-tfa') ? -(TFA_W + 20) : 0,
+                    maxX: wrap.querySelector('.swipe-delete') ? OPEN_W + 20 : 0,
+                    horizontal: null, x: 0
+                };
+            });
+
+            container.addEventListener('pointermove', (e) => {
+                if (!swipe || e.pointerId !== swipe.id) return;
+                const dx = e.clientX - swipe.startX;
+                const dy = e.clientY - swipe.startY;
+                if (swipe.horizontal === null) {
+                    if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+                    swipe.horizontal = Math.abs(dx) > Math.abs(dy);
+                    if (swipe.horizontal) {
+                        try { swipe.card.setPointerCapture(e.pointerId); } catch (err) {}
+                        swipe.card.style.transition = 'none';
+                    }
+                }
+                if (!swipe.horizontal) return;
+                swipe.x = Math.max(swipe.minX, Math.min(swipe.maxX, swipe.base + dx));
+                swipe.card.style.transform = `translateX(${swipe.x}px)`;
+                const del = swipe.wrap.querySelector('.swipe-delete');
+                const tfa = swipe.wrap.querySelector('.swipe-tfa');
+                if (del) del.style.opacity = Math.max(0, Math.min(swipe.x / 50, 1));
+                if (tfa) tfa.style.opacity = Math.max(0, Math.min(-swipe.x / 50, 1));
+            });
+
+            container.addEventListener('pointerup', endSwipe);
+            container.addEventListener('pointercancel', endSwipe);
+
+            // drag-er por ba khola obosthay click holey OTP copy hobe na
+            container.addEventListener('click', (e) => {
+                const wrap = e.target.closest('.otp-swipe');
+                if (!wrap) return;
+                if (wrap.dataset.dragged === '1') { e.stopPropagation(); e.preventDefault(); return; }
+                const pinBtn = e.target.closest('.card-pin');
+                if (pinBtn && !wrapIsOpen(wrap)) {
+                    e.stopPropagation(); e.preventDefault();
+                    togglePin(pinBtn.dataset.email);
+                    return;
+                }
+                const delBtn = e.target.closest('.swipe-delete');
+                if (delBtn) {
+                    openDeleteModal(delBtn.dataset.email);
+                    return;
+                }
+                const editBtn = e.target.closest('.swipe-tfa-edit');
+                if (editBtn) {
+                    e.stopPropagation(); e.preventDefault();
+                    openTfaModal('edit', editBtn.dataset.email, editBtn);
+                    setSwipe(wrap, false);
+                    return;
+                }
+                const tfaDelBtn = e.target.closest('.swipe-tfa-del');
+                if (tfaDelBtn) {
+                    e.stopPropagation(); e.preventDefault();
+                    openTfaModal('remove', tfaDelBtn.dataset.email, tfaDelBtn);
+                    setSwipe(wrap, false);
+                    return;
+                }
+                const svcEdit = e.target.closest('.swipe-svc-edit');
+                if (svcEdit) {
+                    e.stopPropagation(); e.preventDefault();
+                    setSwipe(wrap, false);
+                    openSvcForm('edit', svcEdit.dataset.id);
+                    return;
+                }
+                const svcDel = e.target.closest('.swipe-svc-del');
+                if (svcDel) {
+                    e.stopPropagation(); e.preventDefault();
+                    setSwipe(wrap, false);
+                    openSvcForm('del', svcDel.dataset.id);
+                    return;
+                }
+                if (wrapIsOpen(wrap)) {
+                    e.stopPropagation(); e.preventDefault();
+                    setSwipe(wrap, false);
+                }
+            }, true);
+        }
+
+        function endSwipe() {
+            if (!swipe) return;
+            const s = swipe;
+            swipe = null;
+            if (!s.horizontal) return;
+            s.card.style.transition = '';
+            setSwipe(s.wrap, s.x > OPEN_W / 2 ? 'del' : s.x < -TFA_W / 2 ? 'tfa' : false);
+            s.wrap.dataset.dragged = '1';
+            setTimeout(() => { delete s.wrap.dataset.dragged; }, 80);
+        }
+        attachSwipe(allContainer);
+        attachSwipe(otpContainer);
+        attachSwipe(tfaScroll);
+
+        document.addEventListener('click', (e) => {
+            if (openWrap && !openWrap.contains(e.target)) setSwipe(openWrap, false);
+        });
+
+        // ---------- Delete Gmail (password / fingerprint) ----------
+        const deleteModal = document.getElementById('deleteModal');
+        const deleteTarget = document.getElementById('deleteTarget');
+        const deleteForm = document.getElementById('deleteForm');
+        const deletePasswordInput = document.getElementById('deletePasswordInput');
+        const deletePasskeyBtn = document.getElementById('deletePasskeyBtn');
+        const deleteError = document.getElementById('deleteError');
+        let deleteTargetEmail = null;
+
+        if (window.PublicKeyCredential) deletePasskeyBtn.classList.remove('hidden');
+
+        function deleteModalOpen() { return !deleteModal.classList.contains('hidden'); }
+
+        function openDeleteModal(email) {
+            deleteTargetEmail = email;
+            deleteTarget.innerText = email;
+            deletePasswordInput.value = '';
+            deleteError.style.display = 'none';
+            deleteModal.classList.remove('hidden');
+            setTimeout(() => deletePasswordInput.focus(), 50);
+        }
+
+        function closeDeleteModal() {
+            deleteModal.classList.add('hidden');
+            deleteTargetEmail = null;
+            deletePasswordInput.value = '';
+            if (openWrap) setSwipe(openWrap, false);
+        }
+
+        function showDeleteError(msg) {
+            deleteError.innerText = msg;
+            deleteError.style.display = 'block';
+        }
+
+        function removeCardFromScreen(email) {
+            const wrap = [...allContainer.querySelectorAll('.otp-swipe')]
+                .find(w => w.querySelector('.swipe-delete').dataset.email === email);
+            previousCodes = previousCodes.filter(p => p.email !== email);
+            allItems = allItems.filter(i => i.email !== email);
+            accountList = accountList.filter(x => x !== String(email).toLowerCase());
+            newCardEmails = newCardEmails.filter(e => e !== email);
+            pinnedEmails = pinnedEmails.filter(x => x !== String(email).toLowerCase());
+            savePins();
+            if (openWrap === wrap) openWrap = null;
+            renderHome();
+            document.getElementById('allCount').innerText = allItems.length;
+            if (wrap) {
+                wrap.style.transition = 'opacity 0.25s ease';
+                wrap.style.opacity = '0';
+                setTimeout(() => {
+                    wrap.remove();
+                    if (!allContainer.querySelector('.otp-swipe')) renderAll();
+                }, 260);
+            }
+            loadAccountCount();
+        }
+
+        async function deleteAccountRequest(email, extra) {
+            const res = await fetch('/api/delete-account', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, ...extra })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Failed');
+        }
+
+        deleteForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = deleteTargetEmail;
+            try {
+                await deleteAccountRequest(email, { password: deletePasswordInput.value });
+                closeDeleteModal();
+                removeCardFromScreen(email);
+                showToast('Gmail removed');
+            } catch (err) {
+                showDeleteError(err.message || 'Failed');
+            }
+        });
+
+        deletePasskeyBtn.addEventListener('click', async () => {
+            const email = deleteTargetEmail;
+            try {
+                await passkeyAuth('delete');
+                await deleteAccountRequest(email, { use_passkey: true });
+                closeDeleteModal();
+                removeCardFromScreen(email);
+                showToast('Gmail removed');
+            } catch (err) {
+                showDeleteError(err.message || 'Fingerprint verification failed');
+            }
+        });
+
+        document.getElementById('deleteCancelBtn').addEventListener('click', closeDeleteModal);
+        deleteModal.addEventListener('click', (e) => { if (e.target === deleteModal) closeDeleteModal(); });
+
+        function dashboardIsOpen() {
+            return !dashboardSection.classList.contains('hidden');
+        }
+
+        // ---------- Auto-copy toggle ----------
+        let autoCopyOn = true;
+        try { autoCopyOn = localStorage.getItem('otpDash.autoCopy') !== '0'; } catch (e) {}
+        const autoCopyBtn = document.getElementById('autoCopyBtn');
+        function renderAutoCopyBtn() {
+            autoCopyBtn.classList.toggle('on', autoCopyOn);
+            autoCopyBtn.querySelector('b').textContent = autoCopyOn ? 'ON' : 'OFF';
+        }
+        autoCopyBtn.addEventListener('click', () => {
+            autoCopyOn = !autoCopyOn;
+            try { localStorage.setItem('otpDash.autoCopy', autoCopyOn ? '1' : '0'); } catch (e) {}
+            renderAutoCopyBtn();
+            showToast('Auto-copy ' + (autoCopyOn ? 'ON' : 'OFF'));
+        });
+        renderAutoCopyBtn();
+
+        // ---------- Keyboard shortcuts (desktop) ----------
+        function typingInField(t) {
+            return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+        }
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+                e.preventDefault();
+                if (dashboardIsOpen()) { paletteOpen() ? closePalette() : openPalette(); }
+                return;
+            }
+            if (e.ctrlKey || e.metaKey || e.altKey) return;
+            if (e.key === 'Escape') {
+                if (tfaModalOpen()) { closeTfaModal(); return; }
+                if (mailModalOpen()) { closeMailModal(); return; }
+                if (paletteOpen()) { closePalette(); return; }
+                if (deleteModalOpen()) { closeDeleteModal(); return; }
+                if (accountsModalOpen()) {
+                    if (document.activeElement === accSearchInput && accSearchInput.value) {
+                        accSearchInput.value = '';
+                        accSearchWrap.classList.remove('has-text');
+                        renderAll();
+                    } else {
+                        closeAccountsModal();
+                    }
+                    return;
+                }
+                if (settingsPopup.classList.contains('active')) {
+                    settingsPopup.classList.remove('active');
+                    resetSettingsPopup();
+                }
+                return;
+            }
+            if (!dashboardIsOpen() || deleteModalOpen()) return;
+            if (e.key === '/' && !typingInField(e.target)) {
+                e.preventDefault();
+                if (!accountsModalOpen()) openAccountsModal();
+                else accSearchInput.focus();
+                return;
+            }
+            if (typingInField(e.target) || accountsModalOpen()) return;
+            const k = e.key.toLowerCase();
+            if (k === 'c') {
+                const first = allItems.find(i => isValidItem(i) && i.expiresAt > Date.now());
+                if (first) { e.preventDefault(); copyOTP(first.code); }
+                else showToast('No active code to copy');
+            }
+        });
+
+        // ---------- Auto-lock: kichu na korle nije logout ----------
+        const AUTO_LOCK_MINUTES = 5;           // koto minute kichu na korle auto logout
+        const AUTO_LOCK_WARN_SECONDS = 30;     // logout-er koto sekend age hushiyar
+        let lockLastActive = Date.now();
+        let lockWarned = false;
+        let locking = false;
+        const lockNotice = document.getElementById('lockNotice');
+
+        // click / tap / key / scroll = kaj kora. (mouse nare gele dhora hoy na)
+        function markLockActivity() {
+            lockLastActive = Date.now();
+            lockWarned = false;
+        }
+        ['pointerdown', 'keydown', 'touchstart', 'scroll', 'wheel'].forEach(ev =>
+            document.addEventListener(ev, markLockActivity, { passive: true, capture: true }));
+
+        loginSection.addEventListener('pointerdown', () => { lockNotice.style.display = 'none'; });
+
+        async function autoLock(reason) {
+            if (locking) return;
+            locking = true;
+            try {
+                // shob khola popup / sensitive jinish bondho
+                settingsPopup.classList.remove('active');
+                resetSettingsPopup();
+                closeDeleteModal();
+                closeMailModal(); closeTfaModal(); tfaActive.clear();
+                otpContainer.innerHTML = '';
+                allContainer.innerHTML = '';
+                await logout();
+                document.getElementById('lockNoticeText').innerText =
+                    reason || `Locked after ${AUTO_LOCK_MINUTES} minutes of inactivity. Please login again.`;
+                lockNotice.style.display = 'block';
+                loginError.style.display = 'none';
+            } finally {
+                locking = false;
+                lockLastActive = Date.now();
+                lockWarned = false;
+            }
+        }
+
+        // Keep-alive: user kaj korle ~1 min-e server-ke jani, jate server-er idle timeout-o reset hoy.
+        // User kichu na korle ping jay na -> server-o ekshomoy session shesh kore dey.
+        const PING_EVERY_MS = 60 * 1000;
+        let lastPingAt = Date.now();
+        setInterval(async () => {
+            if (!dashboardIsOpen() || locking) return;
+            if (lockLastActive <= lastPingAt) return;      // ager ping-er por kichu kora hoyni
+            lastPingAt = Date.now();
+            try {
+                const res = await fetch('/api/ping', { method: 'POST' });
+                if (res.status === 401) autoLock('Session expired. Please login again.');
+            } catch (e) {}
+        }, PING_EVERY_MS);
+
+        function checkAutoLock() {
+            if (!dashboardIsOpen()) {           // login screen-e thakle timer cholbe na
+                lockLastActive = Date.now();
+                lockWarned = false;
+                return;
+            }
+            const idleMs = Date.now() - lockLastActive;
+            const limitMs = AUTO_LOCK_MINUTES * 60 * 1000;
+            if (idleMs >= limitMs) { autoLock(); return; }
+            if (!lockWarned && idleMs >= limitMs - AUTO_LOCK_WARN_SECONDS * 1000) {
+                lockWarned = true;
+                showToast(`Auto-lock in ${AUTO_LOCK_WARN_SECONDS}s - tap to stay logged in`);
+            }
+        }
+        setInterval(checkAutoLock, 1000);
+        // background tab-e timer slow hoy -> tab-e fire ashar sathe sathe check
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible') checkAutoLock();
+        });
+
+        async function logout() {
+            try { await fetch('/api/logout', { method: 'POST' }); } catch (e) {}   // network na thakleo UI lock hobe
+            dashboardSection.classList.add('hidden');
+            loginSection.classList.remove('hidden');
+            document.getElementById('masterPasswordInput').value = '';
+            previousCodes = [];
+            allItems = [];
+            accountList = [];
+            accountListLoaded = false;
+            newCardEmails = [];
+            hasLoaded = false;
+            updateHealthBadge();
+            stopPush();
+            stopWaiting(false);
+            closeMailModal(); closeTfaModal(); tfaActive.clear();
+            closeAccountsModal();
+            closePalette();
+        }
+
+        // =====================================================================
+        // UI refresh: theme, filters, quick find (Ctrl+K), keyboard on code boxes
+        // =====================================================================
+
+        // ---------- Theme (Auto / Light / Dark) ----------
+        const THEME_KEY = 'otpDash.theme';
+        const THEME_LABEL = { auto: 'Auto', light: 'Light', dark: 'Dark' };
+        const THEME_ICON = { auto: 'fa-circle-half-stroke', light: 'fa-sun', dark: 'fa-moon' };
+        function themePref() {
+            try { const v = localStorage.getItem(THEME_KEY); return (v === 'light' || v === 'dark') ? v : 'auto'; }
+            catch (e) { return 'auto'; }
+        }
+        function renderThemeBtn() {
+            const p = themePref();
+            const b = document.getElementById('themeBtn');
+            b.innerHTML = `<i class="fa-solid ${THEME_ICON[p]}"></i> Theme: <b>${THEME_LABEL[p]}</b>`;
+            b.title = 'Switch theme (Auto / Light / Dark)';
+        }
+        function cycleTheme() {
+            const order = ['auto', 'light', 'dark'];
+            const next = order[(order.indexOf(themePref()) + 1) % order.length];
+            try { if (next === 'auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, next); } catch (e) {}
+            if (window.__applyTheme) window.__applyTheme();
+            renderThemeBtn();
+            showToast('Theme: ' + THEME_LABEL[next]);
+        }
+        document.getElementById('themeBtn').addEventListener('click', cycleTheme);
+        renderThemeBtn();
+
+        // ---------- Filter + sort (All Gmail accounts) ----------
+        let accFilter = 'all', accSort = 'recent';
+        const FILTERS = {
+            all: () => true,
+            active: i => isValidItem(i) && i.expiresAt > Date.now(),
+            unused: i => isValidItem(i) && !isUsed(i),
+            errors: i => !i.placeholder && healthOf(i) !== 'ok',
+            pinned: i => isPinned(i.email)
+        };
+        function renderFilterRow(base) {
+            document.querySelectorAll('#filterRow .fchip[data-filter]').forEach(b => {
+                const f = b.dataset.filter;
+                b.querySelector('b').textContent = base.filter(FILTERS[f]).length;
+                b.classList.toggle('on', f === accFilter);
+                b.setAttribute('aria-pressed', f === accFilter ? 'true' : 'false');
+            });
+            const sp = document.querySelector('#sortBtn span');
+            if (sp) sp.textContent = accSort === 'az' ? 'A-Z' : 'Last used';
+        }
+        function resetAccFilters() { accFilter = 'all'; accSort = 'recent'; }
+        document.getElementById('tfaServiceBtn').addEventListener('click', (e) => openTfaModal('services', '', e.currentTarget));
+        document.getElementById('filterRow').addEventListener('click', (e) => {
+            const c = e.target.closest('.fchip');
+            if (!c) return;
+            if (c.id === 'sortBtn') accSort = accSort === 'az' ? 'recent' : 'az';
+            else accFilter = c.dataset.filter;
+            renderAll();
+        });
+
+        // ---------- Code box: Enter / Space works from the keyboard ----------
+        document.addEventListener('keydown', (e) => {
+            const t = e.target;
+            if ((e.key === 'Enter' || e.key === ' ') && t && t.classList && t.classList.contains('otp-code-box') && t.getAttribute('role') === 'button') {
+                e.preventDefault();
+                if (t.classList.contains('tfa-code')) tfaCopy(t); else onCodeTap(t);
+            }
+        });
+
+        // ---------- Quick find / command palette ----------
+        const palette = document.getElementById('palette');
+        const paletteInput = document.getElementById('paletteInput');
+        const paletteList = document.getElementById('paletteList');
+        let paletteIdx = 0, paletteRows = [], paletteReturnFocus = null;
+
+        function paletteOpen() { return !palette.classList.contains('hidden'); }
+
+        function useItem(item) {
+            markAccountUsed(item.email);
+            const k = usedKey(item);
+            if (item.kind === 'link') {
+                if (/^https:\/\//i.test(item.url || '')) {
+                    window.open(item.url, '_blank', 'noopener,noreferrer');
+                    if (!usedMap[k]) setUsed(k, true);
+                }
+                return;
+            }
+            copyOTP(item.code, () => { if (!usedMap[k]) setUsed(k, true); });
+        }
+
+        function paletteAccounts() {
+            const seen = new Set(), out = [];
+            allItems.forEach(i => { const k = String(i.email).toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(i); } });
+            accountList.forEach(em => { if (!seen.has(em)) { seen.add(em); out.push({ email: em, code: '', placeholder: true }); } });
+            return out.sort((a, b) => (lastUsed[String(b.email).toLowerCase()] || 0) - (lastUsed[String(a.email).toLowerCase()] || 0));
+        }
+        function accountState(i) {
+            if (i.placeholder) return { text: 'Not checked yet - Enter to check', cls: '' };
+            if (healthOf(i) !== 'ok') return { text: i.sender || 'Connection problem', cls: 'bad' };
+            if (isValidItem(i)) {
+                if (i.expiresAt > Date.now()) {
+                    const what = i.kind === 'link' ? 'Verify link ready' : 'Code ready';
+                    return { text: what + (isUsed(i) ? ' (used)' : '') + ' - Enter to ' + (i.kind === 'link' ? 'open' : 'copy'), cls: 'ok' };
+                }
+                return { text: 'Code expired - Enter to check again', cls: '' };
+            }
+            return { text: 'No code found - Enter to check again', cls: '' };
+        }
+        function paletteActions() {
+            return [
+                { icon: 'fa-envelope', label: 'Open all Gmail accounts', kw: 'accounts list gmail', run: () => openAccountsModal() },
+                { icon: THEME_ICON[themePref()], label: 'Switch theme', kw: 'theme dark light auto', run: cycleTheme },
+                { icon: 'fa-copy', label: 'Turn auto-copy ' + (autoCopyOn ? 'off' : 'on'), kw: 'auto copy', run: () => autoCopyBtn.click() },
+                ...(alertsMode !== 'off' ? [{ icon: 'fa-bell', label: 'Send test notification', kw: 'test notification alert push', run: () => sendTestAlert() }] : []),
+                { icon: 'fa-right-from-bracket', label: 'Logout', kw: 'logout lock sign out', run: () => logout() }
+            ];
+        }
+        function paletteBuild(q) {
+            q = q.trim().toLowerCase();
+            const rows = [];
+            paletteAccounts()
+                .filter(i => !q || String(i.email).toLowerCase().includes(q) || String(i.service || '').toLowerCase().includes(q))
+                .slice(0, 8)
+                .forEach(i => rows.push({
+                    type: 'account', item: i, label: i.email, state: accountState(i),
+                    run: () => { if (!i.placeholder && isValidItem(i) && i.expiresAt > Date.now()) useItem(i); else refreshAccount(i.email); }
+                }));
+            paletteActions()
+                .filter(a => !q || (a.label + ' ' + a.kw).toLowerCase().includes(q))
+                .forEach(a => rows.push({ type: 'action', ...a }));
+            return rows;
+        }
+        function paletteSelect(i, scroll) {
+            paletteIdx = i;
+            paletteList.querySelectorAll('.pal-row').forEach(r => {
+                const on = Number(r.dataset.i) === i;
+                r.classList.toggle('sel', on);
+                r.setAttribute('aria-selected', on ? 'true' : 'false');
+                if (on) {
+                    paletteInput.setAttribute('aria-activedescendant', r.id);
+                    if (scroll) r.scrollIntoView({ block: 'nearest' });
+                }
+            });
+        }
+        function paletteRender() {
+            paletteRows = paletteBuild(paletteInput.value);
+            if (!paletteRows.length) {
+                paletteList.innerHTML = '<div class="empty-state">Nothing matches.</div>';
+                paletteInput.removeAttribute('aria-activedescendant');
+                return;
+            }
+            if (paletteIdx >= paletteRows.length) paletteIdx = paletteRows.length - 1;
+            let html = '', last = '';
+            paletteRows.forEach((r, i) => {
+                if (r.type !== last) { html += `<div class="pal-section">${r.type === 'account' ? 'Accounts' : 'Actions'}</div>`; last = r.type; }
+                if (r.type === 'account') {
+                    html += `<div class="pal-row" role="option" id="pal-${i}" data-i="${i}">${avatarHTML(r.item)}<div class="pal-text"><div class="pal-main">${escAttr(r.label)}</div><div class="pal-sub ${r.state.cls}">${escAttr(r.state.text)}</div></div></div>`;
+                } else {
+                    html += `<div class="pal-row" role="option" id="pal-${i}" data-i="${i}"><span class="pal-ico"><i class="fa-solid ${r.icon}"></i></span><div class="pal-text"><div class="pal-main">${escAttr(r.label)}</div></div></div>`;
+                }
+            });
+            paletteList.innerHTML = html;
+            paletteSelect(paletteIdx, false);
+        }
+        function paletteRun(i) {
+            const r = paletteRows[i];
+            if (!r) return;
+            closePalette();
+            r.run();
+        }
+        function openPalette() {
+            if (!dashboardIsOpen() || paletteOpen()) return;
+            paletteReturnFocus = document.activeElement;
+            paletteInput.value = '';
+            paletteIdx = 0;
+            palette.classList.remove('hidden');
+            paletteRender();
+            paletteInput.focus();
+        }
+        function closePalette() {
+            if (!paletteOpen()) return;
+            palette.classList.add('hidden');
+            paletteInput.value = '';
+            try { if (paletteReturnFocus && paletteReturnFocus.focus) paletteReturnFocus.focus(); } catch (e) {}
+            paletteReturnFocus = null;
+        }
+
+        paletteInput.addEventListener('input', () => { paletteIdx = 0; paletteRender(); });
+        paletteInput.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                if (!paletteRows.length) return;
+                const d = e.key === 'ArrowDown' ? 1 : -1;
+                paletteSelect((paletteIdx + d + paletteRows.length) % paletteRows.length, true);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                paletteRun(paletteIdx);
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+            }
+        });
+        paletteList.addEventListener('mousemove', (e) => {
+            const row = e.target.closest('.pal-row');
+            if (row && Number(row.dataset.i) !== paletteIdx) paletteSelect(Number(row.dataset.i), false);
+        });
+        paletteList.addEventListener('click', (e) => {
+            const row = e.target.closest('.pal-row');
+            if (row) paletteRun(Number(row.dataset.i));
+        });
+        palette.addEventListener('mousedown', (e) => { if (e.target === palette) closePalette(); });
+        document.getElementById('findBtn').addEventListener('click', openPalette);
+
+        // dashboard lukiye gele (logout / session shesh) palette-o bondho
+        new MutationObserver(() => { if (!dashboardIsOpen()) closePalette(); })
+            .observe(dashboardSection, { attributes: true, attributeFilter: ['class'] });
+
+        // desktop <-> mobile breakpoint pare gele home-er card shonkha thik kori
+        window.matchMedia('(min-width: 1024px)').addEventListener('change', () => { if (dashboardIsOpen()) renderHome(); });
+
+        // =====================================================================
+        // App experience: install (PWA), service worker, alerts (Web Push),
+        // pull-to-refresh, offline
+        // =====================================================================
+        const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+        const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Timed out')), ms))]);
+
+        // app icon-e long-press shortcut: /?action=find  (login-er por kaj kore)
+        try {
+            const a = new URLSearchParams(location.search).get('action');
+            if (a === 'find') launchAction = a;
+            if (a) history.replaceState(null, '', location.pathname);
+        } catch (e) {}
+
+        // ---------- Service worker ----------
+        if ('serviceWorker' in navigator) {
+            let reloading = false, regRef = null, baseline = null;
+            const hadController = !!navigator.serviceWorker.controller;
+
+            // notun SW control nile page reload hoy (prothom install-e na)
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!hadController || reloading) return;
+                reloading = true;
+                location.reload();
+            });
+
+            // ---- "Update this app" banner ----
+            function applyUpdate() {
+                const w = regRef && regRef.waiting;
+                if (w) {
+                    w.postMessage({ type: 'SKIP_WAITING' });      // controllerchange -> reload
+                    setTimeout(() => location.reload(), 2500);    // jodi controllerchange na ashe
+                } else {
+                    location.reload();                            // shudhu page bodlechhe
+                }
+            }
+            function showUpdateBanner() {
+                if (document.getElementById('updateBanner')) return;
+                const bar = document.createElement('div');
+                bar.id = 'updateBanner';
+                bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));' +
+                    'z-index:99999;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;' +
+                    'background:#1f2937;color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.4);font:500 14px/1.3 system-ui,sans-serif;';
+                const msg = document.createElement('span');
+                msg.style.flex = '1';
+                msg.textContent = 'New version available';
+                const btn = document.createElement('button');
+                btn.textContent = 'Update this app';
+                btn.style.cssText = 'border:0;border-radius:10px;padding:9px 14px;background:#3b82f6;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer;';
+                btn.onclick = () => { btn.disabled = true; btn.textContent = 'Updating...'; applyUpdate(); };
+                const x = document.createElement('button');
+                x.textContent = '\u2715';
+                x.setAttribute('aria-label', 'Later');
+                x.style.cssText = 'border:0;background:transparent;color:#9ca3af;font-size:16px;cursor:pointer;padding:4px 6px;';
+                x.onclick = () => bar.remove();
+                bar.append(msg, btn, x);
+                document.body.appendChild(bar);
+            }
+
+            // ---- page (index.html) bodlalo kina check ----
+            const hashStr = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return s.length + ':' + h; };
+            const fetchPageHash = () => fetch('/', { cache: 'no-store' })
+                .then((r) => (r.ok ? r.text() : null)).then((t) => (t ? hashStr(t) : null)).catch(() => null);
+            const checkPage = () => fetchPageHash().then((hh) => { if (hh && baseline && hh !== baseline) showUpdateBanner(); });
+
+            function watch(reg) {
+                if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
+                reg.addEventListener('updatefound', () => {
+                    const nw = reg.installing;
+                    if (!nw) return;
+                    nw.addEventListener('statechange', () => {
+                        if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner();
+                    });
+                });
+            }
+
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).then((reg) => {
+                    regRef = reg;
+                    watch(reg);
+                    fetchPageHash().then((hh) => { baseline = hh; });
+                    const check = () => { reg.update().catch(() => {}); checkPage(); };
+                    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+                    window.addEventListener('focus', check);
+                    setInterval(check, 30 * 60 * 1000);
+                }).catch(() => {});
+            });
+            navigator.serviceWorker.addEventListener('message', (e) => {
+                if (e.data && e.data.type === 'app-updated') showUpdateBanner();
+            });
+        }
+
+        // ---------- Install app ----------
+        let deferredInstall = null;
+        const installBtn = document.getElementById('installBtn');
+        function renderInstallBtn() {
+            const can = !isStandalone() && (!!deferredInstall || isIOS);
+            installBtn.classList.toggle('hidden', !can);
+        }
+        window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredInstall = e; renderInstallBtn(); });
+        window.addEventListener('appinstalled', () => { deferredInstall = null; renderInstallBtn(); showToast('App installed'); });
+        installBtn.addEventListener('click', async () => {
+            if (deferredInstall) {
+                deferredInstall.prompt();
+                try { await deferredInstall.userChoice; } catch (e) {}
+                deferredInstall = null;
+                renderInstallBtn();
+            } else if (isIOS) {
+                showToast('Tap the Share button, then "Add to Home Screen"');
+            }
+        });
+        renderInstallBtn();
+
+        // ---------- Offline ----------
+        const offlineBar = document.getElementById('offlineBar');
+        function updateOnline() { offlineBar.classList.toggle('hidden', navigator.onLine); }
+        window.addEventListener('offline', updateOnline);
+        window.addEventListener('online', () => {
+            updateOnline();
+            showToast('Back online');
+        });
+        updateOnline();
+
+        // ---------- Alerts (Web Push) ----------
+        // off -> on (code hidden in the notification) -> on + code (shown on lock screen) -> off
+        const ALERT_KEY = 'otpDash.alertsMode';
+        const alertsBtn = document.getElementById('alertsBtn');
+        let pushCfg = null, alertsMode = 'off', alertsBusy = false;
+        const pushSupported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+
+        function renderAlertsBtn() {
+            const show = !!(pushCfg && pushCfg.enabled) && (pushSupported() || (isIOS && !isStandalone()));
+            alertsBtn.classList.toggle('hidden', !show);
+            alertsBtn.classList.toggle('on', alertsMode !== 'off');
+            const label = alertsMode === 'code' ? 'On + code' : alertsMode === 'hidden' ? 'On' : 'Off';
+            alertsBtn.innerHTML = `<i class="fa-solid ${alertsMode === 'off' ? 'fa-bell-slash' : 'fa-bell'}"></i> Alerts: <b>${label}</b>`;
+            alertsBtn.title = 'Notify this device when a new code arrives (even when the app is closed)';
+        }
+        function setAlertsMode(m) {
+            alertsMode = m;
+            try { if (m === 'off') localStorage.removeItem(ALERT_KEY); else localStorage.setItem(ALERT_KEY, m); } catch (e) {}
+            renderAlertsBtn();
+        }
+        async function pushPost(path, body) {
+            const res = await fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+            let data = {};
+            try { data = await res.json(); } catch (e) {}
+            if (!res.ok) throw new Error(data.error || 'Request failed');
+            return data;
+        }
+        function b64ToU8(b64) {
+            const pad = '='.repeat((4 - b64.length % 4) % 4);
+            const raw = atob((b64 + pad).replace(/-/g, '+').replace(/_/g, '/'));
+            return Uint8Array.from(raw, c => c.charCodeAt(0));
+        }
+        function sameKey(buf, u8) {
+            if (!buf) return false;
+            const a = new Uint8Array(buf);
+            return a.length === u8.length && a.every((v, i) => v === u8[i]);
+        }
+        async function getPushSub() {
+            const reg = await withTimeout(navigator.serviceWorker.ready, 8000);
+            return { reg, sub: await reg.pushManager.getSubscription() };
+        }
+        async function ensureSubscription() {
+            const { reg, sub } = await getPushSub();
+            const key = b64ToU8(pushCfg.public_key);
+            if (sub && sameKey(sub.options && sub.options.applicationServerKey, key)) return sub;
+            if (sub) { try { await sub.unsubscribe(); } catch (e) {} }     // server-er key bodlale purono subscription bad
+            return reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+        }
+
+        async function cycleAlerts() {
+            if (alertsBusy) return;
+            if (!pushSupported()) {
+                showToast(isIOS ? 'On iPhone: add this app to your Home Screen first, then open it from there' : 'Notifications are not supported in this browser');
+                return;
+            }
+            alertsBusy = true;
+            try {
+                if (alertsMode === 'off') {
+                    if (Notification.permission === 'denied') throw new Error('Notifications are blocked. Allow them in your browser settings.');
+                    if (Notification.permission === 'default') {
+                        const p = await Notification.requestPermission();
+                        if (p !== 'granted') throw new Error('Notifications were not allowed');
+                    }
+                    const sub = await ensureSubscription();
+                    await pushPost('/api/push/subscribe', { subscription: sub.toJSON(), show_code: false });
+                    setAlertsMode('hidden');
+                    showToast(pushCfg.live ? 'Alerts on. The code stays hidden in the notification.' : 'Saved, but live watching is off on the server (set ENABLE_PUSH=1)');
+                } else if (alertsMode === 'hidden') {
+                    const { sub } = await getPushSub();
+                    if (!sub) throw new Error('This device is not subscribed. Turn alerts off and on again.');
+                    await pushPost('/api/push/prefs', { endpoint: sub.endpoint, show_code: true });
+                    setAlertsMode('code');
+                    showToast('Alerts on. The code will show on your lock screen.');
+                } else {
+                    const { sub } = await getPushSub();
+                    if (sub) {
+                        await pushPost('/api/push/unsubscribe', { endpoint: sub.endpoint }).catch(() => {});
+                        try { await sub.unsubscribe(); } catch (e) {}
+                    }
+                    setAlertsMode('off');
+                    showToast('Alerts off');
+                }
+            } catch (err) {
+                showToast(err.message || 'Could not change alerts');
+            } finally {
+                alertsBusy = false;
+                renderAlertsBtn();
+            }
+        }
+        alertsBtn.addEventListener('click', cycleAlerts);
+
+        async function sendTestAlert() {
+            try {
+                const { sub } = await getPushSub();
+                if (!sub) throw new Error('Alerts are not on for this device');
+                await pushPost('/api/push/test', { endpoint: sub.endpoint });
+                showToast('Test notification sent');
+            } catch (err) {
+                showToast(err.message || 'Could not send the test');
+            }
+        }
+
+        // login-er por: server theke config ane, ar browser-er asol obostha-r sathe mil kore
+        async function initAppFeatures() {
+            try {
+                const r = await fetch('/api/push/config');
+                if (!r.ok) return;
+                pushCfg = await r.json();
+            } catch (e) { return; }
+            let mode = 'off';
+            try {
+                if (pushCfg.enabled && pushSupported() && Notification.permission === 'granted') {
+                    const { sub } = await getPushSub();
+                    if (sub) {
+                        let stored = 'hidden';
+                        try { stored = localStorage.getItem(ALERT_KEY) === 'code' ? 'code' : 'hidden'; } catch (e) {}
+                        await pushPost('/api/push/subscribe', { subscription: sub.toJSON(), show_code: stored === 'code' });
+                        mode = stored;
+                    }
+                }
+            } catch (e) {}
+            setAlertsMode(mode);
+        }
+
+        // ---------- Pull to refresh (phone) ----------
+        (function () {
+            const el = document.getElementById('ptr');
+            const READY = 62;                 // koto px tanle refresh hobe (damped)
+            let startY = 0, startX = 0, dy = 0, active = false, decided = false;
+            const blocked = () => !dashboardIsOpen() || accountsModalOpen() || deleteModalOpen() || paletteOpen()
+                || settingsPopup.classList.contains('active') || isFetching;
+            function show(d) {
+                el.style.transition = 'none';
+                el.style.opacity = String(Math.min(1, d / READ_FADE));
+                el.style.transform = `translate(-50%, ${Math.min(d, 90) - 56}px)`;
+                el.classList.toggle('ready', d >= READY);
+            }
+            const READ_FADE = 40;
+            function hide() {
+                el.classList.remove('ready');
+                el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+                el.style.opacity = '0';
+                el.style.transform = 'translate(-50%, -60px)';
+            }
+            document.addEventListener('touchstart', (e) => {
+                active = false; dy = 0;
+                if (blocked() || e.touches.length !== 1) return;
+                if ((window.scrollY || document.documentElement.scrollTop) > 0) return;
+                if (e.target.closest('.otp-container') && otpContainer.scrollTop > 0) return;
+                startY = e.touches[0].clientY; startX = e.touches[0].clientX;
+                active = true; decided = false;
+            }, { passive: true });
+            document.addEventListener('touchmove', (e) => {
+                if (!active) return;
+                const t = e.touches[0];
+                const ddy = t.clientY - startY, ddx = t.clientX - startX;
+                if (!decided) {
+                    if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
+                    if (ddy <= 0 || Math.abs(ddx) > Math.abs(ddy)) { active = false; return; }   // upore ba pashe -> pull na
+                    decided = true;
+                }
+                dy = ddy * 0.55;
+                show(dy);
+            }, { passive: true });
+            function end() {
+                if (!active) return;
+                active = false;
+                if (dy >= READY) {
+                    lightVibrate();
+                    el.classList.remove('ready');
+                    el.querySelector('i').className = 'fa-solid fa-rotate-right rotating';
+                    el.style.transition = 'transform 0.2s ease';
+                    el.style.transform = 'translate(-50%, 18px)';
+                    Promise.resolve().finally(() => {
+                        hide();
+                        setTimeout(() => { el.querySelector('i').className = 'fa-solid fa-arrow-down'; }, 250);
+                    });
+                } else {
+                    hide();
+                }
+                dy = 0;
+            }
+            document.addEventListener('touchend', end, { passive: true });
+            document.addEventListener('touchcancel', end, { passive: true });
+        })();
