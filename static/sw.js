@@ -2,7 +2,7 @@
    - app shell offline-e kaj kore (login page + shell)
    - /api/* KOKHONO cache hoy na (OTP private data)
    - Web Push: tab/app bondho thakleo notification dekhay */
-const VERSION = 'v4';
+const VERSION = 'v5';
 const SHELL_CACHE = 'otp-shell-' + VERSION;
 const ASSET_CACHE = 'otp-assets-' + VERSION;
 const SHELL = ['/', '/manifest.webmanifest', '/static/icons/icon-192.png', '/static/icons/icon-512.png',
@@ -14,8 +14,12 @@ self.addEventListener('install', (event) => {
     event.waitUntil(
         caches.open(SHELL_CACHE)
             .then((cache) => Promise.all(SHELL.map((u) => cache.add(u).catch(() => {}))))
-            .then(() => self.skipWaiting())
+        // skipWaiting ekhane NEI: notun SW "waiting"-e thake, user banner-e "Update" click korle tobe chalu hoy
     );
+});
+
+self.addEventListener('message', (event) => {
+    if (event.data && event.data.type === 'SKIP_WAITING') self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
