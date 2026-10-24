@@ -4380,9 +4380,31 @@
 
         // ---------- Service worker ----------
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}); });
+            let reloading = false;
+            const hadController = !!navigator.serviceWorker.controller;
+            // notun SW control nile (update) page nijei reload hobe; prothom install-e reload na
+            navigator.serviceWorker.addEventListener('controllerchange', () => {
+                if (!hadController || reloading) return;
+                reloading = true;
+                location.reload();
+            });
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).then((reg) => {
+                    const check = () => { reg.update().catch(() => {}); };
+                    document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
+                    window.addEventListener('focus', check);
+                    setInterval(check, 30 * 60 * 1000);
+                }).catch(() => {});
+            });
             navigator.serviceWorker.addEventListener('message', (e) => {
                 if (e.data && e.data.type === 'app-updated') showToast('App updated - reload to use the new version');
+            });
+            // PWA onek khon background-e thakle, phire ashle (10 min+) fresh version-er jonno reload
+            let hiddenAt = 0;
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden) { hiddenAt = Date.now(); return; }
+                if (hiddenAt && Date.now() - hiddenAt > 10 * 60 * 1000) location.reload();
+                hiddenAt = 0;
             });
         }
 
