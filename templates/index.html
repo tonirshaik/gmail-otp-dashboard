@@ -1564,14 +1564,12 @@
         // (Refresh OTPs / card-er refresh chapte hobe).
         async function onLoggedIn() {
             loadTfaStatus();
-            otpContainer.innerHTML = `
-                <div class="empty-state">
-                    <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                </div>`;
+            otpContainer.innerHTML = '';
             loadAccountCount();
             ensurePush();
             loadAccountList();
             await syncPins();
+            renderHome();
             initAppFeatures();
             if (launchAction === 'find') { launchAction = ''; openPalette(); }
         }
@@ -1976,50 +1974,31 @@
                 </div>`;
         }
 
-        // Home: shudhu jeigulo-te code ache (max 2 ta)
+        // Home: shudhu PIN kora account gulo. Kono Gmail auto check hoy na -- card-er refresh chapte hobe.
+        // Pin na thakle faka.
         function renderHome() {
             updateHealthBadge();
-            if (allItems.length === 0) {
-                const none = accountListLoaded && accountList.length === 0;
-                otpContainer.innerHTML = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        ${none ? 'No Gmail accounts added yet.' : ''}
-                    </div>`;
-                return;
-            }
             const now = Date.now();
-            const active = allItems.filter(i => isValidItem(i) && i.expiresAt > now);
-            if (active.length === 0) {
-                // Active code nai -> shobcheye shesh asha code-ta card hishebe dekhai (meyad shesh hole-o)
-                const last = allItems
-                    .filter(isValidItem)
-                    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0];
-                let html = '';
-                if (!last) {
-                    html = `
-                    <div class="empty-state">
-                        <i class="fa-solid fa-envelope-open" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        No codes yet.
-                    </div>`;
-                }
-                if (last) {
-                    html += `<div class="acc-section" style="margin-top: 6px;"><i class="fa-solid fa-clock-rotate-left"></i> Last received code</div>`;
-                    html += cardHTML(last, { isNew: false, deletable: false, showExpiry: false, expired: true });
-                }
-                otpContainer.innerHTML = html;
+            const pinnedList = pinnedEmails.filter(em => !accountListLoaded || accountList.includes(em));
+            if (pinnedList.length === 0) {
+                otpContainer.innerHTML = '';
                 return;
             }
-            // Use hoye jaoa code pichone; notun/unused code age (ager timestamp-order thake)
-            active.sort((a, b) => (isUsed(a) ? 1 : 0) - (isUsed(b) ? 1 : 0));
-            const max = homeMax();
-            const shown = active.slice(0, max);
-            let html = shown.map(item => cardHTML(item, { isNew: newCardEmails.includes(item.email), deletable: false, showExpiry: true, enter: !entered.has(codeKey(item)) })).join('');
-            if (active.length > max) {
-                html += `<div class="empty-state" style="padding: 6px 0;">+${active.length - max} more active code(s) &middot; tap the envelope button to see all</div>`;
-            }
+            const items = pinnedList.map(em =>
+                allItems.find(i => String(i.email).toLowerCase() === em) || { email: em, code: '', placeholder: true });
+            const html = items.map(item => {
+                const valid = isValidItem(item);
+                const live = valid && item.expiresAt > now;
+                return cardHTML(item, {
+                    isNew: newCardEmails.includes(item.email),
+                    deletable: false,
+                    showExpiry: live,
+                    expired: valid && !live,
+                    enter: live && !entered.has(codeKey(item))
+                });
+            }).join('');
             otpContainer.innerHTML = html;
-            shown.forEach(i => entered.add(codeKey(i)));
+            items.forEach(i => { if (isValidItem(i) && i.expiresAt > now) entered.add(codeKey(i)); });
             syncTimers();
         }
 
@@ -2039,6 +2018,7 @@
             const same = next.length === pinnedEmails.length && next.every((x, i) => x === [...pinnedEmails].sort()[i]);
             pinnedEmails = next;
             savePins();
+            if (!same) renderHome();
             if (!same && hasLoaded && accountsModalOpen()) renderAll();
         }
 
@@ -2074,6 +2054,7 @@
             if (wasPinned) pinnedEmails = pinnedEmails.filter(x => x !== k); else pinnedEmails.push(k);
             savePins();
             renderAll();
+            renderHome();
             try {
                 const res = await fetch('/api/pins/toggle', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -2086,6 +2067,7 @@
                 else pinnedEmails = pinnedEmails.filter(x => x !== k);
                 savePins();
                 renderAll();
+                renderHome();
                 showToast('Could not save pin. Try again.');
             }
         }
