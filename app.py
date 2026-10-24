@@ -1231,6 +1231,96 @@ def start_push():
     threading.Thread(target=_push_supervisor, daemon=True).start()
     print("[PUSH] live push chalu. Start Command: gunicorn app:app --worker-class gthread --workers 1 --threads 16 --timeout 120")
 
+# ======================= Card-er ⏳: shudhu ekta account-e on-demand live watch =======================
+# ⏳ chaple server shudhu oi ekta Gmail-e ekta IMAP IDLE connection khole (max WAIT_WATCH_SECONDS).
+# Notun mail ashle oi account-ta ekbar scan kore SSE diye browser-e pathay. Shesh hole / cancel hole connection bondho.
+# Pin kora account-er permanent watcher (ENABLE_PUSH=1) already chalu thakle notun connection khola hoy na.
+WAIT_WATCH_MAX = 3          # ekshathe max koyta account-e on-demand watch
+WAIT_WATCH_SECONDS = 130    # browser-er 120s wait-er cheye ektu beshi; tarpor nije bondho hoy
+_waiters = {}               # email(lower) -> {"stop": Event, "holder": {"mail": ...}}
+_waiters_lock = threading.Lock()
+
+def _wait_watch_run(acc, mail, stop_event, deadline):
+    key = _norm_email(acc["email"])
+    try:
+        sock = mail.sock
+        lines = _Lines(sock)
+        n = 0
+        while not stop_event.is_set():
+            left = deadline - time.time()
+            if left <= 0:
+                break
+            n += 1
+            if _idle_cycle(lines, sock, ("W%d" % n).encode(), min(IDLE_MAX_WAIT, left)) and not stop_event.is_set():
+                time.sleep(1)                       # mail puropuri index hoye jak
+                publish_scan(acc)
+    except Exception as e:
+        if not stop_event.is_set():
+            print(f"[WAIT] {acc['email']}: {_error_reason(e)} ({type(e).__name__})")
+    finally:
+        try:
+            mail.shutdown()
+        except Exception:
+            pass
+        with _waiters_lock:
+            w = _waiters.get(key)
+            if w and w["stop"] is stop_event:
+                _waiters.pop(key, None)
+
+@app.route('/api/watch-start', methods=['POST'])
+def watch_start():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    body = request.json or {}
+    key = _norm_email(body.get('email'))
+    acc = next((x for x in load_accounts() if _norm_email(x.get('email')) == key), None)
+    if not acc:
+        return jsonify({"error": "Account not found"}), 404
+    w = _watchers.get(acc["email"])
+    if w and w["thread"].is_alive():                # pin-er permanent watcher already ache
+        return jsonify({"ok": True, "via": "pinned"})
+    try:
+        seconds = int(body.get('seconds') or WAIT_WATCH_SECONDS)
+    except (TypeError, ValueError):
+        seconds = WAIT_WATCH_SECONDS
+    seconds = max(10, min(seconds, WAIT_WATCH_SECONDS))
+    with _waiters_lock:
+        old = _waiters.pop(key, None)
+        if old:
+            _stop_watcher(old)
+        if len(_waiters) >= WAIT_WATCH_MAX:
+            return jsonify({"error": "Too many accounts are being watched. Cancel one first."}), 429
+    mail = None
+    try:
+        mail = _imap_login(acc)
+        typ, _ = mail.select("inbox", readonly=True)
+        if typ != "OK":
+            raise RuntimeError("cannot select inbox")
+    except Exception as e:
+        try:
+            if mail is not None:
+                mail.shutdown()
+        except Exception:
+            pass
+        return jsonify({"error": _error_reason(e)}), 502
+    ev = threading.Event()
+    with _waiters_lock:
+        _waiters[key] = {"stop": ev, "holder": {"mail": mail}}
+    deadline = time.time() + seconds
+    threading.Thread(target=_wait_watch_run, args=(acc, mail, ev, deadline), daemon=True).start()
+    return jsonify({"ok": True, "via": "wait"})
+
+@app.route('/api/watch-stop', methods=['POST'])
+def watch_stop():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    key = _norm_email((request.json or {}).get('email'))
+    with _waiters_lock:
+        w = _waiters.pop(key, None)
+    if w:
+        _stop_watcher(w)
+    return jsonify({"ok": True})
+
 # ======================= PWA files (service worker + manifest) =======================
 # sw.js root-e thakte hoy (/sw.js), nahole shob page-er scope pay na.
 @app.route('/sw.js')
@@ -1325,7 +1415,7 @@ def _push_worker(item):
             body = f"New code for {email_addr}"
         _send_one(doc, {
             "title": service, "body": body, "tag": "otp-" + email_addr.lower(),
-            "url": "/?action=refresh", "ts": int(time.time() * 1000),
+            "url": "/?action=find", "ts": int(time.time() * 1000),
         })
 
 def notify_push(item):
@@ -1553,20 +1643,8 @@ def logout():
 
 @app.route('/api/fetch-otps')
 def fetch_otps():
-    if not session.get('logged_in'):
-        return jsonify({"error": "Unauthorized Access"}), 401
-
-    only = None
-    if request.args.get('pinned') == '1':          # login-er por shudhu pin kora account
-        try:
-            only = {_norm_email(e) for e in _read_pins()} if prefs_collection is not None else set()
-        except Exception as e:
-            print(f"Pins read error: {e}")
-            only = set()
-        if not only:
-            return jsonify([])
-    all_otps = get_latest_otps(only)
-    return jsonify(all_otps)
+    # Shob account ekshathe check bondho (Gmail block hoyar jhunki). Shudhu card-er refresh (/api/refresh-one) cholbe.
+    return jsonify({"error": "Checking all accounts at once is turned off. Use the refresh button on a card."}), 410
 
 @app.route('/api/refresh-one', methods=['POST'])
 def refresh_one():
@@ -2210,7 +2288,7 @@ def stream():
     """Server-Sent Events: notun code ashle sathe sathe browser-e pathay."""
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    if not ENABLE_PUSH:
+    if not ENABLE_PUSH and not _waiters:             # ENABLE_PUSH=0 hole shudhu ⏳ watch cholar somoy
         return jsonify({"error": "Push disabled"}), 503
     q = queue.Queue(maxsize=100)
     with _subs_lock:
@@ -2226,6 +2304,8 @@ def stream():
             while time.time() - started < STREAM_MAX_SECONDS:
                 if time.time() - _last_user_activity > IDLE_TIMEOUT:
                     yield "event: expired\ndata: {}\n\n"      # kew kaj kortese na -> stream bondho
+                    break
+                if not ENABLE_PUSH and not _waiters:         # ⏳ watch shesh -> stream-o bondho
                     break
                 try:
                     msg = q.get(timeout=15)
