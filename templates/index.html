@@ -4380,31 +4380,79 @@
 
         // ---------- Service worker ----------
         if ('serviceWorker' in navigator) {
-            let reloading = false;
+            let reloading = false, regRef = null, baseline = null;
             const hadController = !!navigator.serviceWorker.controller;
-            // notun SW control nile (update) page nijei reload hobe; prothom install-e reload na
+
+            // notun SW control nile page reload hoy (prothom install-e na)
             navigator.serviceWorker.addEventListener('controllerchange', () => {
                 if (!hadController || reloading) return;
                 reloading = true;
                 location.reload();
             });
+
+            // ---- "Update this app" banner ----
+            function applyUpdate() {
+                const w = regRef && regRef.waiting;
+                if (w) {
+                    w.postMessage({ type: 'SKIP_WAITING' });      // controllerchange -> reload
+                    setTimeout(() => location.reload(), 2500);    // jodi controllerchange na ashe
+                } else {
+                    location.reload();                            // shudhu page bodlechhe
+                }
+            }
+            function showUpdateBanner() {
+                if (document.getElementById('updateBanner')) return;
+                const bar = document.createElement('div');
+                bar.id = 'updateBanner';
+                bar.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));' +
+                    'z-index:99999;display:flex;align-items:center;gap:10px;padding:12px 14px;border-radius:14px;' +
+                    'background:#1f2937;color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.4);font:500 14px/1.3 system-ui,sans-serif;';
+                const msg = document.createElement('span');
+                msg.style.flex = '1';
+                msg.textContent = 'New version available';
+                const btn = document.createElement('button');
+                btn.textContent = 'Update this app';
+                btn.style.cssText = 'border:0;border-radius:10px;padding:9px 14px;background:#3b82f6;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer;';
+                btn.onclick = () => { btn.disabled = true; btn.textContent = 'Updating...'; applyUpdate(); };
+                const x = document.createElement('button');
+                x.textContent = '\u2715';
+                x.setAttribute('aria-label', 'Later');
+                x.style.cssText = 'border:0;background:transparent;color:#9ca3af;font-size:16px;cursor:pointer;padding:4px 6px;';
+                x.onclick = () => bar.remove();
+                bar.append(msg, btn, x);
+                document.body.appendChild(bar);
+            }
+
+            // ---- page (index.html) bodlalo kina check ----
+            const hashStr = (s) => { let h = 5381; for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return s.length + ':' + h; };
+            const fetchPageHash = () => fetch('/', { cache: 'no-store' })
+                .then((r) => (r.ok ? r.text() : null)).then((t) => (t ? hashStr(t) : null)).catch(() => null);
+            const checkPage = () => fetchPageHash().then((hh) => { if (hh && baseline && hh !== baseline) showUpdateBanner(); });
+
+            function watch(reg) {
+                if (reg.waiting && navigator.serviceWorker.controller) showUpdateBanner();
+                reg.addEventListener('updatefound', () => {
+                    const nw = reg.installing;
+                    if (!nw) return;
+                    nw.addEventListener('statechange', () => {
+                        if (nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateBanner();
+                    });
+                });
+            }
+
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).then((reg) => {
-                    const check = () => { reg.update().catch(() => {}); };
+                    regRef = reg;
+                    watch(reg);
+                    fetchPageHash().then((hh) => { baseline = hh; });
+                    const check = () => { reg.update().catch(() => {}); checkPage(); };
                     document.addEventListener('visibilitychange', () => { if (!document.hidden) check(); });
                     window.addEventListener('focus', check);
                     setInterval(check, 30 * 60 * 1000);
                 }).catch(() => {});
             });
             navigator.serviceWorker.addEventListener('message', (e) => {
-                if (e.data && e.data.type === 'app-updated') showToast('App updated - reload to use the new version');
-            });
-            // PWA onek khon background-e thakle, phire ashle (10 min+) fresh version-er jonno reload
-            let hiddenAt = 0;
-            document.addEventListener('visibilitychange', () => {
-                if (document.hidden) { hiddenAt = Date.now(); return; }
-                if (hiddenAt && Date.now() - hiddenAt > 10 * 60 * 1000) location.reload();
-                hiddenAt = 0;
+                if (e.data && e.data.type === 'app-updated') showUpdateBanner();
             });
         }
 
