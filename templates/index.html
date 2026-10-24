@@ -609,6 +609,13 @@
         }
         .otp-card.expiring .ring-fg { stroke: var(--accent-red); }
 
+        /* ---- countdown bar (amber -> teal, kome jay) ---- */
+        .tbar { flex: 1; min-width: 36px; height: 6px; border-radius: 999px; background: #272d35; overflow: hidden; }
+        .tbar-fill { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #cba96b, #5ed5c6); transition: width 1s linear; }
+        :root[data-theme="light"] .tbar { background: rgba(15, 23, 42, 0.1); }
+        .otp-card.expiring .tbar-fill, .tfa-box.warn .tbar-fill, .svc-item.warn .tbar-fill { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+        @media (prefers-reduced-motion: reduce) { .tbar-fill { transition: none; } }
+
         /* ---- skeleton loader ---- */
         .skeleton-card {
             background: rgba(15, 23, 42, 0.6);
@@ -1098,7 +1105,7 @@
         .tfa-code { cursor: pointer; }
         .tfa-time { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
         .tfa-box.warn .tfa-label, .tfa-box.warn .tfa-time { color: var(--accent-red); }
-        .tfa-box.warn .ring-fg { stroke: var(--accent-red); }
+        .tfa-left, .svc-left { min-width: 30px; text-align: right; font-weight: 700; }
         .tfa-remove { margin-left: auto; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 4px 8px; border-radius: 8px; touch-action: manipulation; }
         .tfa-remove:hover, .tfa-remove:focus-visible { color: #f87171; background: rgba(239, 68, 68, 0.12); outline: none; }
         @media (hover: none), (pointer: coarse) { .tfa-remove { min-width: 38px; min-height: 38px; } }
@@ -1119,7 +1126,6 @@
         .svc-code { cursor: pointer; }
         .svc-time { display: flex; align-items: center; gap: 8px; margin-top: 2px; font-size: 12px; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
         .svc-item.warn .svc-time { color: var(--accent-red); }
-        .svc-item.warn .ring-fg { stroke: var(--accent-red); }
         .swipe-tfa .swipe-svc-edit { background: rgba(6, 182, 212, 0.92); }
         .swipe-tfa .swipe-svc-del { background: rgba(239, 68, 68, 0.92); }
         .tfa-qr-row { display: flex; gap: 8px; }
@@ -1642,6 +1648,23 @@
             return { ...item, expiresAt: Date.now() + (ttl - age) * 1000, ttlMs: ttl * 1000 };
         }
 
+        // Bar kome 1s-e smoothly: porer second-er mane-te transition, notun code ele (jump) lafiye full hoy
+        function setTbar(root, leftMs, periodMs, active) {
+            const f = root.querySelector('.tbar-fill');
+            if (!f) return;
+            const pc = (v) => Math.max(0, Math.min(1, v)) * 100;
+            const cur = active ? pc(leftMs / periodMs) : 0;
+            const nxt = active ? pc((leftMs - 1000) / periodMs) : 0;
+            const prev = parseFloat(f.dataset.pct);
+            if (isNaN(prev) || Math.abs(cur - prev) > 8) {
+                f.style.transition = 'none';
+                f.style.width = cur + '%';
+                void f.offsetWidth;
+                f.style.transition = '';
+            }
+            f.style.width = nxt + '%';
+            f.dataset.pct = nxt;
+        }
         function updateCardTimer(card) {
             const left = Number(card.dataset.expires) - Date.now();
             if (left <= 0) return false;
@@ -1652,8 +1675,7 @@
             const expiring = left <= Math.min(20000, ttlMs * 0.25);     // chhoto meyade shobshomoy lal na hoy
             card.classList.toggle('expiring', expiring);
             card.classList.toggle('ring-warn', !expiring && frac <= 0.5);
-            const ring = card.querySelector('.ring-fg');
-            if (ring) ring.style.strokeDashoffset = RING_C * (1 - frac);
+            setTbar(card, left, ttlMs, true);
             return true;
         }
         function syncTimers() {
@@ -1925,7 +1947,7 @@
                     ? `<div class="verify-note"><i class="fa-solid fa-circle-exclamation"></i><span>Please verify this code &middot; Subject: ${escAttr(item.subject || '')}</span></div>`
                     : '');
             const expiryRow = withTimer
-                ? `<div class="otp-expiry"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${ringOffset.toFixed(2)}"/></svg> Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></div>`
+                ? `<div class="otp-expiry"><span class="tbar" aria-hidden="true"><i class="tbar-fill" style="width:${(100 - ringOffset / RING_C * 100).toFixed(1)}%"></i></span><span class="otp-expiry-lbl">Expires in <span class="otp-expiry-time">${fmtLeft(leftSec)}</span></span></div>`
                 : '';
             const usedBadge = (used && !showExpired)
                 ? `<button type="button" class="used-badge" data-used-key="${escAttr(uKey)}" title="Tap to mark as unused"><i class="fa-solid fa-check"></i> Used</button>`
@@ -3179,7 +3201,7 @@
                             </div>
                         </div>
                         <div class="otp-code-box has-cells svc-code" role="button" tabindex="0" data-id="${id}" title="Click to copy" aria-label="2FA code of ${nm}. Press to copy"></div>
-                        <div class="svc-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg><span class="svc-left"></span></div>
+                        <div class="svc-time"><span class="tbar" aria-hidden="true"><i class="tbar-fill"></i></span><span class="svc-left"></span></div>
                     </div>
                 </div>`;
             }).join('');
@@ -3198,8 +3220,7 @@
                     c.dataset.code = cur;
                     c.innerHTML = cur ? codeCellsHTML(cur, false) : '<span class="tfa-wait">------</span>';
                 }
-                const ring = el.querySelector('.ring-fg');
-                if (ring) ring.style.strokeDashoffset = x.code ? RING_C * (1 - Math.min(1, leftMs / (x.period * 1000))) : RING_C;
+                setTbar(el, leftMs, x.period * 1000, !!x.code);
                 const t = el.querySelector('.svc-left');
                 if (t) t.textContent = x.code ? left + 's' : '';
             });
@@ -3471,7 +3492,7 @@
             return `<div class="tfa-box" data-tfa-email="${escAttr(email)}">
                 <div class="tfa-label"><i class="fa-solid fa-shield-halved"></i> 2FA code</div>
                 <div class="otp-code-box has-cells tfa-code" role="button" tabindex="0" data-tfa-email="${escAttr(email)}" data-code="${escAttr(s.code || '')}" title="Click to copy" aria-label="2FA code. Press to copy">${s.code ? codeCellsHTML(s.code, false) : '<span class="tfa-wait">&bull;&bull;&bull;</span>'}</div>
-                <div class="tfa-time"><svg class="ring" viewBox="0 0 26 26" width="26" height="26"><circle class="ring-bg" cx="13" cy="13" r="10"/><circle class="ring-fg" cx="13" cy="13" r="10" stroke-dasharray="${RING_C.toFixed(2)}" stroke-dashoffset="${RING_C.toFixed(2)}"/></svg> <span class="tfa-left"></span></div>
+                <div class="tfa-time"><span class="tbar" aria-hidden="true"><i class="tbar-fill"></i></span><span class="tfa-left"></span></div>
             </div>`;
         }
         function paintTfa() {
@@ -3486,8 +3507,7 @@
                     codeEl.dataset.code = s.code || '';
                     codeEl.innerHTML = s.code ? codeCellsHTML(s.code, false) : '<span class="tfa-wait">&bull;&bull;&bull;</span>';
                 }
-                const ring = box.querySelector('.ring-fg');
-                if (ring) ring.style.strokeDashoffset = s.code ? RING_C * (1 - Math.min(1, leftMs / (s.period * 1000))) : RING_C;
+                setTbar(box, leftMs, s.period * 1000, !!s.code);
                 const t = box.querySelector('.tfa-left');
                 if (t) t.textContent = s.code ? left + 's' : '';
             });
