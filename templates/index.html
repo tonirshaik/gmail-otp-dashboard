@@ -240,19 +240,6 @@
             color: #fff;
         }
 
-        .btn-refresh {
-            background: rgba(6, 182, 212, 0.15);
-            color: var(--accent-cyan);
-            border: 1px solid rgba(6, 182, 212, 0.3);
-            margin-bottom: 20px;
-        }
-
-        .btn-refresh:hover {
-            background: rgba(6, 182, 212, 0.25);
-            color: #fff;
-            box-shadow: 0 0 15px rgba(6, 182, 212, 0.3);
-        }
-
         .btn-logout {
             background: rgba(239, 68, 68, 0.1);
             color: var(--accent-red);
@@ -441,18 +428,6 @@
         }
         .btn-danger { background: linear-gradient(135deg, #dc2626, #ef4444); color: #fff; }
         .btn-cancel { background: rgba(255,255,255,0.06); color: var(--text-muted); margin-top: 8px; }
-        .btn-wait {
-            background: rgba(139, 92, 246, 0.15);
-            color: #c4b5fd;
-            border: 1px solid rgba(139, 92, 246, 0.35);
-            margin-bottom: 20px;
-        }
-        .btn-wait:hover { background: rgba(139, 92, 246, 0.25); color: #fff; }
-        .btn-wait.active {
-            background: rgba(245, 158, 11, 0.15);
-            color: #fcd34d;
-            border-color: rgba(245, 158, 11, 0.45);
-        }
         .card-refresh {
             margin-left: auto;
             margin-right: 20px;
@@ -653,13 +628,6 @@
         .health-msg.warn { color: #fcd34d; }
         .health-msg.bad { color: #fca5a5; }
 
-        /* ---- Refresh + Wait: ek line-e pashapashi ---- */
-        .btn-row { display: flex; gap: 10px; margin-bottom: 20px; }
-        .btn-row .btn {
-            flex: 1 1 0; min-width: 0; margin-bottom: 0;
-            padding: 12px 8px; font-size: 13px; line-height: 1.25; text-align: center;
-        }
-
         /* ---- accounts icon button (gear-er pashe) ---- */
         .top-actions { display: flex; align-items: center; gap: 10px; }
         .accounts-btn {
@@ -741,11 +709,7 @@
             -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
         }
         :root[data-theme="light"] .accounts-btn, :root[data-theme="light"] .accounts-head { color: #0e7490; }
-        :root[data-theme="light"] .btn-refresh:hover,
-        :root[data-theme="light"] .btn-wait:hover,
         :root[data-theme="light"] .btn-logout:hover { color: var(--text-main); }
-        :root[data-theme="light"] .btn-wait { color: #6d28d9; }
-        :root[data-theme="light"] .btn-wait.active { color: #b45309; }
         :root[data-theme="light"] .acc-section.pinned-label { color: #b45309; }
         :root[data-theme="light"] .card-pin.pinned { color: #d97706; }
         :root[data-theme="light"] .verify-note { color: #92400e; }
@@ -881,7 +845,6 @@
             .dash-side { grid-area: side; position: sticky; top: 24px; align-self: start; }
             .dash-main { grid-area: main; }
             .dash-foot { grid-area: foot; align-self: end; }
-            .btn-row { flex-direction: column; }
             .otp-container {
                 max-height: none; overflow: visible; padding: 0;
                 display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-content: start;
@@ -945,7 +908,6 @@
         .card-wait:hover { color: #a78bfa; background: rgba(139, 92, 246, 0.12); }
         .card-wait.active { color: #fcd34d; background: rgba(245, 158, 11, 0.15); }
         .card-wait .wtime { font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
-        .btn-wait .wtarget { display: inline-block; max-width: 11em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
         @media (hover: none), (pointer: coarse) { .card-wait { min-width: 40px; min-height: 40px; font-size: 16px; padding: 8px; } }
         @media (max-width: 480px) { .otp-email .card-wait { min-width: 34px; min-height: 34px; padding: 6px; } }
         :root[data-theme="light"] .card-wait:hover { color: #6d28d9; }
@@ -1298,7 +1260,7 @@
                 <button type="button" class="fchip" data-filter="unused" aria-pressed="false">Unused <b>0</b></button>
                 <button type="button" class="fchip" data-filter="errors" aria-pressed="false">Errors <b>0</b></button>
                 <button type="button" class="fchip" data-filter="pinned" aria-pressed="false">Pinned <b>0</b></button>
-                <button type="button" class="fchip sort" id="sortBtn" title="Change sort order"><i class="fa-solid fa-arrow-down-wide-short"></i> <span>Newest</span></button>
+                <button type="button" class="fchip sort" id="sortBtn" title="Change sort order"><i class="fa-solid fa-arrow-down-wide-short"></i> <span>Last used</span></button>
             </div>
             <div id="allContainer"></div>
         </div>
@@ -1574,50 +1536,6 @@
             if (launchAction === 'find') { launchAction = ''; openPalette(); }
         }
 
-        async function fetchOTPs(silent = false, pinnedOnly = false) {
-            if (isFetching) return;
-            isFetching = true;
-
-            if (!silent) {
-                loadAccountCount();
-
-                otpContainer.innerHTML = skeletonHTML(2);
-            }
-
-            try {
-                const res = await fetch(pinnedOnly ? '/api/fetch-otps?pinned=1' : '/api/fetch-otps');
-
-                if (res.status === 401) {
-                    stopPush(); stopWaiting(false);
-                    dashboardSection.classList.add('hidden');
-                    loginSection.classList.remove('hidden');
-                    return;
-                }
-
-                if (!res.ok) throw new Error("Failed");
-
-                const data = await res.json();
-                renderOTPs(data);
-                syncPins();
-                ensurePush();
-                const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-                document.getElementById('autoStatus').innerHTML =
-                    `<i class="fa-regular fa-clock"></i> Last updated ${t}`;
-
-            } catch (err) {
-                // silent refresh e error hole purono OTP gulo thakbe, kichu muche jabe na
-                if (!silent) {
-                    otpContainer.innerHTML = `
-                        <div class="empty-state">
-                            <i class="fa-solid fa-triangle-exclamation" style="font-size: 24px; color: var(--accent-red); margin-bottom: 6px; display: block;"></i>
-                            ${navigator.onLine ? 'Error loading OTPs. Try again.' : "You're offline. Reconnect to refresh."}
-                        </div>`;
-                }
-            } finally {
-                isFetching = false;
-            }
-        }
-
         function escAttr(s) {
             return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         }
@@ -1775,6 +1693,7 @@
                 const url = box.dataset.url || '';
                 if (/^https:\/\//i.test(url)) {
                     window.open(url, '_blank', 'noopener,noreferrer');
+                    markAccountUsed(String(box.dataset.key || '').split('|')[0]);
                     const k = box.dataset.usedKey;
                     if (k && !usedMap[k]) setUsed(k, true);
                 }
@@ -1785,7 +1704,7 @@
                 setBoxRevealed(box, true);
             }
             const uk = box.dataset.usedKey;
-            copyOTP(code, () => { flashCopied(box); if (uk && !usedMap[uk]) setUsed(uk, true); });
+            copyOTP(code, () => { flashCopied(box); markAccountUsed(String(box.dataset.key || '').split('|')[0]); if (uk && !usedMap[uk]) setUsed(uk, true); });
         }
 
         // "Used" badge-e tap korle abar unused (vul kore copy hole)
@@ -1838,6 +1757,37 @@
 
         // ---------- UI refresh helpers (service avatar, code cells, enter animation) ----------
         const entered = new Set();            // je code card ekbar animate hoyeche, abar hobe na
+        // Kon account kokhon shesh check hoyeche (shudhu ei page khola thakar somoy-er jonno)
+        const checkedAt = new Map();
+        const BN_DIGITS = ['\u09e6', '\u09e7', '\u09e8', '\u09e9', '\u09ea', '\u09eb', '\u09ec', '\u09ed', '\u09ee', '\u09ef'];
+        function bnNum(n) { return String(n).replace(/\d/g, d => BN_DIGITS[+d]); }
+        function checkedAgoText(email) {
+            const t = checkedAt.get(String(email).toLowerCase());
+            if (!t) return '';
+            const sec = Math.max(0, Math.floor((Date.now() - t) / 1000));
+            let ago;
+            if (sec < 10) ago = '\u098f\u0987\u09ae\u09be\u09a4\u09cd\u09b0';
+            else if (sec < 60) ago = bnNum(sec) + ' \u09b8\u09c7\u0995\u09c7\u09a8\u09cd\u09a1 \u0986\u0997\u09c7';
+            else if (sec < 3600) ago = bnNum(Math.floor(sec / 60)) + ' \u09ae\u09bf\u09a8\u09bf\u099f \u0986\u0997\u09c7';
+            else if (sec < 86400) ago = bnNum(Math.floor(sec / 3600)) + ' \u0998\u09a8\u09cd\u099f\u09be \u0986\u0997\u09c7';
+            else ago = bnNum(Math.floor(sec / 86400)) + ' \u09a6\u09bf\u09a8 \u0986\u0997\u09c7';
+            return '\u09b6\u09c7\u09b7 \u099a\u09c7\u0995: ' + ago;
+        }
+        // Shesh kon account kokhon byabohar kora hoyeche (refresh / wait / code copy) -- ei device-e thake
+        const LASTUSED_KEY = 'otpDash.lastUsed';
+        let lastUsed = {};
+        try { lastUsed = JSON.parse(localStorage.getItem(LASTUSED_KEY) || '{}') || {}; } catch (e) { lastUsed = {}; }
+        let usedOrder = Object.assign({}, lastUsed);      // popup khola-r somoy-er snapshot, jate card lafiye na othe
+        function markAccountUsed(email) {
+            if (!email) return;
+            lastUsed[String(email).toLowerCase()] = Date.now();
+            const keys = Object.keys(lastUsed);
+            if (keys.length > 300) keys.sort((a, b) => lastUsed[a] - lastUsed[b]).slice(0, keys.length - 300).forEach(k => delete lastUsed[k]);
+            try { localStorage.setItem(LASTUSED_KEY, JSON.stringify(lastUsed)); } catch (e) {}
+        }
+        setInterval(() => {
+            document.querySelectorAll('.checked-ago').forEach(el => { el.textContent = checkedAgoText(el.dataset.email); });
+        }, 15000);
         function homeMax() { return window.matchMedia('(min-width: 1024px)').matches ? 6 : HOME_MAX; }
 
         const BRAND_ICONS = {
@@ -1955,7 +1905,7 @@
                     ${tfaOn ? '' : phishNote}
                     ${tfaOn ? '' : verifyNote}
                     ${tfaOn ? '' : expiryRow}
-                    <div class="otp-time">${infoLine}</div>
+                    <div class="otp-time">${infoLine}${!item.placeholder && checkedAt.has(String(item.email).toLowerCase()) ? ` <span class="checked-ago-sep">&middot;</span> <span class="checked-ago" data-email="${escAttr(String(item.email).toLowerCase())}">${checkedAgoText(item.email)}</span>` : ''}</div>
                 </div>`;
             const tfaActions = tfaOn
                 ? `<div class="swipe-tfa">
@@ -2019,7 +1969,7 @@
             pinnedEmails = next;
             savePins();
             if (!same) renderHome();
-            if (!same && hasLoaded && accountsModalOpen()) renderAll();
+            if (!same && accountsModalOpen()) renderAll();
         }
 
         // Pin server-e (Mongo) thake -> phone/computer-e eki. 401 hole login-e ferot jay na (fetchOTPs oita dekhe).
@@ -2108,6 +2058,7 @@
             let list = q ? baseItems.filter(i => String(i.email).toLowerCase().includes(q)) : baseItems;
             list = list.filter(FILTERS[accFilter] || FILTERS.all);
             if (accSort === 'az') list = [...list].sort((a, b) => String(a.email).localeCompare(String(b.email)));
+            else list = [...list].sort((a, b) => (usedOrder[String(b.email).toLowerCase()] || 0) - (usedOrder[String(a.email).toLowerCase()] || 0));
             if (list.length === 0) {
                 allContainer.innerHTML = `<div class="empty-state"><i class="fa-solid fa-magnifying-glass" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>${q ? 'No Gmail matches "' + escAttr(accSearchInput.value.trim()) + '".' : 'No accounts match this filter.'}</div>`;
                 return;
@@ -2137,6 +2088,7 @@
 
         function showAccountsModal() {
             loadAccountCount();
+            usedOrder = Object.assign({}, lastUsed);
             renderAll();
             accountsModal.classList.remove('hidden');
             if (!accountListLoaded) loadAccountList();
@@ -2162,6 +2114,7 @@
         function renderOTPs(otps) {
             hasLoaded = true;
             allItems = (otps || []).map(normalizeExpiry);
+            allItems.forEach(i => checkedAt.set(String(i.email).toLowerCase(), Date.now()));
 
             // kon kon card notun ta check kora
             newCardEmails = [];
@@ -2239,6 +2192,7 @@
         // ======================= ekta account-er item merge kora =======================
         function applyItem(raw, fromPush) {
             const item = normalizeExpiry(raw);
+            checkedAt.set(String(item.email).toLowerCase(), Date.now());
             const i = allItems.findIndex(x => x.email === item.email);
             const prev = i >= 0 ? allItems[i] : null;
             // temporary error diye thik code muche felbo na
@@ -2289,43 +2243,69 @@
                 b.innerHTML = waitCardInner(on, left);
             });
         }
-        // email dile -> shudhu sei ekta account (onek druto)
-        // email na dile -> pin kora account gulo; kono pin na thakle shob account (age-r moto)
-        function startWaiting(email = null) {
+        // Card-er \u23f3: server shudhu oi ekta account-e live connection (IMAP IDLE) khole. Polling / bar bar login hoy na.
+        // Notun code ashle server SSE diye pathay (applyItem -> stopWaiting).
+        async function startWaiting(email) {
             initAudio();
             if (waiting) stopWaiting(false);                 // onno target-e jaowar somoy age-ta bondho
-            const target = email ? String(email).toLowerCase() : null;
-            const emails = target ? [target] : (pinnedEmails.length ? [...pinnedEmails] : null);   // null = shob account
-            waiting = { email: target, emails, endsAt: Date.now() + WAIT_SECONDS * 1000, tick: null, poll: null };
+            if (!email) return;
+            const target = String(email).toLowerCase();
+            markAccountUsed(target);
+            const w = { email: target, emails: [target], endsAt: Date.now() + WAIT_SECONDS * 1000, tick: null, poll: null, live: false, conn: null };
+            waiting = w;
             syncWaitCards();
-            waiting.tick = setInterval(() => {
-                if (!waiting) return;
-                const left = Math.ceil((waiting.endsAt - Date.now()) / 1000);
+            w.tick = setInterval(() => {
+                if (waiting !== w) return;
+                const left = Math.ceil((w.endsAt - Date.now()) / 1000);
                 if (left <= 0) {
-                    const scope = waiting.email ? ' on ' + waiting.email : (waiting.emails ? ' on your pinned accounts' : '');
                     stopWaiting(false);
-                    showToast('No new code arrived' + scope);
+                    showToast('No new code arrived on ' + target);
                     return;
                 }
                 syncWaitCards();
             }, 1000);
-            // ekta account: push chalu thakle 10s, nahole 3s. Pin / shob account: push chalu thakle 20s, nahole 5s.
-            const every = () => target ? (pushConnected ? 10000 : 3000) : (pushConnected ? 20000 : 5000);
-            // pin kora account gulo alada alada check kori (applyItem shudhu oi account-i update kore, baki-ra muche jay na)
-            const loop = async () => {
-                if (!waiting) return;
-                if (emails) await Promise.all(emails.map(em => refreshAccount(em, true)));
-                else await fetchOTPs(true);
-                if (waiting) waiting.poll = setTimeout(loop, every());
-            };
-            waiting.poll = setTimeout(loop, emails ? 1000 : every());
+            try {
+                const res = await fetch('/api/watch-start', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email: target, seconds: WAIT_SECONDS })
+                });
+                if (waiting !== w) {                          // ei majhe cancel hoye gele server-er watch-o bondho
+                    if (res.ok) fetch('/api/watch-stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: target }) }).catch(() => {});
+                    return;
+                }
+                if (res.status === 401) { stopWaiting(false); return; }
+                if (!res.ok) {
+                    let msg = 'Could not start live watch';
+                    try { msg = (await res.json()).error || msg; } catch (e) {}
+                    stopWaiting(false, null, false);
+                    showToast(msg);
+                    return;
+                }
+                w.live = true;
+                ensurePush(true);
+                // live stream ashe nai -> bar bar login na kore bondho kore dei
+                w.conn = setTimeout(() => {
+                    if (waiting === w && !pushConnected) {
+                        stopWaiting(false);
+                        showToast('Live connection unavailable. Use the refresh button.');
+                    }
+                }, 10000);
+            } catch (e) {
+                if (waiting === w) { stopWaiting(false, null, false); showToast('Connection error'); }
+            }
         }
-        function stopWaiting(found, email) {
+        function stopWaiting(found, email, notifyServer = true) {
             if (!waiting) return;
-            clearInterval(waiting.tick);
-            clearTimeout(waiting.poll);
+            const w = waiting;
+            clearInterval(w.tick);
+            clearTimeout(w.poll);
+            clearTimeout(w.conn);
             waiting = null;
             syncWaitCards();
+            if (w.live && notifyServer) {
+                fetch('/api/watch-stop', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: w.email }), keepalive: true }).catch(() => {});
+            }
+            if (w.live && pushEnabled !== true) stopPush();      // ENABLE_PUSH=0 hole stream shudhu wait-er somoy
             if (found) alertNewCode(email);
         }
         document.addEventListener('click', (e) => {
@@ -3544,6 +3524,7 @@
 
         // ======================= Ekta account refresh =======================
         async function refreshAccount(email, silent = false) {
+            if (!silent) markAccountUsed(email);
             try {
                 const res = await fetch('/api/refresh-one', {
                     method: 'POST',
@@ -3592,16 +3573,19 @@
             }
         }
 
-        async function ensurePush() {
+        async function ensurePush(force = false) {
             if (es || pushRetry) return;
-            if (pushEnabled === null) {
-                try {
-                    const r = await fetch('/api/push-status');
-                    const d = await r.json();
-                    pushEnabled = !!d.enabled;
-                } catch (e) { return; }
+            if (!force) {
+                if (pushEnabled === null) {
+                    try {
+                        const r = await fetch('/api/push-status');
+                        const d = await r.json();
+                        pushEnabled = !!d.enabled;
+                    } catch (e) { return; }
+                }
+                if (!pushEnabled) return;
             }
-            if (!pushEnabled || !dashboardIsOpen()) return;
+            if (!dashboardIsOpen()) return;
 
             es = new EventSource('/api/stream');
             es.addEventListener('hello', () => {
@@ -4207,7 +4191,7 @@
                 b.setAttribute('aria-pressed', f === accFilter ? 'true' : 'false');
             });
             const sp = document.querySelector('#sortBtn span');
-            if (sp) sp.textContent = accSort === 'az' ? 'A-Z' : 'Newest';
+            if (sp) sp.textContent = accSort === 'az' ? 'A-Z' : 'Last used';
         }
         function resetAccFilters() { accFilter = 'all'; accSort = 'recent'; }
         document.getElementById('tfaServiceBtn').addEventListener('click', (e) => openTfaModal('services', '', e.currentTarget));
@@ -4237,6 +4221,7 @@
         function paletteOpen() { return !palette.classList.contains('hidden'); }
 
         function useItem(item) {
+            markAccountUsed(item.email);
             const k = usedKey(item);
             if (item.kind === 'link') {
                 if (/^https:\/\//i.test(item.url || '')) {
@@ -4252,7 +4237,7 @@
             const seen = new Set(), out = [];
             allItems.forEach(i => { const k = String(i.email).toLowerCase(); if (!seen.has(k)) { seen.add(k); out.push(i); } });
             accountList.forEach(em => { if (!seen.has(em)) { seen.add(em); out.push({ email: em, code: '', placeholder: true }); } });
-            return out;
+            return out.sort((a, b) => (lastUsed[String(b.email).toLowerCase()] || 0) - (lastUsed[String(a.email).toLowerCase()] || 0));
         }
         function accountState(i) {
             if (i.placeholder) return { text: 'Not checked yet - Enter to check', cls: '' };
@@ -4385,11 +4370,11 @@
         const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
         const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Timed out')), ms))]);
 
-        // app icon-e long-press shortcut: /?action=refresh  ba  /?action=find  (login-er por kaj kore)
+        // app icon-e long-press shortcut: /?action=find  (login-er por kaj kore)
         let launchAction = '';
         try {
             const a = new URLSearchParams(location.search).get('action');
-            if (a === 'refresh' || a === 'find') launchAction = a;
+            if (a === 'find') launchAction = a;
             if (a) history.replaceState(null, '', location.pathname);
         } catch (e) {}
 
