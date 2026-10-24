@@ -493,6 +493,25 @@
         #allContainer::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
         #accountCountBar:active { transform: scale(0.98); }
 
+        /* ---- backup & import ---- */
+        .bk-box { max-height: 90vh; overflow-y: auto; }
+        .bk-sec { border: 1px solid var(--card-border); border-radius: 14px; padding: 12px; margin-bottom: 12px; }
+        .bk-title { font-weight: 700; font-size: 14px; margin-bottom: 4px; color: var(--text-main); }
+        .bk-note { font-size: 12px; opacity: 0.7; margin-bottom: 10px; line-height: 1.4; color: var(--text-main); }
+        .bk-sec .input-group input[type="file"] { padding: 9px 10px; }
+        .input-group textarea {
+            width: 100%; min-height: 110px; resize: vertical; padding: 12px 14px; font: 13px/1.5 ui-monospace, Menlo, Consolas, monospace;
+            background: var(--input-bg, rgba(0,0,0,0.4)); color: var(--input-text, #fff);
+            border: 1px solid var(--card-border); border-radius: 12px; outline: none;
+        }
+        .input-group textarea:focus { border-color: var(--accent-blue); }
+        .btn-ghost { background: rgba(255,255,255,0.08); color: var(--text-main); border: 1px solid var(--card-border); }
+        .bk-result { font-size: 13px; line-height: 1.5; word-break: break-word; }
+        .bk-result div { margin-bottom: 3px; }
+        .bk-result .bk-ok { color: var(--accent-green); }
+        .bk-result .bk-err { color: var(--accent-red); }
+        .bk-result .bk-dim { opacity: 0.75; }
+
         /* ---- search + pin ---- */
         .acc-search { position: relative; margin-bottom: 12px; }
         .acc-search i.fa-magnifying-glass {
@@ -1195,6 +1214,9 @@
                                 <i class="fa-solid fa-floppy-disk"></i> Save Account
                             </button>
                         </form>
+                        <button type="button" class="btn btn-ghost" id="openBackupBtn" style="margin-top: 10px;">
+                            <i class="fa-solid fa-box-archive"></i> Backup &amp; Import
+                        </button>
                     </div>
                 </div>
             </div>
@@ -1237,6 +1259,41 @@
             </div><!-- /dash-grid -->
         </div>
 
+    </div>
+
+    <!-- Backup & Import popup -->
+    <div id="backupModal" class="modal-overlay hidden">
+        <div class="accounts-box bk-box">
+            <div class="accounts-head">
+                <span><i class="fa-solid fa-box-archive"></i> Backup &amp; Import</span>
+                <button type="button" class="accounts-close" id="backupCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+
+            <div class="bk-sec">
+                <div class="bk-title">Export encrypted backup</div>
+                <div class="bk-note">Saves all Gmail accounts and App Passwords in one file, locked with a backup password you choose. If you forget that password, the file cannot be opened.</div>
+                <div class="input-group"><input type="password" id="bkSettingsPw" placeholder="Settings password" autocomplete="off"></div>
+                <div class="input-group"><input type="password" id="bkFilePw" placeholder="New backup password (min 8 characters)" autocomplete="new-password"></div>
+                <button type="button" class="btn btn-primary" id="bkExportBtn"><i class="fa-solid fa-file-arrow-down"></i> Download backup file</button>
+            </div>
+
+            <div class="bk-sec">
+                <div class="bk-title">Import from backup file</div>
+                <div class="bk-note">Choose a backup file and enter its password. Accounts that already exist are skipped.</div>
+                <div class="input-group"><input type="file" id="bkFile" accept=".otpbak,.json,application/json"></div>
+                <div class="input-group"><input type="password" id="bkImportPw" placeholder="Backup password" autocomplete="off"></div>
+                <button type="button" class="btn btn-primary" id="bkImportBtn"><i class="fa-solid fa-file-arrow-up"></i> Restore accounts</button>
+            </div>
+
+            <div class="bk-sec">
+                <div class="bk-title">Add many accounts at once</div>
+                <div class="bk-note">One account per line: Gmail address, then App Password (spaces are fine). Each one is checked with Gmail. Up to 30 at a time.</div>
+                <div class="input-group"><textarea id="bkText" placeholder="name1@gmail.com abcd efgh ijkl mnop&#10;name2@gmail.com abcdefghijklmnop" autocomplete="off" spellcheck="false"></textarea></div>
+                <button type="button" class="btn btn-primary" id="bkBulkBtn"><i class="fa-solid fa-users-line"></i> Verify &amp; add all</button>
+            </div>
+
+            <div id="bkResult" class="bk-result"></div>
+        </div>
     </div>
 
     <!-- All Gmail accounts popup -->
@@ -3640,6 +3697,127 @@
                 }
             } catch (err) {
                 showMessage("Connection error", true);
+            }
+        });
+
+        // ---------- Backup & Import ----------
+        const backupModal = document.getElementById('backupModal');
+        const bkResult = document.getElementById('bkResult');
+        function bkSay(lines, isError, extra) {
+            bkResult.textContent = '';
+            (lines || []).forEach((t, i) => {
+                const d = document.createElement('div');
+                d.textContent = t;
+                d.className = i === 0 ? (isError ? 'bk-err' : 'bk-ok') : 'bk-dim';
+                bkResult.appendChild(d);
+            });
+            (extra || []).forEach((t) => { const d = document.createElement('div'); d.className = 'bk-err'; d.textContent = t; bkResult.appendChild(d); });
+        }
+        function bkSummary(d) {
+            const lines = ['Added ' + (d.added || 0) + (d.total != null ? ' of ' + d.total : '') + ' account(s)'];
+            if (d.skipped && d.skipped.length) lines.push(d.skipped.length + ' already existed (skipped)');
+            if (d.invalid) lines.push(d.invalid + ' invalid entr' + (d.invalid === 1 ? 'y' : 'ies') + ' skipped');
+            if (d.bad_lines && d.bad_lines.length) lines.push('Could not read line(s): ' + d.bad_lines.join(', '));
+            const extra = (d.failed || []).map((f) => f.email + ' - ' + f.reason);
+            return { lines, extra };
+        }
+        async function bkPost(url, payload) {
+            const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+            const data = await res.json().catch(() => ({}));
+            return { ok: res.ok, data };
+        }
+        document.getElementById('openBackupBtn').addEventListener('click', () => {
+            settingsPopup.classList.remove('active');
+            bkResult.textContent = '';
+            backupModal.classList.remove('hidden');
+        });
+        function closeBackupModal() {
+            backupModal.classList.add('hidden');
+            ['bkSettingsPw', 'bkFilePw', 'bkImportPw', 'bkText'].forEach((id) => { document.getElementById(id).value = ''; });
+            document.getElementById('bkFile').value = '';
+            bkResult.textContent = '';
+        }
+        document.getElementById('backupCloseBtn').addEventListener('click', closeBackupModal);
+        backupModal.addEventListener('click', (e) => { if (e.target === backupModal) closeBackupModal(); });
+
+        document.getElementById('bkExportBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkExportBtn');
+            const pw = document.getElementById('bkSettingsPw').value.trim();
+            const fp = document.getElementById('bkFilePw').value;
+            if (!pw) return bkSay(['Enter the settings password'], true);
+            if (fp.length < 8) return bkSay(['Backup password must be at least 8 characters'], true);
+            btn.disabled = true;
+            try {
+                const res = await fetch('/api/backup/export', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ password: pw, backup_password: fp })
+                });
+                if (!res.ok) {
+                    const d = await res.json().catch(() => ({}));
+                    return bkSay([d.error || 'Export failed'], true);
+                }
+                const count = res.headers.get('X-Backup-Count');
+                const blob = await res.blob();
+                const cd = res.headers.get('Content-Disposition') || '';
+                const name = (cd.match(/filename="([^"]+)"/) || [])[1] || 'otp-backup.otpbak';
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = name;
+                document.body.appendChild(a);
+                a.click();
+                a.remove();
+                setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+                document.getElementById('bkSettingsPw').value = '';
+                document.getElementById('bkFilePw').value = '';
+                bkSay(['Backup downloaded (' + (count || '?') + ' accounts)', 'Keep the file and its password safe. Without the password it cannot be opened.']);
+            } catch (err) {
+                bkSay(['Connection error'], true);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('bkImportBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkImportBtn');
+            const f = document.getElementById('bkFile').files[0];
+            const pw = document.getElementById('bkImportPw').value;
+            if (!f) return bkSay(['Choose a backup file first'], true);
+            if (f.size > 1.5 * 1024 * 1024) return bkSay(['This file is too big to be a backup'], true);
+            if (!pw) return bkSay(['Enter the backup password'], true);
+            btn.disabled = true;
+            try {
+                const text = await f.text();
+                const r = await bkPost('/api/backup/import', { file: text, backup_password: pw });
+                if (!r.ok) return bkSay([r.data.error || 'Import failed'], true);
+                const s = bkSummary(r.data);
+                bkSay(s.lines, false, s.extra);
+                document.getElementById('bkFile').value = '';
+                document.getElementById('bkImportPw').value = '';
+                loadAccountList(); loadAccountCount();
+            } catch (err) {
+                bkSay(['Connection error'], true);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('bkBulkBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkBulkBtn');
+            const box = document.getElementById('bkText');
+            if (!box.value.trim()) return bkSay(['Paste at least one line: Gmail address and App Password'], true);
+            btn.disabled = true;
+            bkSay(['Checking with Gmail, please wait...']);
+            try {
+                const r = await bkPost('/api/bulk-add', { text: box.value });
+                if (!r.ok) return bkSay([r.data.error || 'Failed'], true);
+                const s = bkSummary(r.data);
+                bkSay(s.lines, false, s.extra);
+                if (!(r.data.failed && r.data.failed.length) && !(r.data.bad_lines && r.data.bad_lines.length)) box.value = '';
+                loadAccountList(); loadAccountCount();
+            } catch (err) {
+                bkSay(['Connection error'], true);
+            } finally {
+                btn.disabled = false;
             }
         });
 
