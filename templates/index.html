@@ -1287,9 +1287,22 @@
 
             <div class="bk-sec">
                 <div class="bk-title">Add many accounts at once</div>
-                <div class="bk-note">One account per line: Gmail address, then App Password (spaces are fine). Each one is checked with Gmail. Up to 30 at a time.</div>
+                <div class="bk-note">One account per line: Gmail address, then App Password (spaces are fine). Up to 30 at a time. Already-added accounts are shown before verification so you can deselect them.</div>
                 <div class="input-group"><textarea id="bkText" placeholder="name1@gmail.com abcd efgh ijkl mnop&#10;name2@gmail.com abcdefghijklmnop" autocomplete="off" spellcheck="false"></textarea></div>
-                <button type="button" class="btn btn-primary" id="bkBulkBtn"><i class="fa-solid fa-users-line"></i> Verify &amp; add all</button>
+                <button type="button" class="btn btn-primary" id="bkBulkPreviewBtn"><i class="fa-solid fa-list-check"></i> Preview list</button>
+
+                <div id="bkBulkPreviewBox" style="display:none; margin-top:10px;">
+                    <div class="bk-preview-meta" id="bkBulkMeta"></div>
+                    <div class="bk-check-actions">
+                        <button type="button" id="bkBulkChkAll">Select all</button>
+                        <button type="button" id="bkBulkChkNone">Deselect all</button>
+                        <button type="button" id="bkBulkChkNew">New only</button>
+                    </div>
+                    <div class="bk-checklist" id="bkBulkChecklist"></div>
+                    <button type="button" class="btn btn-primary" id="bkBulkBtn" style="margin-top:8px;">
+                        <i class="fa-solid fa-users-line"></i> Verify &amp; add selected
+                    </button>
+                </div>
             </div>
 
             <div id="bkResult" class="bk-result"></div>
@@ -1573,6 +1586,7 @@
                 const res = await fetch('/api/accounts-list');
                 if (!res.ok) return;
                 accountList = ((await res.json()).emails || []).map(x => String(x).toLowerCase());
+                window._accountList = accountList;   // bulk preview needs this
                 accountListLoaded = true;
                 renderHome();
                 if (accountsModalOpen()) renderAll();
@@ -3735,6 +3749,10 @@
             backupModal.classList.add('hidden');
             ['bkSettingsPw', 'bkFilePw', 'bkImportPw', 'bkText'].forEach((id) => { document.getElementById(id).value = ''; });
             document.getElementById('bkFile').value = '';
+            document.getElementById('bkPreviewBox').style.display = 'none';
+            document.getElementById('bkBulkPreviewBox').style.display = 'none';
+            bkBulkParsed = [];
+            bkPreviewFileText = null; bkPreviewPw = null;
             bkResult.textContent = '';
         }
         document.getElementById('backupCloseBtn').addEventListener('click', closeBackupModal);
@@ -3777,22 +3795,98 @@
             }
         });
 
-        document.getElementById('bkImportBtn').addEventListener('click', async () => {
-            const btn = document.getElementById('bkImportBtn');
+        // ---- Import: Preview then Confirm ----
+        let bkPreviewFileText = null, bkPreviewPw = null;
+
+        function bkRenderChecklist(items) {
+            const box = document.getElementById('bkChecklist');
+            box.innerHTML = '';
+            items.forEach((item, i) => {
+                const row = document.createElement('label');
+                row.className = 'bk-check-row';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.dataset.idx = i;
+                cb.checked = !item.exists;
+                const em = document.createElement('span');
+                em.className = 'bk-em';
+                em.textContent = item.email;
+                const badge = document.createElement('span');
+                badge.className = 'bk-badge ' + (item.exists ? 'bk-badge-exists' : 'bk-badge-new');
+                badge.textContent = item.exists ? 'Already added' : 'New';
+                row.append(cb, em, badge);
+                box.appendChild(row);
+            });
+        }
+
+        function bkChecklistItems() {
+            return Array.from(document.querySelectorAll('#bkChecklist input[type=checkbox]'));
+        }
+
+        document.getElementById('bkChkAll').addEventListener('click', () => {
+            bkChecklistItems().forEach((cb) => { cb.checked = true; });
+        });
+        document.getElementById('bkChkNone').addEventListener('click', () => {
+            bkChecklistItems().forEach((cb) => { cb.checked = false; });
+        });
+        document.getElementById('bkChkNew').addEventListener('click', () => {
+            document.querySelectorAll('#bkChecklist .bk-check-row').forEach((row) => {
+                const cb = row.querySelector('input');
+                const badge = row.querySelector('.bk-badge');
+                cb.checked = badge && badge.classList.contains('bk-badge-new');
+            });
+        });
+
+        document.getElementById('bkPreviewBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkPreviewBtn');
             const f = document.getElementById('bkFile').files[0];
             const pw = document.getElementById('bkImportPw').value;
             if (!f) return bkSay(['Choose a backup file first'], true);
             if (f.size > 1.5 * 1024 * 1024) return bkSay(['This file is too big to be a backup'], true);
             if (!pw) return bkSay(['Enter the backup password'], true);
-            btn.disabled = true;
+            btn.disabled = true; bkSay(['Reading backup file...']);
             try {
                 const text = await f.text();
-                const r = await bkPost('/api/backup/import', { file: text, backup_password: pw });
-                if (!r.ok) return bkSay([r.data.error || 'Import failed'], true);
+                const r = await bkPost('/api/backup/preview', { file: text, backup_password: pw });
+                if (!r.ok) { bkSay([r.data.error || 'Could not read backup'], true); return; }
+                bkPreviewFileText = text;
+                bkPreviewPw = pw;
+                const items = r.data.items || [];
+                const newCount = items.filter((x) => !x.exists).length;
+                const meta = document.getElementById('bkPreviewMeta');
+                const dt = r.data.exported_at ? new Date(r.data.exported_at).toLocaleString() : '';
+                meta.textContent = items.length + ' account(s) in backup' +
+                    (dt ? ' · exported ' + dt : '') +
+                    ' · ' + newCount + ' new, ' + (items.length - newCount) + ' already added';
+                bkRenderChecklist(items);
+                document.getElementById('bkPreviewBox').style.display = 'block';
+                bkSay([]);
+            } catch (err) {
+                bkSay(['Connection error'], true);
+            } finally {
+                btn.disabled = false;
+            }
+        });
+
+        document.getElementById('bkImportBtn').addEventListener('click', async () => {
+            const btn = document.getElementById('bkImportBtn');
+            if (!bkPreviewFileText || !bkPreviewPw) return bkSay(['Click "Preview accounts" first'], true);
+            const rows = Array.from(document.querySelectorAll('#bkChecklist .bk-check-row'));
+            const selected = rows.filter((row) => row.querySelector('input').checked)
+                                 .map((row) => row.querySelector('.bk-em').textContent.trim());
+            if (!selected.length) return bkSay(['Select at least one account'], true);
+            btn.disabled = true; bkSay(['Restoring ' + selected.length + ' account(s)...']);
+            try {
+                const r = await bkPost('/api/backup/import', {
+                    file: bkPreviewFileText, backup_password: bkPreviewPw, selected_emails: selected
+                });
+                if (!r.ok) { bkSay([r.data.error || 'Import failed'], true); return; }
                 const s = bkSummary(r.data);
                 bkSay(s.lines, false, s.extra);
                 document.getElementById('bkFile').value = '';
                 document.getElementById('bkImportPw').value = '';
+                document.getElementById('bkPreviewBox').style.display = 'none';
+                bkPreviewFileText = null; bkPreviewPw = null;
                 loadAccountList(); loadAccountCount();
             } catch (err) {
                 bkSay(['Connection error'], true);
@@ -3801,18 +3895,98 @@
             }
         });
 
+        // ---- Bulk add: preview then verify ----
+        let bkBulkParsed = [];   // [{email, password, exists}]
+
+        function bkBulkRender(items) {
+            const box = document.getElementById('bkBulkChecklist');
+            box.innerHTML = '';
+            items.forEach((item, i) => {
+                const row = document.createElement('label');
+                row.className = 'bk-check-row';
+                const cb = document.createElement('input');
+                cb.type = 'checkbox';
+                cb.dataset.idx = i;
+                cb.checked = !item.exists;
+                const em = document.createElement('span');
+                em.className = 'bk-em';
+                em.textContent = item.email;
+                const badge = document.createElement('span');
+                badge.className = 'bk-badge ' + (item.exists ? 'bk-badge-exists' : 'bk-badge-new');
+                badge.textContent = item.exists ? 'Already added' : 'New';
+                row.append(cb, em, badge);
+                box.appendChild(row);
+            });
+        }
+
+        function bkBulkSelected() {
+            return Array.from(document.querySelectorAll('#bkBulkChecklist input[type=checkbox]'))
+                        .filter((cb) => cb.checked)
+                        .map((cb) => parseInt(cb.dataset.idx));
+        }
+
+        document.getElementById('bkBulkChkAll').addEventListener('click', () => {
+            document.querySelectorAll('#bkBulkChecklist input').forEach((cb) => { cb.checked = true; });
+        });
+        document.getElementById('bkBulkChkNone').addEventListener('click', () => {
+            document.querySelectorAll('#bkBulkChecklist input').forEach((cb) => { cb.checked = false; });
+        });
+        document.getElementById('bkBulkChkNew').addEventListener('click', () => {
+            document.querySelectorAll('#bkBulkChecklist .bk-check-row').forEach((row) => {
+                const cb = row.querySelector('input');
+                const badge = row.querySelector('.bk-badge');
+                cb.checked = badge && badge.classList.contains('bk-badge-new');
+            });
+        });
+
+        document.getElementById('bkBulkPreviewBtn').addEventListener('click', () => {
+            const box = document.getElementById('bkText');
+            const raw = box.value;
+            if (!raw.trim()) return bkSay(['Paste at least one line: Gmail address and App Password'], true);
+            const lineRe = /^\s*([^\s,;:|]+@[^\s,;:|]+)[\s,;:|]+(.+?)\s*$/;
+            const existing = new Set((window._accountList || []).map((e) => String(e).toLowerCase()));
+            const parsed = [], badLines = [];
+            raw.split('\n').forEach((line, i) => {
+                if (!line.trim()) return;
+                const m = lineRe.exec(line);
+                if (m) parsed.push({ email: m[1].toLowerCase(), password: m[2], exists: existing.has(m[1].toLowerCase()), lineIdx: i + 1 });
+                else badLines.push(i + 1);
+            });
+            if (!parsed.length) {
+                bkSay(['No valid lines found. Format: email  app-password' + (badLines.length ? ' (bad lines: ' + badLines.join(', ') + ')' : '')], true);
+                return;
+            }
+            if (parsed.length > 30) return bkSay(['Too many accounts. Paste up to 30 at a time.'], true);
+            bkBulkParsed = parsed;
+            const newCount = parsed.filter((x) => !x.exists).length;
+            document.getElementById('bkBulkMeta').textContent =
+                parsed.length + ' line(s) · ' + newCount + ' new, ' + (parsed.length - newCount) + ' already added' +
+                (badLines.length ? ' · could not read line(s): ' + badLines.join(', ') : '');
+            bkBulkRender(parsed);
+            document.getElementById('bkBulkPreviewBox').style.display = 'block';
+            bkSay([]);
+        });
+
         document.getElementById('bkBulkBtn').addEventListener('click', async () => {
             const btn = document.getElementById('bkBulkBtn');
-            const box = document.getElementById('bkText');
-            if (!box.value.trim()) return bkSay(['Paste at least one line: Gmail address and App Password'], true);
+            const idxs = bkBulkSelected();
+            if (!idxs.length) return bkSay(['Select at least one account'], true);
+            const toAdd = idxs.map((i) => bkBulkParsed[i]).filter((x) => !x.exists);
+            if (!toAdd.length) return bkSay(['All selected accounts are already added'], true);
             btn.disabled = true;
-            bkSay(['Checking with Gmail, please wait...']);
+            bkSay(['Checking ' + toAdd.length + ' account(s) with Gmail, please wait...']);
             try {
-                const r = await bkPost('/api/bulk-add', { text: box.value });
-                if (!r.ok) return bkSay([r.data.error || 'Failed'], true);
-                const s = bkSummary(r.data);
-                bkSay(s.lines, false, s.extra);
-                if (!(r.data.failed && r.data.failed.length) && !(r.data.bad_lines && r.data.bad_lines.length)) box.value = '';
+                const lines = toAdd.map((x) => x.email + ' ' + x.password).join('\n');
+                const r = await bkPost('/api/bulk-add', { text: lines });
+                if (!r.ok) { bkSay([r.data.error || 'Failed'], true); return; }
+                const su = bkSummary(r.data);
+                bkSay(su.lines, false, su.extra);
+                const allOk = !(r.data.failed && r.data.failed.length) && !(r.data.bad_lines && r.data.bad_lines.length);
+                if (allOk) {
+                    document.getElementById('bkText').value = '';
+                    document.getElementById('bkBulkPreviewBox').style.display = 'none';
+                    bkBulkParsed = [];
+                }
                 loadAccountList(); loadAccountCount();
             } catch (err) {
                 bkSay(['Connection error'], true);
