@@ -1241,11 +1241,6 @@
 
             <div class="dash-grid">
             <div class="dash-side">
-            <div class="btn-row">
-                <button type="button" class="btn btn-wait" id="waitBtn">
-                    <i class="fa-solid fa-hourglass-start"></i> Wait for new code
-                </button>
-            </div>
             <div id="autoStatus" style="text-align:center; font-size:12px; opacity:0.65; margin-top:8px;">
                 <i class="fa-regular fa-clock"></i> Last updated: --
             </div>
@@ -1267,13 +1262,12 @@
             <div class="otp-container" id="otpContainer">
                 <div class="empty-state">
                     <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                    Click "Refresh OTPs" to load emails.
                 </div>
             </div>
 
             </div><!-- /dash-main -->
             <div class="dash-foot">
-                <div class="kbd-hint">R refresh &middot; W wait &middot; C copy &middot; / search &middot; Ctrl K quick find &middot; Esc close</div>
+                <div class="kbd-hint">C copy &middot; / search &middot; Ctrl K quick find &middot; Esc close</div>
                 <button type="button" class="btn btn-logout" onclick="logout()">
                     <i class="fa-solid fa-right-from-bracket"></i> Logout
                 </button>
@@ -1573,16 +1567,13 @@
             otpContainer.innerHTML = `
                 <div class="empty-state">
                     <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                    Click "Refresh OTPs" to load emails.
                 </div>`;
             loadAccountCount();
             ensurePush();
             loadAccountList();
             await syncPins();
             initAppFeatures();
-            if (launchAction === 'refresh') { launchAction = ''; fetchOTPs(); }
-            else if (launchAction === 'find') { launchAction = ''; openPalette(); }
-            else if (pinnedEmails.length && !hasLoaded && !isFetching) fetchOTPs(false, true);
+            if (launchAction === 'find') { launchAction = ''; openPalette(); }
         }
 
         async function fetchOTPs(silent = false, pinnedOnly = false) {
@@ -1993,7 +1984,7 @@
                 otpContainer.innerHTML = `
                     <div class="empty-state">
                         <i class="fa-solid fa-inbox" style="font-size: 24px; margin-bottom: 6px; display: block;"></i>
-                        ${none ? 'No Gmail accounts added yet.' : 'Click "Refresh OTPs" to load emails.'}
+                        ${none ? 'No Gmail accounts added yet.' : ''}
                     </div>`;
                 return;
             }
@@ -2291,7 +2282,6 @@
         }
 
         // ======================= Wait for new code =======================
-        const waitBtn = document.getElementById('waitBtn');
 
         function waitMatches(email) {
             // target / pin kora account-er code-i "notun code" hishebe dhora hoy; pin na thakle shob account
@@ -2317,18 +2307,6 @@
                 b.innerHTML = waitCardInner(on, left);
             });
         }
-        function setWaitBtn(left) {
-            if (!waiting) {
-                waitBtn.classList.remove('active');
-                waitBtn.innerHTML = '<i class="fa-solid fa-hourglass-start"></i> Wait for new code';
-                return;
-            }
-            waitBtn.classList.add('active');
-            const tgt = waiting.email
-                ? ` &middot; <span class="wtarget">${escAttr(waiting.email)}</span>`
-                : (waiting.emails ? ` &middot; ${waiting.emails.length} pinned` : '');
-            waitBtn.innerHTML = `<i class="fa-solid fa-spinner rotating"></i> Waiting ${fmtLeft(left)}${tgt} &middot; cancel`;
-        }
         // email dile -> shudhu sei ekta account (onek druto)
         // email na dile -> pin kora account gulo; kono pin na thakle shob account (age-r moto)
         function startWaiting(email = null) {
@@ -2337,7 +2315,6 @@
             const target = email ? String(email).toLowerCase() : null;
             const emails = target ? [target] : (pinnedEmails.length ? [...pinnedEmails] : null);   // null = shob account
             waiting = { email: target, emails, endsAt: Date.now() + WAIT_SECONDS * 1000, tick: null, poll: null };
-            setWaitBtn(WAIT_SECONDS);
             syncWaitCards();
             waiting.tick = setInterval(() => {
                 if (!waiting) return;
@@ -2348,7 +2325,6 @@
                     showToast('No new code arrived' + scope);
                     return;
                 }
-                setWaitBtn(left);
                 syncWaitCards();
             }, 1000);
             // ekta account: push chalu thakle 10s, nahole 3s. Pin / shob account: push chalu thakle 20s, nahole 5s.
@@ -2367,11 +2343,9 @@
             clearInterval(waiting.tick);
             clearTimeout(waiting.poll);
             waiting = null;
-            setWaitBtn(0);
             syncWaitCards();
             if (found) alertNewCode(email);
         }
-        waitBtn.addEventListener('click', () => { waiting ? stopWaiting(false) : startWaiting(); });
         document.addEventListener('click', (e) => {
             const b = e.target.closest('.card-wait');
             if (!b) return;
@@ -3651,8 +3625,7 @@
             es.addEventListener('hello', () => {
                 pushConnected = true;
                 updateLive();
-                // beshi somoy connection na thakle ei fake-e asha notun code miss hote pare -> ekbar sync
-                if (helloCount++ > 0 && lastDisconnectAt && Date.now() - lastDisconnectAt > 20000) fetchOTPs(true);
+                helloCount++;
                 lastDisconnectAt = 0;
             });
             es.addEventListener('otp', (ev) => {
@@ -3695,7 +3668,7 @@
                     showMessage(result.message || "Account added!");
                     addAccountForm.reset();
                     settingsPopup.classList.remove('active');
-                    fetchOTPs();
+                    loadAccountList();
                 } else {
                     showMessage(result.error || "Failed", true);
                 }
@@ -4105,13 +4078,7 @@
             }
             if (typingInField(e.target) || accountsModalOpen()) return;
             const k = e.key.toLowerCase();
-            if (k === 'r') {
-                e.preventDefault();
-                fetchOTPs();
-            } else if (k === 'w') {
-                e.preventDefault();
-                waiting ? stopWaiting(false) : startWaiting();
-            } else if (k === 'c') {
+            if (k === 'c') {
                 const first = allItems.find(i => isValidItem(i) && i.expiresAt > Date.now());
                 if (first) { e.preventDefault(); copyOTP(first.code); }
                 else showToast('No active code to copy');
@@ -4319,8 +4286,6 @@
         }
         function paletteActions() {
             return [
-                { icon: 'fa-rotate-right', label: 'Refresh OTPs', kw: 'refresh reload check', run: () => fetchOTPs() },
-                { icon: 'fa-hourglass-start', label: waiting ? 'Cancel waiting' : 'Wait for new code', kw: 'wait new code', run: () => (waiting ? stopWaiting(false) : startWaiting()) },
                 { icon: 'fa-envelope', label: 'Open all Gmail accounts', kw: 'accounts list gmail', run: () => openAccountsModal() },
                 { icon: THEME_ICON[themePref()], label: 'Switch theme', kw: 'theme dark light auto', run: cycleTheme },
                 { icon: 'fa-copy', label: 'Turn auto-copy ' + (autoCopyOn ? 'off' : 'on'), kw: 'auto copy', run: () => autoCopyBtn.click() },
@@ -4450,7 +4415,6 @@
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => { navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {}); });
             navigator.serviceWorker.addEventListener('message', (e) => {
-                if (e.data && e.data.type === 'otp-click' && dashboardIsOpen()) fetchOTPs(true);
                 if (e.data && e.data.type === 'app-updated') showToast('App updated - reload to use the new version');
             });
         }
@@ -4483,7 +4447,6 @@
         window.addEventListener('online', () => {
             updateOnline();
             showToast('Back online');
-            if (dashboardIsOpen() && hasLoaded) fetchOTPs(true);
         });
         updateOnline();
 
@@ -4660,7 +4623,7 @@
                     el.querySelector('i').className = 'fa-solid fa-rotate-right rotating';
                     el.style.transition = 'transform 0.2s ease';
                     el.style.transform = 'translate(-50%, 18px)';
-                    Promise.resolve(fetchOTPs()).finally(() => {
+                    Promise.resolve().finally(() => {
                         hide();
                         setTimeout(() => { el.querySelector('i').className = 'fa-solid fa-arrow-down'; }, 250);
                     });
