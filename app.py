@@ -1210,7 +1210,9 @@ def _push_supervisor():
     """Prottek 30 sekende account list milay: notun hole watcher shuru, delete/password-badol hole bondho."""
     while True:
         try:
-            accs = {x["email"]: x for x in load_accounts()}
+            # shudhu pin kora account gulo watch hobe -- shob Gmail-e ekshathe connection khola hobe na
+            pinned = {_norm_email(e) for e in _read_pins()} if prefs_collection is not None else set()
+            accs = {x["email"]: x for x in load_accounts() if _norm_email(x["email"]) in pinned}
             for email, w in list(_watchers.items()):
                 if email not in accs or accs[email]["password"] != w["password"] or not w["thread"].is_alive():
                     _stop_watcher(w)
