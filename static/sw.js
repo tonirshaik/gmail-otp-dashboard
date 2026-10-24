@@ -2,10 +2,12 @@
    - app shell offline-e kaj kore (login page + shell)
    - /api/* KOKHONO cache hoy na (OTP private data)
    - Web Push: tab/app bondho thakleo notification dekhay */
-const VERSION = 'v1';
+const VERSION = 'v3';
 const SHELL_CACHE = 'otp-shell-' + VERSION;
 const ASSET_CACHE = 'otp-assets-' + VERSION;
-const SHELL = ['/', '/manifest.webmanifest', '/static/icons/icon-192.png', '/static/icons/icon-512.png'];
+const SHELL = ['/', '/manifest.webmanifest', '/static/icons/icon-192.png', '/static/icons/icon-512.png',
+               '/static/icons/favicon-32.png', '/static/icons/apple-touch-icon.png',
+               '/static/jsQR.min.js', '/static/brands.js'];
 const CDN_HOSTS = ['fonts.googleapis.com', 'fonts.gstatic.com', 'cdnjs.cloudflare.com'];
 
 self.addEventListener('install', (event) => {
@@ -38,6 +40,32 @@ function staleWhileRevalidate(request, cacheName) {
     );
 }
 
+/* App kholar somoy: cache theke SOJA SOJA dekhay (network-er jonno opekkha kore na), pichone notun version ene rakhe.
+   Notun version alada hole page-ke janiye dey ("app-updated"). Login/OTP data /api theke ashe -- ota cache hoy na. */
+async function notifyUpdated() {
+    const list = await self.clients.matchAll({ type: 'window' });
+    list.forEach((c) => c.postMessage({ type: 'app-updated' }));
+}
+
+function instantPage(event) {
+    const request = event.request;
+    const refresh = fetch(request).then(async (res) => {
+        if (res && res.ok && !res.redirected) {
+            const cache = await caches.open(SHELL_CACHE);
+            const old = await cache.match('/');
+            let changed = false;
+            if (old) {
+                try { changed = (await old.clone().text()) !== (await res.clone().text()); } catch (e) {}
+            }
+            await cache.put('/', res.clone());
+            if (changed) notifyUpdated();
+        }
+        return res;
+    });
+    event.waitUntil(refresh.catch(() => {}));
+    return caches.match('/').then((hit) => hit || refresh.catch(() => Response.error()));
+}
+
 function networkFirstPage(request) {
     return fetch(request)
         .then((res) => {
@@ -56,7 +84,10 @@ self.addEventListener('fetch', (event) => {
     const url = new URL(req.url);
     if (url.origin === self.location.origin) {
         if (url.pathname.startsWith('/api/')) return;              // private data: kokhono cache na
-        if (req.mode === 'navigate') { event.respondWith(networkFirstPage(req)); return; }
+        if (req.mode === 'navigate') {
+            event.respondWith(url.pathname === '/' ? instantPage(event) : networkFirstPage(req));
+            return;
+        }
         if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.webmanifest') {
             event.respondWith(staleWhileRevalidate(req, SHELL_CACHE));
         }
