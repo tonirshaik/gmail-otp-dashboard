@@ -2,7 +2,7 @@
    - app shell offline-e kaj kore (login page + shell)
    - /api/* KOKHONO cache hoy na (OTP private data)
    - Web Push: tab/app bondho thakleo notification dekhay */
-const VERSION = 'v3';
+const VERSION = 'v4';
 const SHELL_CACHE = 'otp-shell-' + VERSION;
 const ASSET_CACHE = 'otp-assets-' + VERSION;
 const SHELL = ['/', '/manifest.webmanifest', '/static/icons/icon-192.png', '/static/icons/icon-512.png',
@@ -40,42 +40,45 @@ function staleWhileRevalidate(request, cacheName) {
     );
 }
 
-/* App kholar somoy: cache theke SOJA SOJA dekhay (network-er jonno opekkha kore na), pichone notun version ene rakhe.
-   Notun version alada hole page-ke janiye dey ("app-updated"). Login/OTP data /api theke ashe -- ota cache hoy na. */
+/* Notun version pele page-ke janai */
 async function notifyUpdated() {
     const list = await self.clients.matchAll({ type: 'window' });
     list.forEach((c) => c.postMessage({ type: 'app-updated' }));
 }
 
-function instantPage(event) {
-    const request = event.request;
-    const refresh = fetch(request).then(async (res) => {
+/* NETWORK-FIRST (timeout shoho):
+   - network theke ms-er moddhe uttor ashle SEITAI dekhay (mane shobshomoy notun version) + cache update kore
+   - net slow/offline hole cache theke dekhay, ar pichone notun ta ene rekhe page-ke "app-updated" janay
+   Age ekhane stale-while-revalidate chilo -- tai prottekbar ekta version pichone thakto. */
+async function networkFirst(event, key, ms, isPage) {
+    const req = event.request;
+    const cache = await caches.open(SHELL_CACHE);
+    let timedOut = false;
+
+    const network = (isPage ? fetch(req) : fetch(req.url, { cache: 'no-cache' })).then(async (res) => {
         if (res && res.ok && !res.redirected) {
-            const cache = await caches.open(SHELL_CACHE);
-            const old = await cache.match('/');
             let changed = false;
-            if (old) {
-                try { changed = (await old.clone().text()) !== (await res.clone().text()); } catch (e) {}
+            if (timedOut && isPage) {
+                const old = await cache.match(key);
+                if (old) {
+                    try { changed = (await old.clone().text()) !== (await res.clone().text()); } catch (e) {}
+                }
             }
-            await cache.put('/', res.clone());
+            await cache.put(key, res.clone());
             if (changed) notifyUpdated();
         }
         return res;
     });
-    event.waitUntil(refresh.catch(() => {}));
-    return caches.match('/').then((hit) => hit || refresh.catch(() => Response.error()));
-}
+    event.waitUntil(network.catch(() => {}));            // SW beche thakbe jotokkhon cache update na hoy
 
-function networkFirstPage(request) {
-    return fetch(request)
-        .then((res) => {
-            if (res && res.ok && !res.redirected) {
-                const copy = res.clone();
-                caches.open(SHELL_CACHE).then((c) => c.put('/', copy));
-            }
-            return res;
-        })
-        .catch(() => caches.match('/').then((hit) => hit || Response.error()));
+    const timer = new Promise((resolve) => setTimeout(() => resolve(null), ms));
+    const first = await Promise.race([network.catch(() => null), timer]);
+    if (first) return first;
+
+    timedOut = true;
+    const hit = await cache.match(key);
+    if (hit) return hit;
+    return network.catch(() => Response.error());
 }
 
 self.addEventListener('fetch', (event) => {
@@ -85,11 +88,12 @@ self.addEventListener('fetch', (event) => {
     if (url.origin === self.location.origin) {
         if (url.pathname.startsWith('/api/')) return;              // private data: kokhono cache na
         if (req.mode === 'navigate') {
-            event.respondWith(url.pathname === '/' ? instantPage(event) : networkFirstPage(req));
+            event.respondWith(url.pathname === '/' ? networkFirst(event, '/', 4000, true)
+                                                   : fetch(req).catch(() => caches.match('/').then((h) => h || Response.error())));
             return;
         }
         if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.webmanifest') {
-            event.respondWith(staleWhileRevalidate(req, SHELL_CACHE));
+            event.respondWith(networkFirst(event, req.url, 3000, false));
         }
         return;
     }
