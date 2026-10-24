@@ -1282,7 +1282,20 @@
                 <div class="bk-note">Choose a backup file and enter its password. Accounts that already exist are skipped.</div>
                 <div class="input-group"><input type="file" id="bkFile" accept=".otpbak,.json,application/json"></div>
                 <div class="input-group"><input type="password" id="bkImportPw" placeholder="Backup password" autocomplete="off"></div>
-                <button type="button" class="btn btn-primary" id="bkImportBtn"><i class="fa-solid fa-file-arrow-up"></i> Restore accounts</button>
+                <button type="button" class="btn btn-primary" id="bkPreviewBtn"><i class="fa-solid fa-list-check"></i> Preview accounts</button>
+
+                <div id="bkPreviewBox" style="display:none; margin-top:10px;">
+                    <div class="bk-preview-meta" id="bkPreviewMeta"></div>
+                    <div class="bk-check-actions">
+                        <button type="button" id="bkChkAll">Select all</button>
+                        <button type="button" id="bkChkNone">Deselect all</button>
+                        <button type="button" id="bkChkNew">New only</button>
+                    </div>
+                    <div class="bk-checklist" id="bkChecklist"></div>
+                    <button type="button" class="btn btn-primary" id="bkImportBtn" style="margin-top:8px;">
+                        <i class="fa-solid fa-file-arrow-up"></i> Restore selected accounts
+                    </button>
+                </div>
             </div>
 
             <div class="bk-sec">
@@ -1595,6 +1608,7 @@
 
         // Login-er por: shudhu PIN kora account gulo auto check hoy. Kono pin na thakle kichui check hoy na
         // (Refresh OTPs / card-er refresh chapte hobe).
+        let launchAction = '';
         async function onLoggedIn() {
             loadTfaStatus();
             otpContainer.innerHTML = '';
@@ -4723,7 +4737,6 @@
         const withTimeout = (p, ms) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Timed out')), ms))]);
 
         // app icon-e long-press shortcut: /?action=find  (login-er por kaj kore)
-        let launchAction = '';
         try {
             const a = new URLSearchParams(location.search).get('action');
             if (a === 'find') launchAction = a;
