@@ -2498,6 +2498,193 @@ def add_account():
 
     return jsonify({"message": "Account verified and added!"})
 
+# ======================= Backup / Import / Bulk add =======================
+# Backup file: shob Gmail + App Password ekta password diye ENCRYPT kora (PBKDF2-SHA256 + Fernet/AES).
+# File-er password server-e save hoy na -- bhule gele file khola jabe na.
+import concurrent.futures
+
+BACKUP_KDF_ITER = 600000
+BACKUP_MAX_ACCOUNTS = 500        # ekta backup file-e max
+BULK_VERIFY_MAX = 30             # paste kora list-e Gmail-e login kore dekhbe, tai ekbare max 30
+_EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[^@\s]+")
+_BULK_LINE_RE = re.compile(r"^\s*([^\s,;:|]+@[^\s,;:|]+)[\s,;:|]+(.+?)\s*$")
+
+def _backup_key(password, salt, iters):
+    raw = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, iters, dklen=32)
+    return base64.urlsafe_b64encode(raw)
+
+def _verify_gmail_login(email_addr, pw):
+    """Thik hole None, nahole chhoto karon (string)."""
+    try:
+        m = _imap_login({"email": email_addr, "password": pw})
+        try:
+            m.logout()
+        except Exception:
+            pass
+        return None
+    except Exception as e:
+        reason = _error_reason(e)
+        if reason.startswith("Login failed"):
+            return "Login failed - check App Password"
+        return "Could not verify with Gmail - try again"
+
+def _save_accounts(items, verify):
+    """items = [(email, app_password)]. Already thaka account skip kore. Password kokhono response-e jay na."""
+    seen, clean = set(), []
+    invalid = 0
+    for em, pw in items:
+        em = str(em or '').strip().lower()
+        pw = re.sub(r"\s+", "", str(pw or ''))
+        if not _EMAIL_RE.fullmatch(em) or not pw:
+            invalid += 1
+            continue
+        if em in seen:
+            continue
+        seen.add(em)
+        clean.append((em, pw))
+
+    existing = {d.get('email') for d in accounts_collection.find({}, {'_id': 0, 'email': 1})}
+    todo = [(em, pw) for em, pw in clean if em not in existing]
+    skipped = [em for em, _ in clean if em in existing]
+
+    failed, ok = [], []
+    if verify and todo:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as pool:
+            futs = {pool.submit(_verify_gmail_login, em, pw): (em, pw) for em, pw in todo}
+            for f in concurrent.futures.as_completed(futs):
+                em, pw = futs[f]
+                try:
+                    err = f.result()
+                except Exception:
+                    err = "Could not verify with Gmail - try again"
+                if err:
+                    failed.append({"email": em, "reason": err})
+                else:
+                    ok.append((em, pw))
+    else:
+        ok = todo
+
+    added = 0
+    for em, pw in ok:
+        try:
+            accounts_collection.insert_one({"email": em, "password": pw, "created_at": datetime.now()})
+            added += 1
+        except Exception as e:
+            print(f"Bulk insert error: {type(e).__name__}")
+            failed.append({"email": em, "reason": "Could not save"})
+    return {"added": added, "skipped": skipped, "failed": failed, "invalid": invalid}
+
+def _bulk_guard():
+    """logged_in + settings unlock + DB. Thik hole None, nahole (response, status)."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not session.get('settings_unlocked'):
+        return jsonify({"error": "Settings locked. Unlock first."}), 403
+    if accounts_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    return None
+
+@app.route('/api/bulk-add', methods=['POST'])
+def bulk_add():
+    bad = _bulk_guard()
+    if bad:
+        return bad
+    if not _rate_ok('bulk-add', 6, 600):
+        return jsonify({"error": "Too many tries. Wait a few minutes."}), 429
+    text = str((request.json or {}).get('text') or '')
+    if len(text) > 20000:
+        return jsonify({"error": "List is too long"}), 400
+    items, bad_lines = [], []
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.strip():
+            continue
+        m = _BULK_LINE_RE.match(line)
+        if m:
+            items.append((m.group(1), m.group(2)))
+        else:
+            bad_lines.append(n)
+    if not items and not bad_lines:
+        return jsonify({"error": "Paste at least one line: email and App Password"}), 400
+    if len(items) > BULK_VERIFY_MAX:
+        return jsonify({"error": f"Add up to {BULK_VERIFY_MAX} accounts at once (each one is checked with Gmail). Use a backup file for more."}), 400
+    res = _save_accounts(items, verify=True)
+    res["bad_lines"] = bad_lines
+    return _no_store(jsonify(res))
+
+@app.route('/api/backup/export', methods=['POST'])
+def backup_export():
+    bad = _bulk_guard()
+    if bad:
+        return bad
+    if Fernet is None:
+        return jsonify({"error": "Backup is not available (cryptography is not installed on the server)"}), 503
+    data = request.json or {}
+    pwbad = _settings_pw_check(data)          # prottek bar settings password
+    if pwbad:
+        return pwbad
+    if not _rate_ok('backup-export', 5, 600):
+        return jsonify({"error": "Too many tries. Wait a few minutes."}), 429
+    bpw = str(data.get('backup_password') or '')
+    if len(bpw) < 8:
+        return jsonify({"error": "Backup password must be at least 8 characters"}), 400
+    if len(bpw) > 200:
+        return jsonify({"error": "Backup password is too long"}), 400
+    try:
+        docs = list(accounts_collection.find({}, {'_id': 0, 'email': 1, 'password': 1}))
+        accounts = [{"email": d['email'], "password": d['password']} for d in docs if d.get('email') and d.get('password')]
+        payload = json.dumps({"app": "gmail-otp-dashboard", "exported_at": datetime.now(timezone.utc).isoformat(),
+                              "accounts": accounts}).encode('utf-8')
+        salt = os.urandom(16)
+        token = Fernet(_backup_key(bpw, salt, BACKUP_KDF_ITER)).encrypt(payload).decode()
+        blob = {"v": 1, "kdf": "pbkdf2-sha256", "iter": BACKUP_KDF_ITER,
+                "salt": base64.b64encode(salt).decode(), "data": token}
+    except Exception as e:
+        print(f"Backup export error: {type(e).__name__}")
+        return jsonify({"error": "Could not create the backup"}), 500
+    resp = Response(json.dumps(blob).encode('utf-8'), mimetype='application/octet-stream')
+    resp.headers['Content-Disposition'] = 'attachment; filename="otp-backup-%s.otpbak"' % datetime.now().strftime('%Y%m%d-%H%M')
+    resp.headers['X-Backup-Count'] = str(len(accounts))
+    return _no_store(resp)
+
+@app.route('/api/backup/import', methods=['POST'])
+def backup_import():
+    bad = _bulk_guard()
+    if bad:
+        return bad
+    if Fernet is None:
+        return jsonify({"error": "Backup is not available (cryptography is not installed on the server)"}), 503
+    if (request.content_length or 0) > 2 * 1024 * 1024:
+        return jsonify({"error": "File is too big"}), 413
+    if not _rate_ok('backup-import', 8, 600):
+        return jsonify({"error": "Too many tries. Wait a few minutes."}), 429
+    data = request.json or {}
+    bpw = str(data.get('backup_password') or '')
+    try:
+        blob = json.loads(str(data.get('file') or ''))
+        if blob.get('v') != 1:
+            raise ValueError("version")
+        iters = int(blob['iter'])
+        if not (100000 <= iters <= 2000000):
+            raise ValueError("iter")
+        salt = base64.b64decode(blob['salt'])
+        token = str(blob['data']).encode()
+    except Exception:
+        return jsonify({"error": "This is not a valid backup file"}), 400
+    if not bpw:
+        return jsonify({"error": "Enter the backup password"}), 400
+    try:
+        payload = json.loads(Fernet(_backup_key(bpw, salt, iters)).decrypt(token).decode('utf-8'))
+        items = [(a.get('email'), a.get('password')) for a in payload.get('accounts', []) if isinstance(a, dict)]
+    except InvalidToken:
+        return jsonify({"error": "Wrong backup password, or the file is damaged"}), 400
+    except Exception:
+        return jsonify({"error": "Could not read the backup file"}), 400
+    if len(items) > BACKUP_MAX_ACCOUNTS:
+        return jsonify({"error": "Too many accounts in this file"}), 400
+    res = _save_accounts(items, verify=False)      # backup-er account age-i verify kora, tai ekhane abar login check na
+    res["total"] = len(items)
+    return _no_store(jsonify(res))
+
 # ---------------- Settings unlock (server-side) ----------------
 @app.route('/api/settings-unlock', methods=['POST'])
 def settings_unlock():
