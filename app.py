@@ -2646,6 +2646,53 @@ def backup_export():
     resp.headers['X-Backup-Count'] = str(len(accounts))
     return _no_store(resp)
 
+@app.route('/api/backup/preview', methods=['POST'])
+def backup_preview():
+    # Backup file decrypt kore shudhu email list pathay
+    # App Password / password response-e kono obosthay jay na
+    bad = _bulk_guard()
+    if bad:
+        return bad
+    if Fernet is None:
+        return jsonify({"error": "Backup is not available (cryptography is not installed on the server)"}), 503
+    if (request.content_length or 0) > 2 * 1024 * 1024:
+        return jsonify({"error": "File is too big"}), 413
+    if not _rate_ok("backup-preview", 12, 600):
+        return jsonify({"error": "Too many tries. Wait a few minutes."}), 429
+    data = request.json or {}
+    bpw = str(data.get("backup_password") or "")
+    try:
+        blob = json.loads(str(data.get("file") or ""))
+        if blob.get("v") != 1:
+            raise ValueError("version")
+        iters = int(blob["iter"])
+        if not (100000 <= iters <= 2000000):
+            raise ValueError("iter")
+        salt = base64.b64decode(blob["salt"])
+        token = str(blob["data"]).encode()
+    except Exception:
+        return jsonify({"error": "This is not a valid backup file"}), 400
+    if not bpw:
+        return jsonify({"error": "Enter the backup password"}), 400
+    try:
+        payload = json.loads(Fernet(_backup_key(bpw, salt, iters)).decrypt(token).decode("utf-8"))
+        emails_in_file = [
+            str(a.get("email", "")).strip().lower()
+            for a in payload.get("accounts", [])
+            if isinstance(a, dict) and a.get("email")
+        ]
+    except InvalidToken:
+        return jsonify({"error": "Wrong backup password, or the file is damaged"}), 400
+    except Exception:
+        return jsonify({"error": "Could not read the backup file"}), 400
+    if len(emails_in_file) > BACKUP_MAX_ACCOUNTS:
+        return jsonify({"error": "Too many accounts in this file"}), 400
+    existing = {d.get("email") for d in accounts_collection.find({}, {"_id": 0, "email": 1})}
+    items = [{"email": em, "exists": em in existing} for em in emails_in_file]
+    exported_at = payload.get("exported_at", "")
+    return _no_store(jsonify({"items": items, "exported_at": exported_at}))
+
+
 @app.route('/api/backup/import', methods=['POST'])
 def backup_import():
     bad = _bulk_guard()
@@ -2674,15 +2721,21 @@ def backup_import():
         return jsonify({"error": "Enter the backup password"}), 400
     try:
         payload = json.loads(Fernet(_backup_key(bpw, salt, iters)).decrypt(token).decode('utf-8'))
-        items = [(a.get('email'), a.get('password')) for a in payload.get('accounts', []) if isinstance(a, dict)]
+        all_items = [(a.get('email'), a.get('password')) for a in payload.get('accounts', []) if isinstance(a, dict)]
     except InvalidToken:
         return jsonify({"error": "Wrong backup password, or the file is damaged"}), 400
     except Exception:
         return jsonify({"error": "Could not read the backup file"}), 400
-    if len(items) > BACKUP_MAX_ACCOUNTS:
+    if len(all_items) > BACKUP_MAX_ACCOUNTS:
         return jsonify({"error": "Too many accounts in this file"}), 400
+    selected = data.get("selected_emails")   # None mane shob, list mane shudhu oi gulo
+    if isinstance(selected, list) and selected:
+        sel_set = {str(e).strip().lower() for e in selected}
+        items = [(em, pw) for em, pw in all_items if str(em or '').strip().lower() in sel_set]
+    else:
+        items = all_items
     res = _save_accounts(items, verify=False)      # backup-er account age-i verify kora, tai ekhane abar login check na
-    res["total"] = len(items)
+    res["total"] = len(all_items)
     return _no_store(jsonify(res))
 
 # ---------------- Settings unlock (server-side) ----------------
