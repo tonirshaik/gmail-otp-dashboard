@@ -568,11 +568,28 @@
         }
         .otp-card.expiring .ring-fg { stroke: var(--accent-red); }
 
-        /* ---- countdown bar (amber -> teal, kome jay) ---- */
-        .tbar { flex: 1; min-width: 36px; height: 6px; border-radius: 999px; background: #272d35; overflow: hidden; }
-        .tbar-fill { display: block; height: 100%; width: 0; border-radius: 999px; background: linear-gradient(90deg, #cba96b, #5ed5c6); transition: width 1s linear; }
-        :root[data-theme="light"] .tbar { background: rgba(15, 23, 42, 0.1); }
-        .otp-card.expiring .tbar-fill, .tfa-box.warn .tbar-fill, .svc-item.warn .tbar-fill { background: linear-gradient(90deg, #f59e0b, #ef4444); }
+        /* ---- countdown bar ---- */
+        .tbar {
+            flex: 1; min-width: 36px; height: 14px; border-radius: 4px; overflow: hidden;
+            background: repeating-linear-gradient(90deg, rgba(148, 163, 184, 0.14) 0 1px, transparent 1px 11px, rgba(148, 163, 184, 0.14) 11px 12px, transparent 12px 15px), #10131a;
+            -webkit-mask: repeating-linear-gradient(90deg, #000 0 12px, transparent 12px 15px);
+            mask: repeating-linear-gradient(90deg, #000 0 12px, transparent 12px 15px);
+        }
+        .tbar-fill {
+            position: relative; display: block; height: 100%; width: 0; border-radius: 4px;
+            background: linear-gradient(90deg, #7c3aed, #3b82f6, #22d3ee); transition: width 1s linear;
+        }
+        .tbar-fill::after {
+            content: ""; position: absolute; top: 1px; right: 0; bottom: 1px; width: 2px;
+            background: #fff; box-shadow: 0 0 5px 2px rgba(255, 255, 255, 0.8);
+        }
+        :root[data-theme="light"] .tbar {
+            background: repeating-linear-gradient(90deg, rgba(15, 23, 42, 0.16) 0 1px, transparent 1px 11px, rgba(15, 23, 42, 0.16) 11px 12px, transparent 12px 15px), #e2e8f0;
+        }
+        .otp-card.expiring .tbar-fill, .tfa-box.warn .tbar-fill, .svc-item.warn .tbar-fill { background: linear-gradient(90deg, #ef4444, #f87171); }
+        .otp-card.expiring .tbar-fill::after, .tfa-box.warn .tbar-fill::after, .svc-item.warn .tbar-fill::after {
+            background: #fff1f2; box-shadow: 0 0 5px 2px rgba(255, 228, 230, 0.85);
+        }
         @media (prefers-reduced-motion: reduce) { .tbar-fill { transition: none; } }
 
         /* ---- skeleton loader ---- */
