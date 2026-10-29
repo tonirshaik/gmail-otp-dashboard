@@ -1,4 +1,4 @@
-        :root {
+:root {
             --bg-color: #0b0f19;
             --card-bg: rgba(18, 24, 38, 0.75);
             --card-border: rgba(255, 255, 255, 0.08);
@@ -1083,6 +1083,14 @@
         .svc-list .otp-swipe { margin-bottom: 0; }
         .svc-head { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
         .svc-av { width: 38px; height: 38px; border-radius: 12px; flex: none; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 16px; color: #fff; }
+        /* asol favicon: prothome akkhor, favicon load hole tar upor white tile-e fute othe (mail avatar-er moto) */
+        .svc-av { position: relative; overflow: hidden; }
+        .svc-av img { position: absolute; inset: 0; width: 100%; height: 100%; box-sizing: border-box; object-fit: contain; padding: 7px; background: #fff; opacity: 0; transition: opacity 0.2s ease; }
+        .svc-av.img-ok img { opacity: 1; }
+        .svc-name-row { display: flex; align-items: center; gap: 10px; }
+        .svc-name-row .tfa-input { flex: 1; min-width: 0; width: auto; }
+        .svc-prev { flex: none; }
+        .svc-prev:empty { display: none; }
         .svc-info { flex: 1; min-width: 0; }
         .svc-name { font-weight: 700; font-size: 14px; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .svc-label { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
