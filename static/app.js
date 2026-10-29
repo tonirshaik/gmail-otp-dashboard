@@ -1745,9 +1745,9 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             zoho: 'zoho.com', ovh: 'ovhcloud.com', vultr: 'vultr.com', linode: 'linode.com', porkbun: 'porkbun.com',
             mailchimp: 'mailchimp.com', hubspot: 'hubspot.com', zendesk: 'zendesk.com', wetransfer: 'wetransfer.com'
         };
-        const SVC_LOGO_KEY = 'otpDash.svcLogo.v3';
+        const SVC_LOGO_KEY = 'otpDash.svcLogo.v4';
         const SVC_LOGO_MISS_MS = 24 * 3600 * 1000;              // "pawa gelo na" -- 1 din pore abar chesta
-        let svcLogoCache = {};                                  // { "nam": { d: "domain" ba "", t: somoy } }
+        let svcLogoCache = {};                                  // { "nam": { u: "logo-r link" ba "", t: somoy } }
         try { svcLogoCache = JSON.parse(localStorage.getItem(SVC_LOGO_KEY) || '{}') || {}; } catch (e) { svcLogoCache = {}; }
         const svcLogoBusy = {};
         function svcLogoSave() {
@@ -1756,10 +1756,20 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             try { localStorage.setItem(SVC_LOGO_KEY, JSON.stringify(svcLogoCache)); } catch (e) {}
         }
         function svcSlug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-        function svcFavUrl(domain) { return 'https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&size=128&url=' + encodeURIComponent('https://' + domain); }
-        function svcCachedDomain(name) {
+        // Ek domain-er logo-r shombhabbo utsho (priority onujayi). min = ei-tuku chowra na hole dhorbo na.
+        // Google/DuckDuckGo favicon na pele ekta chhoto (16px) default globe pathay -- seta lukhano jay na, tai size dekhei bad dei.
+        function svcIconSources(domain) {
+            const d = encodeURIComponent(domain);
+            return [
+                { u: 'https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=' + encodeURIComponent('https://' + domain), min: 32 },
+                { u: 'https://' + domain + '/apple-touch-icon.png', min: 48 },
+                { u: 'https://www.google.com/s2/favicons?sz=128&domain=' + d, min: 32 },
+                { u: 'https://' + domain + '/favicon.ico', min: 16 }
+            ];
+        }
+        function svcCachedUrl(name) {
             const h = svcLogoCache[String(name || '').trim().toLowerCase()];
-            return h && h.d ? h.d : '';
+            return h && h.u ? h.u : '';
         }
         function svcDomainCandidates(name, b) {
             const nm = String(name || '').trim(), out = [];
@@ -1780,30 +1790,36 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             }
             return out.filter((d, i) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) && out.indexOf(d) === i);
         }
-        function svcProbe(domain) {                              // ei domain-er favicon ache kina
+        function svcProbe(src) {                                 // ei link-e asol (boro) chhobi ache kina
             return new Promise((res) => {
                 const im = new Image();
                 let done = false;
                 const fin = (ok) => { if (done) return; done = true; clearTimeout(t); res(ok); };
                 const t = setTimeout(() => fin(false), 6000);
                 im.referrerPolicy = 'no-referrer';
-                im.onload = () => fin(im.naturalWidth > 1);
+                im.onload = () => fin(im.naturalWidth >= src.min && im.naturalHeight >= src.min);
                 im.onerror = () => fin(false);
-                im.src = svcFavUrl(domain);
+                im.src = src.u;
             });
         }
-        function svcLogoFor(name) {                              // -> Promise<domain ba ''>
+        async function svcFindIcon(domain) {                     // shob utsho ekshathe chheshta, priority-te prothom je pass kore seta
+            const srcs = svcIconSources(domain);
+            const results = srcs.map(svcProbe);
+            for (let i = 0; i < srcs.length; i++) { if (await results[i]) return srcs[i].u; }
+            return '';
+        }
+        function svcLogoFor(name) {                              // -> Promise<logo-r link ba ''>
             const key = String(name || '').trim().toLowerCase();
             if (!key) return Promise.resolve('');
             const hit = svcLogoCache[key];
-            if (hit && (hit.d || Date.now() - hit.t < SVC_LOGO_MISS_MS)) return Promise.resolve(hit.d);
+            if (hit && (hit.u || Date.now() - hit.t < SVC_LOGO_MISS_MS)) return Promise.resolve(hit.u);
             if (svcLogoBusy[key]) return svcLogoBusy[key];
             const cands = svcDomainCandidates(name, svcBrand(name));
             if (!cands.length) return Promise.resolve('');
             svcLogoBusy[key] = (async () => {
                 let found = '';
-                for (const d of cands) { if (await svcProbe(d)) { found = d; break; } }
-                if (found || navigator.onLine !== false) { svcLogoCache[key] = { d: found, t: Date.now() }; svcLogoSave(); }   // offline thakle "nai" likhe rakhbo na
+                for (const d of cands) { found = await svcFindIcon(d); if (found) break; }
+                if (found || navigator.onLine !== false) { svcLogoCache[key] = { u: found, t: Date.now() }; svcLogoSave(); }   // offline thakle "nai" likhe rakhbo na
                 return found;
             })().finally(() => { delete svcLogoBusy[key]; });
             return svcLogoBusy[key];
@@ -1816,13 +1832,13 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                 if (!el.isConnected) return;
                 const b = svcBrand(el.dataset.sn);
                 if (b && b[3]) return;                           // SVG logo ache -- internet lagbe na
-                svcLogoFor(el.dataset.sn).then((d) => {
-                    if (!d || !el.isConnected || el.querySelector('img')) return;
+                svcLogoFor(el.dataset.sn).then((u) => {
+                    if (!u || !el.isConnected || el.querySelector('img')) return;
                     const im = new Image();
                     im.alt = ''; im.referrerPolicy = 'no-referrer';
                     im.onload = () => el.classList.add('img-ok');
                     im.onerror = () => im.remove();
-                    im.src = svcFavUrl(d);
+                    im.src = u;
                     el.appendChild(im);
                 });
             });
@@ -1832,8 +1848,8 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             const b = svcBrand(name);
             const letter = escAttr((Array.from(String(name))[0] || '?').toUpperCase());
             const dn = ' data-sn="' + escAttr(String(name).trim()) + '"';              // favicon khujte hobe (SVG nai)
-            const cached = svcCachedDomain(name);                                       // age-i pawa gele shathe shathe boshe
-            const img = cached ? '<img src="' + svcFavUrl(cached) + '" alt="" referrerpolicy="no-referrer" onload="this.parentNode.classList.add(\'img-ok\')" onerror="this.remove()">' : '';
+            const cached = svcCachedUrl(name);                                       // age-i pawa gele shathe shathe boshe
+            const img = cached ? '<img src="' + escAttr(cached) + '" alt="" referrerpolicy="no-referrer" onload="this.parentNode.classList.add(\'img-ok\')" onerror="this.remove()">' : '';
             if (!b) return '<div class="svc-av"' + dn + ' style="background:' + svcColor(name) + '">' + letter + img + '</div>';
             const hex = b[2], r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), bl = parseInt(hex.slice(4, 6), 16);
             const lum = (0.2126 * r + 0.7152 * g + 0.0722 * bl) / 255;
