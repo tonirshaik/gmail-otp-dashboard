@@ -1740,9 +1740,12 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             skrill: 'skrill.com', twilio: 'twilio.com', salesforce: 'salesforce.com', alibaba: 'alibaba.com',
             bkash: 'bkash.com', nagad: 'nagad.com.bd',
             render: 'render.com', rizon: 'rizon.net', netlify: 'netlify.com', railway: 'railway.app',
-            mongodbatlas: 'mongodb.com', cloudinary: 'cloudinary.com'
+            mongodbatlas: 'mongodb.com', cloudinary: 'cloudinary.com',
+            mega: 'mega.nz', meganz: 'mega.nz', megaio: 'mega.io', pcloud: 'pcloud.com', backblaze: 'backblaze.com',
+            zoho: 'zoho.com', ovh: 'ovhcloud.com', vultr: 'vultr.com', linode: 'linode.com', porkbun: 'porkbun.com',
+            mailchimp: 'mailchimp.com', hubspot: 'hubspot.com', zendesk: 'zendesk.com', wetransfer: 'wetransfer.com'
         };
-        const SVC_LOGO_KEY = 'otpDash.svcLogo.v2';
+        const SVC_LOGO_KEY = 'otpDash.svcLogo.v3';
         const SVC_LOGO_MISS_MS = 24 * 3600 * 1000;              // "pawa gelo na" -- 1 din pore abar chesta
         let svcLogoCache = {};                                  // { "nam": { d: "domain" ba "", t: somoy } }
         try { svcLogoCache = JSON.parse(localStorage.getItem(SVC_LOGO_KEY) || '{}') || {}; } catch (e) { svcLogoCache = {}; }
