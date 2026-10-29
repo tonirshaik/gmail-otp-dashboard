@@ -1,4 +1,4 @@
-        const tfaActive = new Map();                 // email -> { code, endAt, period, hideAt, busy }  (kon card-e 2FA code dekhacche)
+const tfaActive = new Map();                 // email -> { code, endAt, period, hideAt, busy }  (kon card-e 2FA code dekhacche)
         const tfaSet = new Set();                    // je Gmail-gulor 2FA jora ache
         let tfaEnabled = false, tfaStatusLoaded = false;
         const TFA_SHOW_MS = 60000;                   // code ek minit dekhaye, tarpor abar email-code-e fire jay
@@ -1713,9 +1713,10 @@
             }
             return svcBrandsPromise;
         }
-        let svcBrandIdx = null;
+        let svcBrandIdx = null, svcBrandIdxSrc = null;
         function svcBrand(name) {
-            if (!svcBrandIdx) {
+            if (!svcBrandIdx || svcBrandIdxSrc !== window.SVC_BRANDS) {      // brands.js pore load hole index abar banay
+                svcBrandIdxSrc = window.SVC_BRANDS;
                 svcBrandIdx = {};
                 (window.SVC_BRANDS || []).forEach(b => b[0].split('|').forEach(k => { svcBrandIdx[k] = b; }));
             }
@@ -1726,17 +1727,114 @@
             for (const k in svcBrandIdx) if (k.length >= 4 && k.length > bl && n.indexOf(k) > -1) { best = svcBrandIdx[k]; bl = k.length; }
             return best;
         }
+        // ---- Auto logo -- notun service add korle nijei logo boshe. Dhap-gulo (ek-ek kore, na pele porerta):
+        //   1) brands.js-er SVG logo (name mille -- internet lage na)
+        //   2) site-er asol favicon: brands.js-e SVG nai (Microsoft, Amazon...) hole chena domain, noyto nam theke domain anuman (nam.com / nam.net ...)
+        //      -- nam-e-i site likhle ("notion.so") shei domain-i ney
+        //   3) kichui na pele prothom akkhor (age-r moto)
+        // Pawa domain ei browser-e mone rakhe (localStorage), tai porer bar abar khujte hoy na.
+        const SVC_DOMAINS = {                                   // brands.js-e SVG nai kintu brand chena -> asol site
+            microsoft: 'microsoft.com', amazon: 'amazon.com', linkedin: 'linkedin.com', openai: 'openai.com', slack: 'slack.com',
+            bybit: 'bybit.com', kraken: 'kraken.com', canva: 'canva.com', heroku: 'heroku.com', nintendo: 'nintendo.com',
+            metamask: 'metamask.io', trustwallet: 'trustwallet.com', bitget: 'bitget.com', gateio: 'gate.io', mexc: 'mexc.com',
+            skrill: 'skrill.com', twilio: 'twilio.com', salesforce: 'salesforce.com', alibaba: 'alibaba.com',
+            bkash: 'bkash.com', nagad: 'nagad.com.bd'
+        };
+        const SVC_LOGO_KEY = 'otpDash.svcLogo.v1';
+        const SVC_LOGO_MISS_MS = 24 * 3600 * 1000;              // "pawa gelo na" -- 1 din pore abar chesta
+        let svcLogoCache = {};                                  // { "nam": { d: "domain" ba "", t: somoy } }
+        try { svcLogoCache = JSON.parse(localStorage.getItem(SVC_LOGO_KEY) || '{}') || {}; } catch (e) { svcLogoCache = {}; }
+        const svcLogoBusy = {};
+        function svcLogoSave() {
+            const keys = Object.keys(svcLogoCache);
+            if (keys.length > 400) keys.sort((a, b) => svcLogoCache[a].t - svcLogoCache[b].t).slice(0, keys.length - 400).forEach(k => delete svcLogoCache[k]);
+            try { localStorage.setItem(SVC_LOGO_KEY, JSON.stringify(svcLogoCache)); } catch (e) {}
+        }
+        function svcSlug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+        function svcFavUrl(domain) { return 'https://icons.duckduckgo.com/ip3/' + domain + '.ico'; }
+        function svcCachedDomain(name) {
+            const h = svcLogoCache[String(name || '').trim().toLowerCase()];
+            return h && h.d ? h.d : '';
+        }
+        function svcDomainCandidates(name, b) {
+            const nm = String(name || '').trim(), out = [];
+            const m = nm.match(/^(?:https?:\/\/)?(?:www\.)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:[\/:?#]|$)/i);
+            if (m) out.push(m[1].toLowerCase());                                   // nam-e-i site: "notion.so"
+            if (b) {                                                               // brand chena
+                const d = SVC_DOMAINS[b[0].split('|')[0]];
+                if (d) out.push(d);
+            } else if (!m) {                                                       // brand chena na -> nam theke anuman
+                const slug = svcSlug(nm), first = svcSlug(nm.split(/[\s\-_.,:|\/]+/)[0]);
+                if (slug.length >= 3 && slug.length <= 30) {
+                    out.push(slug + '.com');
+                    if (first.length >= 4 && first !== slug) out.push(first + '.com');
+                    out.push(slug + '.net', slug + '.org', slug + '.io');
+                }
+            }
+            return out.filter((d, i) => /^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(d) && out.indexOf(d) === i);
+        }
+        function svcProbe(domain) {                              // ei domain-er favicon ache kina
+            return new Promise((res) => {
+                const im = new Image();
+                let done = false;
+                const fin = (ok) => { if (done) return; done = true; clearTimeout(t); res(ok); };
+                const t = setTimeout(() => fin(false), 6000);
+                im.referrerPolicy = 'no-referrer';
+                im.onload = () => fin(im.naturalWidth > 1);
+                im.onerror = () => fin(false);
+                im.src = svcFavUrl(domain);
+            });
+        }
+        function svcLogoFor(name) {                              // -> Promise<domain ba ''>
+            const key = String(name || '').trim().toLowerCase();
+            if (!key) return Promise.resolve('');
+            const hit = svcLogoCache[key];
+            if (hit && (hit.d || Date.now() - hit.t < SVC_LOGO_MISS_MS)) return Promise.resolve(hit.d);
+            if (svcLogoBusy[key]) return svcLogoBusy[key];
+            const cands = svcDomainCandidates(name, svcBrand(name));
+            if (!cands.length) return Promise.resolve('');
+            svcLogoBusy[key] = (async () => {
+                let found = '';
+                for (const d of cands) { if (await svcProbe(d)) { found = d; break; } }
+                if (found || navigator.onLine !== false) { svcLogoCache[key] = { d: found, t: Date.now() }; svcLogoSave(); }   // offline thakle "nai" likhe rakhbo na
+                return found;
+            })().finally(() => { delete svcLogoBusy[key]; });
+            return svcLogoBusy[key];
+        }
+        function svcLogosHydrate(root) {                         // SVG nai emon avatar-gulor upor asol favicon boshay
+            const els = Array.from((root || document).querySelectorAll('.svc-av[data-sn]')).filter((el) => !el.dataset.sh);
+            if (!els.length) return;
+            els.forEach((el) => { el.dataset.sh = '1'; });
+            const go = () => els.forEach((el) => {
+                if (!el.isConnected) return;
+                const b = svcBrand(el.dataset.sn);
+                if (b && b[3]) return;                           // SVG logo ache -- internet lagbe na
+                svcLogoFor(el.dataset.sn).then((d) => {
+                    if (!d || !el.isConnected || el.querySelector('img')) return;
+                    const im = new Image();
+                    im.alt = ''; im.referrerPolicy = 'no-referrer';
+                    im.onload = () => el.classList.add('img-ok');
+                    im.onerror = () => im.remove();
+                    im.src = svcFavUrl(d);
+                    el.appendChild(im);
+                });
+            });
+            if (window.SVC_BRANDS) go(); else loadBrands().then(go);      // age brands.js asuk, tarpor favicon khuji
+        }
         function svcAvatar(name) {
             const b = svcBrand(name);
             const letter = escAttr((Array.from(String(name))[0] || '?').toUpperCase());
-            if (!b) return '<div class="svc-av" style="background:' + svcColor(name) + '">' + letter + '</div>';
+            const dn = ' data-sn="' + escAttr(String(name).trim()) + '"';              // favicon khujte hobe (SVG nai)
+            const cached = svcCachedDomain(name);                                       // age-i pawa gele shathe shathe boshe
+            const img = cached ? '<img src="' + svcFavUrl(cached) + '" alt="" referrerpolicy="no-referrer" onload="this.parentNode.classList.add(\'img-ok\')" onerror="this.remove()">' : '';
+            if (!b) return '<div class="svc-av"' + dn + ' style="background:' + svcColor(name) + '">' + letter + img + '</div>';
             const hex = b[2], r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), bl = parseInt(hex.slice(4, 6), 16);
             const lum = (0.2126 * r + 0.7152 * g + 0.0722 * bl) / 255;
             const dark = lum < 0.12;                                   // kalo logo (GitHub, X, Apple...) dark UI-te mishe jay
             const bg = dark ? '#2b3342' : '#' + hex;
             const fg = lum > 0.72 ? '#111' : '#fff';
             const style = 'background:' + bg + (dark ? ';border:1px solid rgba(255,255,255,.14)' : '');
-            if (!b[3]) return '<div class="svc-av" style="' + style + ';color:' + fg + '">' + letter + '</div>';
+            if (!b[3]) return '<div class="svc-av"' + dn + ' style="' + style + ';color:' + fg + '">' + letter + img + '</div>';
             return '<div class="svc-av" style="' + style + '"><svg viewBox="0 0 24 24" width="22" height="22" fill="' + fg + '" aria-hidden="true"><path d="' + b[3] + '"/></svg></div>';
         }
         function svcColor(name) {
@@ -1821,6 +1919,7 @@
                 </div>`;
             }).join('');
             svcPaint();
+            svcLogosHydrate(list);
         }
         function svcPaint() {
             const now = Date.now();
@@ -1888,11 +1987,22 @@
                 (window.SVC_BRANDS || []).map(x => x[1]).forEach(n => { const o = document.createElement('option'); o.value = n; dl.appendChild(o); });
             };
             fillNames();
-            if (!window.SVC_BRANDS) loadBrands().then((ok) => { if (ok) fillNames(); });
+            if (!window.SVC_BRANDS) loadBrands().then((ok) => { if (ok) { fillNames(); paintPrev(false); } });
+            // logo preview: nam likhle shathe shathe dekhay (SVG logo hole sathe sathe; favicon khujbe nam likha shesh hole)
+            const nameRow = mkEl('div', 'svc-name-row');
+            const prev = mkEl('div', 'svc-prev');
+            const paintPrev = (net) => {
+                const v = name.value.trim();
+                prev.innerHTML = v ? svcAvatar(v) : '';
+                if (net && v) svcLogosHydrate(prev);
+            };
+            name.addEventListener('input', () => paintPrev(false));
+            name.addEventListener('change', () => paintPrev(true));
+            nameRow.appendChild(prev); nameRow.appendChild(name);
             const label = tfaInput('text', 'Account name (username or email) - optional', 'svcLabel');
             label.maxLength = 60;
             const secret = tfaInput('text', edit ? 'New secret key or otpauth:// link (optional)' : 'Secret key or otpauth:// link', 'tfaSecretInput');
-            if (cur) { name.value = cur.name; label.value = cur.label || ''; }
+            if (cur) { name.value = cur.name; label.value = cur.label || ''; paintPrev(true); }
             const pwRow = mkEl('div');
             pwRow.appendChild(mkEl('div', 'mail-note', 'Enter the settings password to save.'));
             const pw = tfaInput('password', 'Settings password', 'tfaPwInput');
@@ -1908,7 +2018,7 @@
             save.addEventListener('click', () => saveSvc(edit, name, label, secret, pw, err, save));
             [name, label, secret, pw].forEach(i => i.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); save.click(); } }));
             row.appendChild(save); row.appendChild(cancel);
-            [dl, name, label, qr, secret, pwRow, err, row].forEach(n => form.appendChild(n));
+            [dl, nameRow, label, qr, secret, pwRow, err, row].forEach(n => form.appendChild(n));
             tfaScroll.appendChild(form);
             setTimeout(() => { try { (edit ? label : name).focus(); } catch (e) {} }, 50);
         }
