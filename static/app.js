@@ -1738,9 +1738,11 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             bybit: 'bybit.com', kraken: 'kraken.com', canva: 'canva.com', heroku: 'heroku.com', nintendo: 'nintendo.com',
             metamask: 'metamask.io', trustwallet: 'trustwallet.com', bitget: 'bitget.com', gateio: 'gate.io', mexc: 'mexc.com',
             skrill: 'skrill.com', twilio: 'twilio.com', salesforce: 'salesforce.com', alibaba: 'alibaba.com',
-            bkash: 'bkash.com', nagad: 'nagad.com.bd'
+            bkash: 'bkash.com', nagad: 'nagad.com.bd',
+            render: 'render.com', rizon: 'rizon.net', netlify: 'netlify.com', railway: 'railway.app',
+            mongodbatlas: 'mongodb.com', cloudinary: 'cloudinary.com'
         };
-        const SVC_LOGO_KEY = 'otpDash.svcLogo.v1';
+        const SVC_LOGO_KEY = 'otpDash.svcLogo.v2';
         const SVC_LOGO_MISS_MS = 24 * 3600 * 1000;              // "pawa gelo na" -- 1 din pore abar chesta
         let svcLogoCache = {};                                  // { "nam": { d: "domain" ba "", t: somoy } }
         try { svcLogoCache = JSON.parse(localStorage.getItem(SVC_LOGO_KEY) || '{}') || {}; } catch (e) { svcLogoCache = {}; }
@@ -1751,7 +1753,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             try { localStorage.setItem(SVC_LOGO_KEY, JSON.stringify(svcLogoCache)); } catch (e) {}
         }
         function svcSlug(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
-        function svcFavUrl(domain) { return 'https://icons.duckduckgo.com/ip3/' + domain + '.ico'; }
+        function svcFavUrl(domain) { return 'https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&size=128&url=' + encodeURIComponent('https://' + domain); }
         function svcCachedDomain(name) {
             const h = svcLogoCache[String(name || '').trim().toLowerCase()];
             return h && h.d ? h.d : '';
@@ -1760,7 +1762,9 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             const nm = String(name || '').trim(), out = [];
             const m = nm.match(/^(?:https?:\/\/)?(?:www\.)?((?:[a-z0-9-]+\.)+[a-z]{2,})(?:[\/:?#]|$)/i);
             if (m) out.push(m[1].toLowerCase());                                   // nam-e-i site: "notion.so"
-            if (b) {                                                               // brand chena
+            const mapped = SVC_DOMAINS[svcSlug(nm)] || SVC_DOMAINS[svcSlug(nm.split(/[\s\-_.,:|\/]+/)[0])];
+            if (mapped) out.push(mapped);
+            else if (b) {
                 const d = SVC_DOMAINS[b[0].split('|')[0]];
                 if (d) out.push(d);
             } else if (!m) {                                                       // brand chena na -> nam theke anuman
