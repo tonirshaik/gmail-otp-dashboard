@@ -468,6 +468,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             slack: ['fa-brands fa-slack', '#7c3aed'], reddit: ['fa-brands fa-reddit-alien', '#ea580c'],
             snapchat: ['fa-brands fa-snapchat', '#ca8a04'], twitch: ['fa-brands fa-twitch', '#7c3aed']
         };
+        const OFFICIAL_LOGO_DOMAINS = { render: 'render.com', rizon: 'getrizon.com' };
         function hueOf(str) { let h = 0; for (const ch of String(str)) h = (h * 31 + ch.charCodeAt(0)) >>> 0; return h % 360; }
         function avatarHTML(item) {
             const name = String(item.service || item.sender || '').trim();
@@ -478,8 +479,12 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             const base = real ? low : String(item.email || '?').toLowerCase();
             const letter = (real ? name : String(item.email || '?')).charAt(0).toUpperCase() || '?';
             const dom = real && /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(item.domain || '') ? item.domain.toLowerCase() : '';
+            // Render / Rizon: nijeder asol site-er logo (sender domain jai hok)
+            const offKey = real ? Object.keys(OFFICIAL_LOGO_DOMAINS).find(k => low === k || low.startsWith(k + ' ')) : null;
             // site-er asol favicon; na ashle (ba load na hole) akkhor-ta-i thake
-            const img = dom
+            const img = offKey
+                ? `<img src="https://t3.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&size=128&url=${encodeURIComponent('https://' + OFFICIAL_LOGO_DOMAINS[offKey])}" alt="" loading="lazy" referrerpolicy="no-referrer" onload="this.parentNode.classList.add('img-ok')" onerror="this.remove()">`
+                : dom
                 ? `<img src="https://icons.duckduckgo.com/ip3/${dom}.ico" alt="" loading="lazy" referrerpolicy="no-referrer" onload="this.parentNode.classList.add('img-ok')" onerror="this.remove()">`
                 : '';
             return `<span class="svc-avatar" style="--c:hsl(${hueOf(base)} 52% 42%)" aria-hidden="true">${escAttr(letter)}${img}</span>`;
@@ -1739,7 +1744,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             metamask: 'metamask.io', trustwallet: 'trustwallet.com', bitget: 'bitget.com', gateio: 'gate.io', mexc: 'mexc.com',
             skrill: 'skrill.com', twilio: 'twilio.com', salesforce: 'salesforce.com', alibaba: 'alibaba.com',
             bkash: 'bkash.com', nagad: 'nagad.com.bd',
-            render: 'render.com', rizon: 'rizon.net', netlify: 'netlify.com', railway: 'railway.app',
+            render: 'render.com', rizon: 'getrizon.com', netlify: 'netlify.com', railway: 'railway.app',
             mongodbatlas: 'mongodb.com', cloudinary: 'cloudinary.com',
             mega: 'mega.nz', meganz: 'mega.nz', megaio: 'mega.io', pcloud: 'pcloud.com', backblaze: 'backblaze.com',
             zoho: 'zoho.com', ovh: 'ovhcloud.com', vultr: 'vultr.com', linode: 'linode.com', porkbun: 'porkbun.com',
