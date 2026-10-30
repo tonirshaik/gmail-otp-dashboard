@@ -47,7 +47,6 @@
     <div id="offlineBar" class="offline-bar hidden" role="status">
         <i class="fa-solid fa-wifi"></i> <span>You're offline. Showing the last codes you loaded.</span>
     </div>
-    <div id="ptr" class="ptr" aria-hidden="true"><i class="fa-solid fa-arrow-down"></i></div>
 
     <div class="container">
         
@@ -294,45 +293,30 @@
             <div class="palette-input">
                 <i class="fa-solid fa-magnifying-glass"></i>
                 <input type="text" id="paletteInput" placeholder="Find an account or run a command" autocomplete="off" spellcheck="false" aria-controls="paletteList">
-                <kbd>Esc</kbd>
             </div>
             <div id="paletteList" class="palette-list" role="listbox"></div>
-            <div class="palette-foot">Up / Down to move &middot; Enter to run &middot; Esc to close</div>
+            <div class="palette-hint">↑↓ navigate · Enter open · Esc close</div>
         </div>
     </div>
 
-    <!-- Latest email viewer (card-er envelope button) -->
-    <div id="mailModal" class="modal-overlay mail-overlay hidden" role="dialog" aria-modal="true" aria-label="Latest email">
-        <div class="mail-box">
-            <div class="mail-head">
-                <span class="mail-title" id="mailTitle"><i class="fa-regular fa-envelope-open"></i> Latest email</span>
-                <button type="button" class="mail-tab" id="mailInboxBtn" aria-pressed="false" title="Last 3 emails in Inbox"><i class="fa-solid fa-inbox"></i> Inbox</button>
-                <button type="button" class="mail-tab spam" id="mailSpamBtn" aria-pressed="false" title="Last 3 emails in Spam"><i class="fa-solid fa-ban"></i> Spam</button>
-                <button type="button" class="mail-ibtn" id="mailReloadBtn" title="Check again"><i class="fa-solid fa-rotate-right"></i></button>
-                <button type="button" class="mail-ibtn" id="mailCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    <!-- 2FA Service modal -->
+    <div id="tfaServiceModal" class="modal-overlay hidden">
+        <div class="accounts-box">
+            <div class="accounts-head">
+                <span><i class="fa-solid fa-layer-group"></i> 2FA Service</span>
+                <button type="button" class="accounts-close" id="tfaServiceCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
             </div>
-            <div class="mail-acct" id="mailAcct"></div>
-            <div class="mail-scroll" id="mailScroll"></div>
-            <div class="mail-linkbar hidden" id="mailLinkBar"></div>
+            <div id="tfaServiceBody"></div>
         </div>
     </div>
 
-    <!-- 2FA / Services popup (card-er footer button) -->
-    <div id="tfaModal" class="modal-overlay mail-overlay hidden" role="dialog" aria-modal="true" aria-label="Two-factor codes">
-        <div class="mail-box">
-            <div class="mail-head">
-                <span class="mail-title" id="tfaTitle"></span>
-                <button type="button" class="mail-ibtn" id="tfaCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
-            </div>
-            <div class="mail-acct" id="tfaAcct"></div>
-            <div class="mail-scroll" id="tfaScroll"></div>
-        </div>
+    <div id="toast" class="toast">
+        <i class="fa-solid fa-check"></i>
+        <span id="toastMsg">Copied</span>
     </div>
 
-    <div id="toast" class="toast" role="status" aria-live="polite">
-        <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copied!</span>
-    </div>
-
+    <script src="/static/brands.js"></script>
+    <script src="/static/jsQR.min.js"></script>
     <script src="/static/app.js" defer></script>
 
 </body>
