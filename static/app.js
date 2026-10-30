@@ -2471,6 +2471,11 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             if (d.skipped && d.skipped.length) lines.push(d.skipped.length + ' already existed (skipped)');
             if (d.invalid) lines.push(d.invalid + ' invalid entr' + (d.invalid === 1 ? 'y' : 'ies') + ' skipped');
             if (d.bad_lines && d.bad_lines.length) lines.push('Could not read line(s): ' + d.bad_lines.join(', '));
+            if (d.totp_added || d.svc_added || d.totp_skipped || d.svc_skipped) {
+                lines.push('2FA: ' + (d.totp_added || 0) + ' Gmail key(s) and ' + (d.svc_added || 0) + ' service(s) restored' +
+                    ((d.totp_skipped || d.svc_skipped) ? ', ' + ((d.totp_skipped || 0) + (d.svc_skipped || 0)) + ' already existed' : ''));
+            }
+            if (d.twofa_failed) lines.push(d.twofa_failed + ' 2FA key(s) could not be restored');
             const extra = (d.failed || []).map((f) => f.email + ' - ' + f.reason);
             return { lines, extra };
         }
@@ -2485,6 +2490,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             backupModal.classList.remove('hidden');
         });
         function closeBackupModal() {
+            document.getElementById('bk2faRow').style.display = 'none';
             backupModal.classList.add('hidden');
             ['bkSettingsPw', 'bkFilePw', 'bkImportPw', 'bkText'].forEach((id) => { document.getElementById(id).value = ''; });
             document.getElementById('bkFile').value = '';
@@ -2526,7 +2532,10 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                 setTimeout(() => URL.revokeObjectURL(a.href), 5000);
                 document.getElementById('bkSettingsPw').value = '';
                 document.getElementById('bkFilePw').value = '';
-                bkSay(['Backup downloaded (' + (count || '?') + ' accounts)', 'Keep the file and its password safe. Without the password it cannot be opened.']);
+                const n2fa = res.headers.get('X-Backup-2FA'), bad2fa = Number(res.headers.get('X-Backup-2FA-Failed') || 0);
+                bkSay(['Backup downloaded (' + (count || '?') + ' accounts, ' + (n2fa || 0) + ' 2FA keys)']
+                    .concat(bad2fa ? [bad2fa + ' 2FA key(s) could not be read and were NOT saved (is TOTP_ENC_KEY correct?)'] : [])
+                    .concat(['Keep the file and its password safe. It now contains your 2FA keys too.']));
             } catch (err) {
                 bkSay(['Connection error'], true);
             } finally {
@@ -2598,6 +2607,15 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                     (dt ? ' · exported ' + dt : '') +
                     ' · ' + newCount + ' new, ' + (items.length - newCount) + ' already added';
                 bkRenderChecklist(items);
+                const tc = r.data.totp_count || 0, sc = r.data.svc_count || 0;
+                const row2fa = document.getElementById('bk2faRow');
+                if (tc || sc) {
+                    document.getElementById('bk2faText').textContent = 'Also restore 2FA keys (' + tc + ' Gmail, ' + sc + ' service)';
+                    document.getElementById('bkWith2fa').checked = true;
+                    row2fa.style.display = 'flex';
+                } else {
+                    row2fa.style.display = 'none';
+                }
                 document.getElementById('bkPreviewBox').style.display = 'block';
                 bkSay([]);
             } catch (err) {
@@ -2617,10 +2635,12 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             btn.disabled = true; bkSay(['Restoring ' + selected.length + ' account(s)...']);
             try {
                 const r = await bkPost('/api/backup/import', {
-                    file: bkPreviewFileText, backup_password: bkPreviewPw, selected_emails: selected
+                    file: bkPreviewFileText, backup_password: bkPreviewPw, selected_emails: selected,
+                    restore_2fa: document.getElementById('bkWith2fa').checked && document.getElementById('bk2faRow').style.display !== 'none'
                 });
                 if (!r.ok) { bkSay([r.data.error || 'Import failed'], true); return; }
                 const s = bkSummary(r.data);
+                loadTfaStatus(); svcLoaded = false;
                 bkSay(s.lines, false, s.extra);
                 document.getElementById('bkFile').value = '';
                 document.getElementById('bkImportPw').value = '';

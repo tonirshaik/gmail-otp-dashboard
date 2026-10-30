@@ -2641,6 +2641,129 @@ def _save_accounts(items, verify):
             failed.append({"email": em, "reason": "Could not save"})
     return {"added": added, "skipped": skipped, "failed": failed, "invalid": invalid}
 
+# ---------- Backup-e 2FA (Gmail TOTP + 2FA Services) ----------
+def _export_2fa():
+    """DB-r encrypted secret server-e decrypt kore plain list dey (backup-password diye abar encrypt hobe)."""
+    totp_out, svc_out, bad = [], [], 0
+    if _totp_fernet is None:
+        return totp_out, svc_out, 0
+    if totp_collection is not None:
+        for d in totp_collection.find({}, {'_id': 0}):
+            try:
+                plain = json.loads(_totp_fernet.decrypt(d["secret_enc"].encode()).decode())
+                if plain.get("e") != d.get("email"):
+                    raise ValueError("mismatch")
+                totp_out.append({"email": d["email"], "secret": plain["s"], "digits": d["digits"],
+                                 "period": d["period"], "algo": d["algo"], "issuer": d.get("issuer", "")})
+            except Exception:
+                bad += 1
+    if svc_collection is not None:
+        for d in svc_collection.find({}, {'_id': 0}):
+            try:
+                plain = json.loads(_totp_fernet.decrypt(d["secret_enc"].encode()).decode())
+                if plain.get("i") != d.get("sid"):
+                    raise ValueError("mismatch")
+                svc_out.append({"name": d.get("name", ""), "label": d.get("label", ""), "secret": plain["s"],
+                                "digits": d["digits"], "period": d["period"], "algo": d["algo"],
+                                "issuer": d.get("issuer", "")})
+            except Exception:
+                bad += 1
+    return totp_out, svc_out, bad
+
+
+def _clean_totp_entry(e):
+    """Backup-er ekta 2FA entry thik ache kina dekhe; thik hole dict, nahole None."""
+    try:
+        if not isinstance(e, dict):
+            return None
+        secret = re.sub(r"[\s\-]", "", str(e.get("secret", ""))).rstrip("=").upper()
+        digits, period, algo = int(e.get("digits", 6)), int(e.get("period", 30)), str(e.get("algo", "SHA1")).upper()
+        if algo not in _TOTP_ALGOS or digits not in (6, 7, 8) or not (15 <= period <= 120):
+            return None
+        if not re.fullmatch(r"[A-Z2-7]{16,128}", secret):
+            return None
+        totp_at(secret, digits, period, algo, time.time())          # decode hocche kina
+        return {"secret": secret, "digits": digits, "period": period, "algo": algo,
+                "issuer": str(e.get("issuer", ""))[:60]}
+    except Exception:
+        return None
+
+
+def _import_2fa(payload, selected_set):
+    """selected_set = None hole shob. Gmail-er 2FA shudhu sei account-er jonno, je account ekhon DB-te ache.
+    Age theke thaka 2FA key KOKHONO overwrite hoy na. Notun TOTP_ENC_KEY diye encrypt hoy."""
+    res = {"totp_added": 0, "totp_skipped": 0, "svc_added": 0, "svc_skipped": 0, "twofa_failed": 0}
+    if _totp_fernet is None or totp_collection is None:
+        res["twofa_failed"] = len(payload.get("totp", []) or []) + len(payload.get("services", []) or [])
+        return res
+    accounts = {str(d.get("email", "")).lower() for d in accounts_collection.find({}, {'_id': 0, 'email': 1})}
+
+    for t in (payload.get("totp") or [])[:BACKUP_MAX_ACCOUNTS]:
+        em = str((t or {}).get("email", "")).strip().lower() if isinstance(t, dict) else ""
+        if not em or em not in accounts or (selected_set is not None and em not in selected_set):
+            continue
+        c = _clean_totp_entry(t)
+        if not c:
+            res["twofa_failed"] += 1
+            continue
+        blob = _totp_fernet.encrypt(json.dumps({"e": em, "s": c["secret"]}).encode()).decode()
+        now = datetime.now()
+        try:
+            r = totp_collection.update_one(                         # upsert + $setOnInsert = already thakle chhuye na
+                {"email": em},
+                {"$setOnInsert": {"email": em, "secret_enc": blob, "digits": c["digits"], "period": c["period"],
+                                  "algo": c["algo"], "issuer": c["issuer"], "created_at": now, "updated_at": now}},
+                upsert=True)
+            if r.upserted_id is not None:
+                res["totp_added"] += 1
+            else:
+                res["totp_skipped"] += 1
+        except Exception as ex:
+            print(f"[BACKUP] totp import: {type(ex).__name__}")
+            res["twofa_failed"] += 1
+
+    if svc_collection is not None:
+        seen = set()
+        try:
+            count = svc_collection.count_documents({})
+            for d in svc_collection.find({}, {'_id': 0}):
+                try:
+                    plain = json.loads(_totp_fernet.decrypt(d["secret_enc"].encode()).decode())
+                    seen.add((str(d.get("name", "")).lower(), str(d.get("label", "")).lower(), plain["s"]))
+                except Exception:
+                    pass
+        except Exception:
+            count = 0
+        for s in (payload.get("services") or [])[:500]:
+            c = _clean_totp_entry(s)
+            name = re.sub(r"\s+", " ", str((s or {}).get("name", ""))).strip()[:40] if isinstance(s, dict) else ""
+            label = re.sub(r"\s+", " ", str((s or {}).get("label", ""))).strip()[:60] if isinstance(s, dict) else ""
+            if not c or not name:
+                res["twofa_failed"] += 1
+                continue
+            key = (name.lower(), label.lower(), c["secret"])
+            if key in seen:
+                res["svc_skipped"] += 1
+                continue
+            if count >= 500:
+                res["twofa_failed"] += 1
+                continue
+            try:
+                sid = uuid.uuid4().hex
+                blob = _totp_fernet.encrypt(json.dumps({"i": sid, "s": c["secret"]}).encode()).decode()
+                now = datetime.now()
+                svc_collection.insert_one({"sid": sid, "name": name, "label": label, "secret_enc": blob,
+                                           "digits": c["digits"], "period": c["period"], "algo": c["algo"],
+                                           "issuer": c["issuer"], "created_at": now, "updated_at": now})
+                seen.add(key)
+                count += 1
+                res["svc_added"] += 1
+            except Exception as ex:
+                print(f"[BACKUP] svc import: {type(ex).__name__}")
+                res["twofa_failed"] += 1
+    return res
+
+
 def _bulk_guard():
     """logged_in + settings unlock + DB. Thik hole None, nahole (response, status)."""
     if not session.get('logged_in'):
@@ -2703,8 +2826,9 @@ def backup_export():
             plain = pw_decrypt(d.get('email'), d.get('password'))   # backup-e plaintext jay (backup password diye encrypt hoy)
             if d.get('email') and plain:
                 accounts.append({"email": d['email'], "password": plain})
+        totp_out, svc_out, bad2fa = _export_2fa()
         payload = json.dumps({"app": "gmail-otp-dashboard", "exported_at": datetime.now(timezone.utc).isoformat(),
-                              "accounts": accounts}).encode('utf-8')
+                              "accounts": accounts, "totp": totp_out, "services": svc_out}).encode('utf-8')
         salt = os.urandom(16)
         token = Fernet(_backup_key(bpw, salt, BACKUP_KDF_ITER)).encrypt(payload).decode()
         blob = {"v": 1, "kdf": "pbkdf2-sha256", "iter": BACKUP_KDF_ITER,
@@ -2715,6 +2839,8 @@ def backup_export():
     resp = Response(json.dumps(blob).encode('utf-8'), mimetype='application/octet-stream')
     resp.headers['Content-Disposition'] = 'attachment; filename="otp-backup-%s.otpbak"' % datetime.now().strftime('%Y%m%d-%H%M')
     resp.headers['X-Backup-Count'] = str(len(accounts))
+    resp.headers['X-Backup-2FA'] = str(len(totp_out) + len(svc_out))
+    resp.headers['X-Backup-2FA-Failed'] = str(bad2fa)
     return _no_store(resp)
 
 @app.route('/api/backup/preview', methods=['POST'])
@@ -2761,7 +2887,11 @@ def backup_preview():
     existing = {d.get("email") for d in accounts_collection.find({}, {"_id": 0, "email": 1})}
     items = [{"email": em, "exists": em in existing} for em in emails_in_file]
     exported_at = payload.get("exported_at", "")
-    return _no_store(jsonify({"items": items, "exported_at": exported_at}))
+    return _no_store(jsonify({
+        "items": items, "exported_at": exported_at,
+        "totp_count": len(payload.get("totp") or []),
+        "svc_count": len(payload.get("services") or []),
+    }))
 
 
 @app.route('/api/backup/import', methods=['POST'])
@@ -2799,6 +2929,7 @@ def backup_import():
         return jsonify({"error": "Could not read the backup file"}), 400
     if len(all_items) > BACKUP_MAX_ACCOUNTS:
         return jsonify({"error": "Too many accounts in this file"}), 400
+    sel_set = None
     selected = data.get("selected_emails")   # None mane shob, list mane shudhu oi gulo
     if isinstance(selected, list) and selected:
         sel_set = {str(e).strip().lower() for e in selected}
@@ -2807,6 +2938,12 @@ def backup_import():
         items = all_items
     res = _save_accounts(items, verify=False)      # backup-er account age-i verify kora, tai ekhane abar login check na
     res["total"] = len(all_items)
+    if data.get("restore_2fa"):
+        try:
+            res.update(_import_2fa(payload, sel_set))
+        except Exception as e:
+            print(f"[BACKUP] 2fa import: {type(e).__name__}")
+            res["twofa_failed"] = res.get("twofa_failed", 0) + 1
     return _no_store(jsonify(res))
 
 # ---------------- Settings unlock (server-side) ----------------

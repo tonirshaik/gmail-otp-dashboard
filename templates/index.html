@@ -183,7 +183,7 @@
 
             <div class="bk-sec">
                 <div class="bk-title">Export encrypted backup</div>
-                <div class="bk-note">Saves all Gmail accounts and App Passwords in one file, locked with a backup password you choose. If you forget that password, the file cannot be opened.</div>
+                <div class="bk-note">Saves all Gmail accounts, App Passwords and 2FA keys in one file, locked with a backup password you choose. If you forget that password, the file cannot be opened.</div>
                 <div class="input-group"><input type="password" id="bkSettingsPw" placeholder="Settings password" autocomplete="off"></div>
                 <div class="input-group"><input type="password" id="bkFilePw" placeholder="New backup password (min 8 characters)" autocomplete="new-password"></div>
                 <button type="button" class="btn btn-primary" id="bkExportBtn"><i class="fa-solid fa-file-arrow-down"></i> Download backup file</button>
@@ -204,6 +204,10 @@
                         <button type="button" id="bkChkNew">New only</button>
                     </div>
                     <div class="bk-checklist" id="bkChecklist"></div>
+                    <label class="bk-check-row" id="bk2faRow" style="display:none; margin-top:8px;">
+                        <input type="checkbox" id="bkWith2fa" checked>
+                        <span class="bk-em" id="bk2faText"></span>
+                    </label>
                     <button type="button" class="btn btn-primary" id="bkImportBtn" style="margin-top:8px;">
                         <i class="fa-solid fa-file-arrow-up"></i> Restore selected accounts
                     </button>
