@@ -845,7 +845,7 @@ def fetch_email_info(mail, uid):
             sender = name or addr or raw_from
             date_hdr = msg.get("Date")
 
-            msg_dt = datetime.now()
+            msg_dt = datetime.now(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)   # Date header na thakle-o Dhaka somoy (server UTC)
             epoch = time.time()          # asol (timezone-thik) unix time, expiry hisabe lage
             if date_hdr:
                 try:
