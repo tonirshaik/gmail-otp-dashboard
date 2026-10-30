@@ -131,6 +131,9 @@ def load_accounts():
 # State MongoDB-te thake (jate gunicorn-er ek-er besi worker/restart-e-o lock thake).
 # Fingerprint/Face login lock-er bhitore pore na.
 MAX_FAILS = 3
+# Login lock ekhon IP onujayi: onno keu vul password dile tumi lock hobe na. Shudhu ekoi IP theke 3 bar vul hole oi IP 10 min lock.
+# Backstop: onek IP ghure ghure guess korle thamate, shob IP mila LOGIN_GLOBAL_MAX bar vul hole shobar login 10 min lock (passkey cholbe).
+LOGIN_GLOBAL_MAX = 30
 LOCK_SECONDS = 10 * 60
 _fail_state = {}                 # Mongo na thakle / error hole fallback (shudhu ei process-e)
 _fail_lock = threading.Lock()
@@ -169,7 +172,7 @@ def lock_remaining(bucket):
             st.update({"fails": 0, "last": 0, "locked_until": 0})
         return 0
 
-def register_fail(bucket):
+def register_fail(bucket, max_fails=MAX_FAILS):
     """Vul password gona hoy. (lock-er sekend, baki chance) ferot dey."""
     now = time.time()
     if security_collection is not None:
@@ -181,24 +184,24 @@ def register_fail(bucket):
             )
             doc = security_collection.find_one({"_id": bucket}) or {}
             fails = doc.get("fails", 1)
-            if fails >= MAX_FAILS:
+            if fails >= max_fails:
                 security_collection.update_one(
                     {"_id": bucket},
                     {"$set": {"locked_until": now + LOCK_SECONDS, "fails": 0}},
                 )
                 return LOCK_SECONDS, 0
-            return 0, MAX_FAILS - fails
+            return 0, max_fails - fails
         except Exception as e:
             print(f"Lock write error (memory fallback): {e}")
     with _fail_lock:
         st = _mem_get(bucket)
         st["fails"] += 1
         st["last"] = now
-        if st["fails"] >= MAX_FAILS:
+        if st["fails"] >= max_fails:
             st["locked_until"] = now + LOCK_SECONDS
             st["fails"] = 0
             return LOCK_SECONDS, 0
-        return 0, MAX_FAILS - st["fails"]
+        return 0, max_fails - st["fails"]
 
 def clear_fails(bucket):
     if security_collection is not None:
@@ -208,6 +211,10 @@ def clear_fails(bucket):
             print(f"Lock clear error: {e}")
     with _fail_lock:
         _fail_state.pop(bucket, None)
+
+def _login_bucket():
+    """Ei client-er IP-r login lock bucket (ProxyFix-er pore asol IP)."""
+    return "login:" + str(request.remote_addr or "unknown")[:60]
 
 def locked_response(secs):
     mins = max(1, math.ceil(secs / 60))
@@ -1651,17 +1658,22 @@ def ping():
 def login():
     if not MASTER_PASSWORD:
         return jsonify({"error": "Server not configured (MASTER_PASSWORD missing)"}), 503
-    secs = lock_remaining('login')
+    bucket = _login_bucket()
+    secs = max(lock_remaining(bucket), lock_remaining('login-all'))
     if secs:
         return locked_response(secs)
     data = _json_body()
     password = data.get('password')
     if password and pw_equal(password, MASTER_PASSWORD):
-        clear_fails('login')
+        clear_fails(bucket)                           # shudhu nijer IP-r hishab muchhi, global hishab na
         session['logged_in'] = True
         _mark_active()
         return jsonify({"success": True})
-    return wrong_password_response('login', "Wrong password!")
+    all_locked, _ = register_fail('login-all', LOGIN_GLOBAL_MAX)
+    locked, left = register_fail(bucket)
+    if locked or all_locked:
+        return locked_response(locked or all_locked)
+    return jsonify({"error": f"Wrong password! ({left} attempt(s) left)"}), 401
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
