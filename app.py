@@ -108,6 +108,11 @@ if MONGO_URI:
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
 
+def _json_body():
+    """Request body JSON object (dict). Body na thakle / list / vul type hole {} -- tokhon 500 na diye normal 400 error jay."""
+    d = request.get_json(silent=True)
+    return d if isinstance(d, dict) else {}
+
 def load_accounts():
     if accounts_collection is not None:
         try:
@@ -1294,7 +1299,7 @@ def _wait_watch_run(acc, mail, stop_event, deadline):
 def watch_start():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    body = request.json or {}
+    body = _json_body()
     key = _norm_email(body.get('email'))
     acc = next((x for x in load_accounts() if _norm_email(x.get('email')) == key), None)
     if not acc:
@@ -1337,7 +1342,7 @@ def watch_start():
 def watch_stop():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    key = _norm_email((request.json or {}).get('email'))
+    key = _norm_email(_json_body().get('email'))
     with _waiters_lock:
         w = _waiters.pop(key, None)
     if w:
@@ -1476,7 +1481,7 @@ def push_subscribe():
         return jsonify({"error": "Unauthorized Access"}), 401
     if not push_ready():
         return jsonify({"error": "Notifications are not set up on the server"}), 503
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     sub = _valid_subscription(data.get('subscription'))
     if not sub:
         return jsonify({"error": "Invalid subscription"}), 400
@@ -1502,7 +1507,7 @@ def push_prefs():
         return jsonify({"error": "Unauthorized Access"}), 401
     if push_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
-    data = request.get_json(silent=True) or {}
+    data = _json_body()
     ep = data.get('endpoint')
     if not isinstance(ep, str) or not ep:
         return jsonify({"error": "Endpoint required"}), 400
@@ -1521,7 +1526,7 @@ def push_unsubscribe():
         return jsonify({"error": "Unauthorized Access"}), 401
     if push_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
-    ep = (request.get_json(silent=True) or {}).get('endpoint')
+    ep = _json_body().get('endpoint')
     if not isinstance(ep, str) or not ep:
         return jsonify({"error": "Endpoint required"}), 400
     try:
@@ -1538,7 +1543,7 @@ def push_test():
         return jsonify({"error": "Unauthorized Access"}), 401
     if not push_ready():
         return jsonify({"error": "Notifications are not set up on the server"}), 503
-    ep = (request.get_json(silent=True) or {}).get('endpoint')
+    ep = _json_body().get('endpoint')
     if not isinstance(ep, str) or not ep:
         return jsonify({"error": "Endpoint required"}), 400
     doc = push_collection.find_one({"_id": _push_id(ep)})
@@ -1649,7 +1654,7 @@ def login():
     secs = lock_remaining('login')
     if secs:
         return locked_response(secs)
-    data = request.json or {}
+    data = _json_body()
     password = data.get('password')
     if password and pw_equal(password, MASTER_PASSWORD):
         clear_fails('login')
@@ -1674,7 +1679,7 @@ def refresh_one():
     """Shudhu ekta Gmail account abar check kore."""
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    email_in = str((request.json or {}).get('email', '')).strip().lower()
+    email_in = str(_json_body().get('email', '')).strip().lower()
     acc = next((x for x in load_accounts() if str(x.get('email', '')).lower() == email_in), None)
     if not acc:
         return jsonify({"error": "Account not found"}), 404
@@ -1781,14 +1786,14 @@ def latest_mail():
     """Ekta Gmail-er shesh email (sender, subject, shomoy, SPF/DKIM, text) -- card-er envelope button-er jonno."""
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    email_in = str((request.json or {}).get('email', '')).strip().lower()
+    email_in = str(_json_body().get('email', '')).strip().lower()
     acc = next((x for x in load_accounts() if str(x.get('email', '')).lower() == email_in), None)
     if not acc:
         return jsonify({"error": "Account not found"}), 404
     mail = None
     try:
         mail = _imap_login(acc)
-        body_in = request.json or {}
+        body_in = _json_body()
         folder_req = str(body_in.get('folder', '')).strip().lower()
         uid_req = str(body_in.get('uid', '')).strip()
         if folder_req or uid_req:
@@ -1888,7 +1893,7 @@ def mail_list():
     """Inbox ba Spam-er shesh 3 ta email-er shongkhipto talika (notun age)."""
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    data_in = request.json or {}
+    data_in = _json_body()
     email_in = str(data_in.get('email', '')).strip().lower()
     folder_req = str(data_in.get('folder', '')).strip().lower()
     if folder_req not in ('inbox', 'spam'):
@@ -2137,7 +2142,7 @@ def totp_add():
         return _totp_off()
     if not _rate_ok("totp-add", 10, 60):
         return jsonify({"error": "Too many tries. Wait a minute."}), 429
-    data = request.json or {}
+    data = _json_body()
     email_in = str(data.get('email', '')).strip().lower()
     try:
         already = totp_collection.find_one({"email": email_in}, {"_id": 1}) is not None
@@ -2181,7 +2186,7 @@ def totp_code():
         return _totp_off()
     if not _rate_ok("totp-code", 60, 60):
         return jsonify({"error": "Too many requests. Wait a moment."}), 429
-    email_in = str((request.json or {}).get('email', '')).strip().lower()
+    email_in = str(_json_body().get('email', '')).strip().lower()
     try:
         doc = totp_collection.find_one({"email": email_in}, {"_id": 0})
     except Exception as e:
@@ -2209,10 +2214,10 @@ def totp_delete():
         return jsonify({"error": "Settings locked. Unlock first."}), 403
     if totp_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
-    bad = _settings_pw_check(request.json or {})   # session unlock thakleo password lagbe
+    bad = _settings_pw_check_json_body()   # session unlock thakleo password lagbe
     if bad is not None:
         return bad
-    email_in = str((request.json or {}).get('email', '')).strip().lower()
+    email_in = str(_json_body().get('email', '')).strip().lower()
     try:
         r = totp_collection.delete_one({"email": email_in})
     except Exception as e:
@@ -2276,7 +2281,7 @@ def svc_add():
         return _totp_off()
     if not _rate_ok("svc-add", 15, 60):
         return jsonify({"error": "Too many tries. Wait a minute."}), 429
-    data = request.json or {}
+    data = _json_body()
     bad = _settings_pw_check(data)                          # prottek bar settings password lagbe
     if bad is not None:
         return bad
@@ -2310,7 +2315,7 @@ def svc_update():
         return _totp_off()
     if not _rate_ok("svc-update", 20, 60):
         return jsonify({"error": "Too many tries. Wait a minute."}), 429
-    data = request.json or {}
+    data = _json_body()
     bad = _settings_pw_check(data)
     if bad is not None:
         return bad
@@ -2348,7 +2353,7 @@ def svc_delete():
         return jsonify({"error": "Unauthorized Access"}), 401
     if svc_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
-    data = request.json or {}
+    data = _json_body()
     bad = _settings_pw_check(data)
     if bad is not None:
         return bad
@@ -2433,7 +2438,7 @@ def toggle_pin_api():
         return jsonify({"error": "Unauthorized Access"}), 401
     if prefs_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
-    data = request.json or {}
+    data = _json_body()
     em = _norm_email(data.get('email'))
     if not em or len(em) > 320:
         return jsonify({"error": "Email required"}), 400
@@ -2455,7 +2460,7 @@ def merge_pins_api():
         return jsonify({"error": "Unauthorized Access"}), 401
     if prefs_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
-    raw = (request.json or {}).get('emails')
+    raw = _json_body().get('emails')
     known = {_norm_email(a.get('email')) for a in load_accounts()}
     emails = []
     if isinstance(raw, list):
@@ -2504,7 +2509,7 @@ def delete_account():
     if accounts_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
 
-    data = request.json or {}
+    data = _json_body()
     email_input = str(data.get('email', '')).strip()
     if not email_input:
         return jsonify({"error": "Email required"}), 400
@@ -2545,7 +2550,7 @@ def add_account():
     if not session.get('settings_unlocked'):
         return jsonify({"error": "Settings locked. Unlock first."}), 403
 
-    data = request.json or {}
+    data = _json_body()
     email_input = str(data.get('email') or '').strip().lower()
     password_input = re.sub(r"\s+", "", str(data.get('password') or ''))   # App Password-er majher space bad
 
@@ -2802,7 +2807,7 @@ def bulk_add():
         return bad
     if not _rate_ok('bulk-add', 6, 600):
         return jsonify({"error": "Too many tries. Wait a few minutes."}), 429
-    text = str((request.json or {}).get('text') or '')
+    text = str(_json_body().get('text') or '')
     if len(text) > 20000:
         return jsonify({"error": "List is too long"}), 400
     items, bad_lines = [], []
@@ -2829,7 +2834,7 @@ def backup_export():
         return bad
     if Fernet is None:
         return jsonify({"error": "Backup is not available (cryptography is not installed on the server)"}), 503
-    data = request.json or {}
+    data = _json_body()
     pwbad = _settings_pw_check(data)          # prottek bar settings password
     if pwbad:
         return pwbad
@@ -2877,7 +2882,7 @@ def backup_preview():
         return jsonify({"error": "File is too big"}), 413
     if not _rate_ok("backup-preview", 12, 600):
         return jsonify({"error": "Too many tries. Wait a few minutes."}), 429
-    data = request.json or {}
+    data = _json_body()
     bpw = str(data.get("backup_password") or "")
     try:
         blob = json.loads(str(data.get("file") or ""))
@@ -2926,7 +2931,7 @@ def backup_import():
         return jsonify({"error": "File is too big"}), 413
     if not _rate_ok('backup-import', 8, 600):
         return jsonify({"error": "Too many tries. Wait a few minutes."}), 429
-    data = request.json or {}
+    data = _json_body()
     bpw = str(data.get('backup_password') or '')
     try:
         blob = json.loads(str(data.get('file') or ''))
@@ -2975,7 +2980,7 @@ def settings_unlock():
     secs = lock_remaining('settings')
     if secs:
         return locked_response(secs)
-    data = request.json or {}
+    data = _json_body()
     pw = str(data.get('password', '')).strip()
     if pw_equal(pw, SETTINGS_PASSWORD):
         clear_fails('settings')
@@ -3023,7 +3028,7 @@ def passkey_register_verify():
         return jsonify({"error": "Registration expired. Try again."}), 400
     try:
         v = verify_registration_response(
-            credential=request.get_json(),
+            credential=_json_body(),
             expected_challenge=base64url_to_bytes(challenge),
             expected_rp_id=RP_ID,
             expected_origin=ORIGIN,
@@ -3061,9 +3066,11 @@ def passkey_auth_options():
 
 @app.route('/api/passkey/auth/verify', methods=['POST'])
 def passkey_auth_verify():
-    body = request.get_json() or {}
+    body = _json_body()
     purpose = body.get('purpose', 'login')
-    credential = body.get('credential') or {}
+    credential = body.get('credential')
+    if not isinstance(credential, dict):
+        credential = {}
     challenge = session.pop('auth_challenge', None)
     if not challenge or passkeys_collection is None:
         return jsonify({"error": "Expired. Try again."}), 400
