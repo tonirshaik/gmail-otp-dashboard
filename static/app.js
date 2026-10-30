@@ -1,1 +1,1 @@
-PLACEHOLDER_JS
+@/home/workdir/artifacts/app.js
