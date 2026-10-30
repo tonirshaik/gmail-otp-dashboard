@@ -269,8 +269,11 @@ _WEAK_KW = re.compile(r"(?i)\bcode\b|\btoken\b|কোড|\bcódigo\b|\bcodice\b|
 
 _NEG = re.compile(
     r"(?i)\b(?:order|invoice|tracking|receipt|transaction|txn|amount|price|total|balance|zip|postal|"
-    r"phone|tel|call|mobile|a/c|street|st\.|avenue|ave|parkway|road|rd\.|suite|floor|apt|copyright|"
+    r"a/c|street|st\.|avenue|ave|parkway|road|rd\.|suite|floor|apt|copyright|"
     r"usd|bdt|inr|eur|tk|ref|reference|payment|paid|due|bill|flight|booking|ticket|version|build)\b|[$€£৳%©]")
+# phone / call / tel / mobile: shudhu code-er thik pashe thakle (phone: 01712.., Call 555-0100) shastir karon.
+# Dur-e thakle ("verify your phone number", "Call us if ...") code-er score kombe na.
+_NEG_PHONE = re.compile(r"(?i)\b(?:phone|tel|call|mobile)\b")
 _PROMO_BEFORE = re.compile(
     r"(?i)(?:promo(?:tion(?:al)?)?|coupon|discount|referral|invite|gift|voucher|zip|postal|post|area|"
     r"country|dial|error|status|tracking|response|order|invoice|reference|ref|case|ticket|booking|"
@@ -410,6 +413,7 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
         if 7 > kw_val:
             kw_val, strong_hit = 7, True
 
+    had_kw = kw_val > 0                              # asol keyword (code/otp...) paoa gelo, intent-er fallback na
     if kw_val == 0 and has_intent:                   # keyword nai, kintu sign-in/verify jatiyo kotha ache
         stripped = before_line.rstrip().lower()
         if own_line or stripped.endswith(("use", "enter", "type", "is", ":")) or (kind == "digits" and len(text) == 6):
@@ -437,7 +441,13 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
     # ---- shastir hisab ----
     window = t[max(0, s - 45):min(len(t), e + 45)]
     n_neg = len(_NEG.findall(window))
-    score -= min(n_neg, 2) if strong_hit else min(3 * n_neg, 9)
+    n_neg += len(_NEG_PHONE.findall(t[max(0, s - 14):s] + " " + t[e:e + 4]))
+    if strong_hit:
+        score -= min(n_neg, 2)
+    elif had_kw and kw_val >= 4 and _LABEL.search(before_line):
+        score -= min(n_neg, 1)       # "Your code is 482913. Order total $45" -- code-er thik age label, tai pashe order/total thakleo kom shasti
+    else:
+        score -= min(3 * n_neg, 9)
 
     if not strong_hit and _MARKETING.search(t[max(0, s - 80):min(len(t), e + 80)]):
         score -= 5
