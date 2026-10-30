@@ -24,6 +24,7 @@ from urllib.parse import urlparse, parse_qs, unquote
 from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request, session, Response, send_from_directory
 from pymongo import MongoClient
+from pymongo.errors import DuplicateKeyError
 from flask_cors import CORS
 from werkzeug.middleware.proxy_fix import ProxyFix
 from webauthn import (
@@ -2000,6 +2001,21 @@ def pw_decrypt(email_addr, stored):
         print(f"[SEC] App Password decrypt hoyni ({type(e).__name__}) -- TOTP_ENC_KEY age-r motoi ache to?")
         return ""
 
+def ensure_accounts_unique_index():
+    """accounts.email unique -- duto request ekshathe ashleo ekoi Gmail duibar dhukbe na.
+    Database-e age-i duplicate thakle index banano jay na: tokhon shudhu warning dei, app cholte thake."""
+    if accounts_collection is None:
+        return
+    try:
+        dups = [d["_id"] for d in accounts_collection.aggregate([
+            {"$group": {"_id": "$email", "n": {"$sum": 1}}}, {"$match": {"n": {"$gt": 1}}}])]
+        if dups:
+            print(f"[DB] accounts-e duplicate email ache ({len(dups)} ta), unique index banano holo na. Age duplicate muchhe felo.")
+            return
+        accounts_collection.create_index("email", unique=True, name="email_unique")
+    except Exception as e:
+        print(f"[DB] unique index error: {type(e).__name__}")
+
 def migrate_account_passwords():
     """Purono plaintext App Password gulo ekbar encrypt kore felbe (kichu bodlay na, shudhu database-er value)."""
     if accounts_collection is None or _totp_fernet is None:
@@ -2557,11 +2573,14 @@ def add_account():
             return jsonify({"error": "Login failed. Check the email and App Password (2-Step Verification must be on)."}), 400
         return jsonify({"error": f"Could not verify with Gmail ({reason}). Please try again."}), 400
 
-    accounts_collection.insert_one({
-        "email": email_input,
-        "password": pw_encrypt(email_input, password_input),
-        "created_at": datetime.now()
-    })
+    try:
+        accounts_collection.insert_one({
+            "email": email_input,
+            "password": pw_encrypt(email_input, password_input),
+            "created_at": datetime.now()
+        })
+    except DuplicateKeyError:                       # check-er pore, insert-er age onno request dhukiye felechhe
+        return jsonify({"error": "Account already exists!"}), 400
 
     return jsonify({"message": "Account verified and added!"})
 
@@ -2636,6 +2655,8 @@ def _save_accounts(items, verify):
         try:
             accounts_collection.insert_one({"email": em, "password": pw_encrypt(em, pw), "created_at": datetime.now()})
             added += 1
+        except DuplicateKeyError:
+            skipped.append(em)
         except Exception as e:
             print(f"Bulk insert error: {type(e).__name__}")
             failed.append({"email": em, "reason": "Could not save"})
@@ -3079,6 +3100,7 @@ def passkey_auth_verify():
     return jsonify({"success": True})
 
 
+ensure_accounts_unique_index()
 migrate_account_passwords()
 
 if ENABLE_PUSH:
