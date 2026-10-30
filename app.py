@@ -38,7 +38,9 @@ from webauthn.helpers.structs import (
 )
 
 app = Flask(__name__)
-CORS(app, supports_credentials=True)
+# Shudhu nijer site (ORIGIN) cookie-shoho API dakte parbe. Age shob site-ke allow kora chilo.
+# ORIGIN niche (Passkey config) thake -- ekhane age-i pore nei.
+CORS(app, supports_credentials=True, origins=[os.environ.get("ORIGIN", "https://gmail-otp-dashboard.onrender.com")])
 # Render proxy-r pichone thake, tai asol client IP pete lage (lockout-er jonno)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1)
 
@@ -835,27 +837,35 @@ def check_email_auth(msg):
 
 def fetch_email_info(mail, uid):
     """Ekta email download kore OTP, sender, subject, time ber kore."""
-    _, msg_data = mail.uid('fetch', uid, '(BODY.PEEK[])')
+    _, msg_data = mail.uid('fetch', uid, '(INTERNALDATE BODY.PEEK[])')
     for part in msg_data or []:
         if isinstance(part, tuple):
             msg = email.message_from_bytes(part[1])
+            internal = None              # Gmail-e pouchanor asol somoy -- sender nokol korte pare na (Date header pare)
+            try:
+                m_id = re.search(rb'INTERNALDATE "([^"]+)"', part[0])
+                if m_id:
+                    internal = datetime.strptime(m_id.group(1).decode("ascii").strip(), "%d-%b-%Y %H:%M:%S %z").timestamp()
+            except Exception:
+                internal = None
             subject = decode_hdr(msg.get("Subject"), "No Subject")
             raw_from = decode_hdr(msg.get("From"), "Unknown Sender")
             name, addr = parseaddr(raw_from)
             sender = name or addr or raw_from
             date_hdr = msg.get("Date")
 
-            msg_dt = datetime.now(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)   # Date header na thakle-o Dhaka somoy (server UTC)
             epoch = time.time()          # asol (timezone-thik) unix time, expiry hisabe lage
-            if date_hdr:
+            if internal:
+                epoch = internal
+            elif date_hdr:               # INTERNALDATE na pele Date header, kintu bhobishyoter tarikh hole ekhon-ke dhori
                 try:
                     parsed_dt = parsedate_to_datetime(date_hdr)
                     if parsed_dt.tzinfo is None:
                         parsed_dt = parsed_dt.replace(tzinfo=timezone.utc)
-                    epoch = parsed_dt.timestamp()
-                    msg_dt = parsed_dt.astimezone(ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
-                except:
+                    epoch = min(parsed_dt.timestamp(), time.time())
+                except Exception:
                     pass
+            msg_dt = datetime.fromtimestamp(epoch, ZoneInfo("Asia/Dhaka")).replace(tzinfo=None)
 
             otp, score = "Code not found", 0
             ttl = None
