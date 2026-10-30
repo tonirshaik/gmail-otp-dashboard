@@ -109,6 +109,8 @@ def load_accounts():
     if accounts_collection is not None:
         try:
             accounts = list(accounts_collection.find({}, {'_id': 0}))
+            for a in accounts:
+                a['password'] = pw_decrypt(a.get('email'), a.get('password'))
             return accounts
         except Exception as e:
             print(f"Error loading accounts from Mongo: {e}")
@@ -1960,6 +1962,51 @@ else:
     except Exception:
         print("WARNING: TOTP_ENC_KEY thik nai (Fernet key hote hobe). 2FA feature bondho thakbe.")
 
+# ======================= Gmail App Password encryption (database-e) =======================
+# App Password database-e plaintext na, "enc1:..." hishebe thake (TOTP_ENC_KEY diye Fernet/AES).
+# Email-o bhitore bandha thake, tai ek account-er password onno account-e ulte-palte boshale kaj korbe na.
+# TOTP_ENC_KEY na thakle age-r moto plaintext-e thake (app bondho hoy na). Chabi hariye felle login hobe na -- chabi safe rakho.
+_PW_PREFIX = "enc1:"
+
+def pw_encrypt(email_addr, plain):
+    if _totp_fernet is None or not plain:
+        return plain
+    blob = json.dumps({"e": str(email_addr or "").lower(), "p": plain}).encode()
+    return _PW_PREFIX + _totp_fernet.encrypt(blob).decode()
+
+def pw_decrypt(email_addr, stored):
+    """Encrypted hole plaintext ferot dey. Plaintext (purono) hole jemon ache temon. Pore na gele "" (login fail hobe)."""
+    if not isinstance(stored, str) or not stored.startswith(_PW_PREFIX):
+        return stored
+    if _totp_fernet is None:
+        print("[SEC] App Password encrypted kintu TOTP_ENC_KEY nai -- decrypt kora gelo na")
+        return ""
+    try:
+        d = json.loads(_totp_fernet.decrypt(stored[len(_PW_PREFIX):].encode()).decode())
+        if d.get("e") != str(email_addr or "").lower():
+            raise ValueError("mismatch")
+        return d["p"]
+    except Exception as e:
+        print(f"[SEC] App Password decrypt hoyni ({type(e).__name__}) -- TOTP_ENC_KEY age-r motoi ache to?")
+        return ""
+
+def migrate_account_passwords():
+    """Purono plaintext App Password gulo ekbar encrypt kore felbe (kichu bodlay na, shudhu database-er value)."""
+    if accounts_collection is None or _totp_fernet is None:
+        return
+    try:
+        n = 0
+        for d in accounts_collection.find({}, {"email": 1, "password": 1}):
+            pw, em = d.get("password"), d.get("email")
+            if em and isinstance(pw, str) and pw and not pw.startswith(_PW_PREFIX):
+                r = accounts_collection.update_one({"_id": d["_id"], "password": pw},
+                                                   {"$set": {"password": pw_encrypt(em, pw)}})
+                n += r.modified_count
+        if n:
+            print(f"[SEC] {n} ta App Password encrypt kora holo")
+    except Exception as e:
+        print(f"[SEC] password migrate error: {type(e).__name__}")
+
 _TOTP_ALGOS = {"SHA1": hashlib.sha1, "SHA256": hashlib.sha256, "SHA512": hashlib.sha512}
 
 def parse_totp_input(raw):
@@ -2502,7 +2549,7 @@ def add_account():
 
     accounts_collection.insert_one({
         "email": email_input,
-        "password": password_input,
+        "password": pw_encrypt(email_input, password_input),
         "created_at": datetime.now()
     })
 
@@ -2577,7 +2624,7 @@ def _save_accounts(items, verify):
     added = 0
     for em, pw in ok:
         try:
-            accounts_collection.insert_one({"email": em, "password": pw, "created_at": datetime.now()})
+            accounts_collection.insert_one({"email": em, "password": pw_encrypt(em, pw), "created_at": datetime.now()})
             added += 1
         except Exception as e:
             print(f"Bulk insert error: {type(e).__name__}")
@@ -2641,7 +2688,11 @@ def backup_export():
         return jsonify({"error": "Backup password is too long"}), 400
     try:
         docs = list(accounts_collection.find({}, {'_id': 0, 'email': 1, 'password': 1}))
-        accounts = [{"email": d['email'], "password": d['password']} for d in docs if d.get('email') and d.get('password')]
+        accounts = []
+        for d in docs:
+            plain = pw_decrypt(d.get('email'), d.get('password'))   # backup-e plaintext jay (backup password diye encrypt hoy)
+            if d.get('email') and plain:
+                accounts.append({"email": d['email'], "password": plain})
         payload = json.dumps({"app": "gmail-otp-dashboard", "exported_at": datetime.now(timezone.utc).isoformat(),
                               "accounts": accounts}).encode('utf-8')
         salt = os.urandom(16)
@@ -2880,6 +2931,8 @@ def passkey_auth_verify():
         session['delete_auth_at'] = time.time()
     return jsonify({"success": True})
 
+
+migrate_account_passwords()
 
 if ENABLE_PUSH:
     start_push()
