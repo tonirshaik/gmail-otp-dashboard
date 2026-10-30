@@ -413,6 +413,7 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
         if 7 > kw_val:
             kw_val, strong_hit = 7, True
 
+    had_kw = kw_val > 0                              # asol keyword (code/otp...) paoa gelo, intent-er fallback na
     if kw_val == 0 and has_intent:                   # keyword nai, kintu sign-in/verify jatiyo kotha ache
         stripped = before_line.rstrip().lower()
         if own_line or stripped.endswith(("use", "enter", "type", "is", ":")) or (kind == "digits" and len(text) == 6):
@@ -441,7 +442,12 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
     window = t[max(0, s - 45):min(len(t), e + 45)]
     n_neg = len(_NEG.findall(window))
     n_neg += len(_NEG_PHONE.findall(t[max(0, s - 14):s] + " " + t[e:e + 4]))
-    score -= min(n_neg, 2) if strong_hit else min(3 * n_neg, 9)
+    if strong_hit:
+        score -= min(n_neg, 2)
+    elif had_kw and kw_val >= 4 and _LABEL.search(before_line):
+        score -= min(n_neg, 1)       # "Your code is 482913. Order total $45" -- code-er thik age label, tai pashe order/total thakleo kom shasti
+    else:
+        score -= min(3 * n_neg, 9)
 
     if not strong_hit and _MARKETING.search(t[max(0, s - 80):min(len(t), e + 80)]):
         score -= 5
