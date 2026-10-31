@@ -1978,7 +1978,7 @@ def mail_search():
 
     data_in = _json_body()
     email_in = str(data_in.get('email', '')).strip().lower()
-    query = str(data_in.get('query', '')).strip()
+    query = re.sub(r"[\x00-\x1f\x7f]", "", str(data_in.get('query', ''))).strip()
     folder_req = str(data_in.get('folder', '')).strip().lower()
     if folder_req not in ('inbox', 'spam') or not query or len(query) > 60:
         return jsonify({"error": "Enter a search term (up to 60 characters)."}), 400
@@ -1993,7 +1993,6 @@ def mail_search():
         fname = _select_view_folder(mail, folder_req)
         items = []
         if fname:
-            safe_query = query.replace("\\", "\\\\").replace('"', '\\"')
             if any(ord(ch) > 127 for ch in query):
                 # imaplib defaults to ASCII. Gmail supports UTF8=ACCEPT for X-GM-RAW.
                 try:
@@ -2001,10 +2000,12 @@ def mail_search():
                 except Exception:
                     pass
                 mail._encoding = 'utf-8'
-                raw_query = '{from:("' + safe_query + '") subject:("' + safe_query + '")}'
-                status, data = mail.uid('search', None, 'X-GM-RAW', '"' + raw_query.replace('"', '\\"') + '"')
+                # Replace IMAP/Gmail query delimiters from user input before building raw query.
+                safe_query = query.replace('\\', ' ').replace('"', ' ')
+                raw_query = '{from:(' + safe_query + ') subject:(' + safe_query + ')}'
+                status, data = mail.uid('search', None, 'X-GM-RAW', '"' + raw_query + '"')
             else:
-                quoted = '"' + safe_query + '"'
+                quoted = '"' + query + '"'
                 status, data = mail.uid('search', None, 'OR', 'FROM', quoted, 'SUBJECT', quoted)
 
             uids = data[0].split()[-15:] if status == 'OK' and data and data[0] else []
