@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.6.2 - 2026-10-31 (patch)
+- Update app.js
+
 ## v1.6.1 - 2026-10-31 (patch)
 - Remove dead code (unused functions, route, markup and CSS)
 
