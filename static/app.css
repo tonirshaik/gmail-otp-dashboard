@@ -860,7 +860,7 @@
         }
 
         /* =====================================================================
-           App experience: safe areas, pull-to-refresh, offline bar
+           App experience: safe areas, offline bar
            ===================================================================== */
         html, body { overscroll-behavior-y: contain; }
         @media (max-width: 1023px) {
@@ -876,19 +876,6 @@
             color: var(--warn-text); background: var(--popup-bg); border: 1px solid rgba(245, 158, 11, 0.45);
             box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
         }
-
-        .ptr {
-            position: fixed; left: 50%; z-index: 650; pointer-events: none;
-            top: calc(env(safe-area-inset-top, 0px) + 6px);
-            width: 38px; height: 38px; border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            background: var(--popup-bg); color: var(--accent-cyan); border: 1px solid var(--card-border);
-            box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-            opacity: 0; transform: translate(-50%, -60px);
-        }
-        .ptr i { transition: transform 0.15s ease; }
-        .ptr.ready i { transform: rotate(180deg); }
-        .ptr.loading { transition: transform 0.2s ease, opacity 0.2s ease; }
 
         /* ---- per-card "wait for a new code on this account" ---- */
         .card-wait {
