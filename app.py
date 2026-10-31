@@ -1061,52 +1061,6 @@ def check_gmail(account, mail_data):
             "timestamp": 0
         })
 
-REFRESH_DEADLINE = 25      # sekend. Gunicorn-er default 30s timeout-er age e shesh korte hobe
-
-def get_latest_otps(only=None):
-    """only = email-er set hole shudhu sei account gulo check kore (jemon pin kora gulo)."""
-    accounts = load_accounts()
-    if only is not None:
-        accounts = [a for a in accounts if str(a.get('email', '')).lower() in only]
-    all_codes = []
-    threads = []
-    lock = threading.Lock()
-
-    def worker(acc):
-        local_data = []
-        check_gmail(acc, local_data)
-        if local_data:
-            with lock:
-                all_codes.extend(local_data)
-
-    for acc in accounts:
-        t = threading.Thread(target=worker, args=(acc,), daemon=True)
-        threads.append(t)
-        t.start()
-
-    deadline = time.time() + REFRESH_DEADLINE
-    for t in threads:
-        t.join(max(0, deadline - time.time()))
-
-    with lock:
-        results = list(all_codes)
-
-    # Deadline-er moddhe jara sesh kore ni tader "Timeout" card dekhai
-    done = {r["email"] for r in results}
-    for acc in accounts:
-        if acc["email"] not in done:
-            results.append({
-                "email": acc["email"],
-                "sender": "Timeout - Refresh again",
-                "subject": "Took too long",
-                "code": "Error",
-                "time": "N/A",
-                "timestamp": 0,
-            })
-
-    results.sort(key=lambda x: x['timestamp'], reverse=True)
-    return results
-
 # ======================= Live push (IMAP IDLE + SSE) =======================
 # ENABLE_PUSH=1 dile chalu hoy. Gmail-er INBOX "IDLE" mode-e dhore rakhe; notun mail ashle
 # server sathe sathe browser-e (SSE) jani dey, refresh chapte hoy na.
@@ -1718,11 +1672,6 @@ def logout():
     session.pop('logged_in', None)
     session.pop('settings_unlocked', None)
     return jsonify({"success": True})
-
-@app.route('/api/fetch-otps')
-def fetch_otps():
-    # Shob account ekshathe check bondho (Gmail block hoyar jhunki). Shudhu card-er refresh (/api/refresh-one) cholbe.
-    return jsonify({"error": "Checking all accounts at once is turned off. Use the refresh button on a card."}), 410
 
 @app.route('/api/refresh-one', methods=['POST'])
 def refresh_one():

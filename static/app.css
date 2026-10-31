@@ -567,12 +567,6 @@
         /* ---- countdown ring ---- */
         .otp-expiry { display: flex; align-items: center; gap: 6px; }
         .ring { transform: rotate(-90deg); flex: none; }
-        .ring-bg { fill: none; stroke: rgba(255, 255, 255, 0.12); stroke-width: 3; }
-        .ring-fg {
-            fill: none; stroke: var(--accent-cyan); stroke-width: 3; stroke-linecap: round;
-            transition: stroke-dashoffset 1s linear, stroke 0.3s ease;
-        }
-        .otp-card.expiring .ring-fg { stroke: var(--accent-red); }
 
         /* ---- countdown bar ---- */
         .tbar {
@@ -722,7 +716,6 @@
         :root[data-theme="light"] .otp-card.is-used { border-color: var(--ctl-border); }
         :root[data-theme="light"] .otp-card.is-expired::before,
         :root[data-theme="light"] .otp-card.is-used::before { background: rgba(15, 23, 42, 0.18); }
-        :root[data-theme="light"] .ring-bg { stroke: rgba(15, 23, 42, 0.12); }
         :root[data-theme="light"] .sk {
             background: linear-gradient(90deg, rgba(15, 23, 42, 0.06) 25%, rgba(15, 23, 42, 0.12) 50%, rgba(15, 23, 42, 0.06) 75%);
             background-size: 200% 100%;
@@ -772,9 +765,6 @@
         /* ---- expiry ring: bigger, colour follows time left ---- */
         .otp-expiry { font-size: 12px; gap: 8px; font-variant-numeric: tabular-nums; }
         .ring { width: 30px; height: 30px; }
-        .ring-fg { stroke: var(--ring-ok); }
-        .otp-card.ring-warn .ring-fg { stroke: var(--ring-warn); }
-        .otp-card.expiring .ring-fg { stroke: var(--ring-bad); }
         .otp-expiry-time { font-weight: 700; color: var(--text-main); }
         .otp-card.expiring .otp-expiry-time { color: var(--accent-red); }
         @keyframes ringPulse {
@@ -923,18 +913,12 @@
         .mail-acct { font-size: 12px; color: var(--text-muted); word-break: break-all; margin-bottom: 10px; }
         .mail-scroll { overflow-y: auto; -webkit-overflow-scrolling: touch; min-height: 0; }
         .mail-state { text-align: center; padding: 28px 8px; color: var(--text-muted); font-size: 13px; }
-        .mail-meta { font-size: 12.5px; line-height: 1.6; color: var(--text-main); border-bottom: 1px solid var(--card-border); padding-bottom: 10px; margin-bottom: 10px; word-break: break-word; }
         .mail-subject { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
-        .mail-meta .k { color: var(--text-muted); }
         .mail-badge { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; margin-left: 4px; background: rgba(6, 182, 212, 0.15); color: var(--accent-cyan); }
         .mail-badge.spam { background: rgba(245, 158, 11, 0.18); color: #fbbf24; }
-        .mail-auth-ok { color: #34d399; }
-        .mail-auth-bad { color: #f87171; font-weight: 700; }
         .mail-text { white-space: pre-wrap; word-break: break-word; font-family: inherit; font-size: 13.5px; line-height: 1.6; color: var(--text-main); margin: 0; }
         .mail-note { font-size: 11px; color: var(--text-muted); margin-top: 10px; }
         :root[data-theme="light"] .mail-badge.spam { color: #b45309; }
-        :root[data-theme="light"] .mail-auth-ok { color: #047857; }
-        :root[data-theme="light"] .mail-auth-bad { color: #b91c1c; }
 
         /* ---- latest email: poriskar body, link chip, code box ---- */
         .mail-code {
@@ -1067,9 +1051,6 @@
         .tfa-time { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-size: 12px; color: var(--accent-cyan); font-variant-numeric: tabular-nums; }
         .tfa-box.warn .tfa-label, .tfa-box.warn .tfa-time { color: var(--accent-red); }
         .tfa-left, .svc-left { min-width: 30px; text-align: right; font-weight: 700; }
-        .tfa-remove { margin-left: auto; background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; padding: 4px 8px; border-radius: 8px; touch-action: manipulation; }
-        .tfa-remove:hover, .tfa-remove:focus-visible { color: #f87171; background: rgba(239, 68, 68, 0.12); outline: none; }
-        @media (hover: none), (pointer: coarse) { .tfa-remove { min-width: 38px; min-height: 38px; } }
         .tfa-wait { opacity: 0.6; letter-spacing: 6px; }
         .tfa-form { display: flex; flex-direction: column; gap: 10px; }
         .tfa-form-title { font-weight: 700; font-size: 14px; color: var(--text-main); }
