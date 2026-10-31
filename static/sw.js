@@ -2,7 +2,7 @@
    - app shell offline-e kaj kore (login page + shell)
    - /api/* KOKHONO cache hoy na (OTP private data)
    - Web Push: tab/app bondho thakleo notification dekhay */
-const VERSION = 'v6';
+const VERSION = 'v7';
 const SHELL_CACHE = 'otp-shell-' + VERSION;
 const ASSET_CACHE = 'otp-assets-' + VERSION;
 const SHELL = ['/', '/manifest.webmanifest', '/static/icons/icon-192.png', '/static/icons/icon-512.png',
@@ -86,6 +86,27 @@ async function networkFirst(event, key, ms, isPage) {
     return network.catch(() => Response.error());
 }
 
+/* ?v=<hash> shoho static file: hash bodlale URL bodlay, tai cache-first-i nirapod.
+   Offline-e notun URL cache-e na thakle purono (?v chhara) precache-ta dei. */
+async function cacheFirstVersioned(req, url) {
+    const cache = await caches.open(SHELL_CACHE);
+    const hit = await cache.match(req.url);
+    if (hit) return hit;
+    try {
+        const res = await fetch(req);
+        if (res && res.ok) {
+            const keys = await cache.keys();                       // ei file-er purono ?v= version mushe fela
+            await Promise.all(keys.filter((k) => { const u = new URL(k.url); return u.pathname === url.pathname && u.search && k.url !== req.url; })
+                                  .map((k) => cache.delete(k)));
+            await cache.put(req.url, res.clone());
+        }
+        return res;
+    } catch (e) {
+        const any = await cache.match(url.pathname);               // offline fallback
+        return any || Response.error();
+    }
+}
+
 self.addEventListener('fetch', (event) => {
     const req = event.request;
     if (req.method !== 'GET') return;
@@ -95,6 +116,10 @@ self.addEventListener('fetch', (event) => {
         if (req.mode === 'navigate') {
             event.respondWith(url.pathname === '/' ? networkFirst(event, '/', 4000, true)
                                                    : fetch(req).catch(() => caches.match('/').then((h) => h || Response.error())));
+            return;
+        }
+        if (url.pathname.startsWith('/static/') && url.searchParams.has('v')) {
+            event.respondWith(cacheFirstVersioned(req, url));       // ?v=<hash> file kokhono bodlay na
             return;
         }
         if (url.pathname.startsWith('/static/') || url.pathname === '/manifest.webmanifest') {

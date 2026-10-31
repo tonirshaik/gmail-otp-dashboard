@@ -1643,6 +1643,33 @@ def gzip_response(resp):
         print(f"[GZIP] skipped: {type(e).__name__}")
     return resp
 
+# ---------------- Static file cache: URL-e file-er hash (?v=...) -> 1 bochor cache, file bodlale URL bodlay ----------------
+_ASSET_V = {}         # filename -> (mtime, hash)
+
+def asset_v(name):
+    """static/<name>-er content hash (10 char). File bodlale hash bodlay, tai purono cache aponei bad."""
+    path = os.path.join(app.root_path, 'static', name)
+    try:
+        mt = os.path.getmtime(path)
+        hit = _ASSET_V.get(name)
+        if hit and hit[0] == mt:
+            return hit[1]
+        with open(path, 'rb') as f:
+            h = hashlib.sha1(f.read()).hexdigest()[:10]
+        _ASSET_V[name] = (mt, h)
+        return h
+    except OSError:
+        return '0'
+
+app.jinja_env.globals['asset_v'] = asset_v
+
+@app.after_request
+def static_cache_headers(resp):
+    # Shudhu ?v=<hash> shoho URL immutable. Bina ?v= static file age-r moto (ETag diye check) thake.
+    if request.path.startswith('/static/') and request.args.get('v') and resp.status_code == 200:
+        resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
+
 @app.route('/')
 def home():
     return render_template('index.html')
