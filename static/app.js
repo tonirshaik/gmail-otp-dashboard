@@ -1891,7 +1891,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                 const now = Date.now();
                 const next = (r.data.services || []).map(x => Object.assign({}, x, { endAt: now + (x.remaining || 0) * 1000 }));
                 const same = svcLoaded && next.length === svcList.length &&
-                    next.every((x, i) => svcList[i] && svcList[i].id === x.id && svcList[i].name === x.name && svcList[i].label === x.label);
+                    next.every((x, i) => svcList[i] && svcList[i].id === x.id && svcList[i].name === x.name && svcList[i].label === x.label && !!svcList[i].pinned === !!x.pinned);
                 svcList = next; svcLoaded = true;
                 if (tfaModalOpen() && tfaView === 'services') { if (same) svcPaint(); else renderSvcItems(); }
             } catch (e) {
@@ -1935,7 +1935,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             if (!items.length) { list.innerHTML = '<div class="mail-state">No service matches.</div>'; return; }
             list.innerHTML = items.map(x => {
                 const id = escAttr(x.id), nm = escAttr(x.name);
-                return `<div class="otp-swipe tfa">
+                return `<div class="otp-swipe tfa${x.pinned ? ' svc-pinned' : ''}">
                     <div class="swipe-tfa">
                         <button type="button" class="swipe-svc-edit" data-id="${id}" title="Edit" aria-label="Edit ${nm}"><i class="fa-solid fa-pencil"></i></button>
                         <button type="button" class="swipe-svc-del" data-id="${id}" title="Remove" aria-label="Remove ${nm}"><i class="fa-regular fa-trash-can"></i></button>
@@ -1947,6 +1947,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                                 <div class="svc-name">${nm}</div>
                                 ${x.label ? `<div class="svc-label">${escAttr(x.label)}</div>` : ''}
                             </div>
+                            <button type="button" class="svc-pin ${x.pinned ? 'pinned' : ''}" data-id="${id}" title="${x.pinned ? 'Unpin' : 'Pin to top'}" aria-label="${x.pinned ? 'Unpin' : 'Pin'} ${nm}" aria-pressed="${x.pinned ? 'true' : 'false'}"><i class="fa-${x.pinned ? 'solid' : 'regular'} fa-star"></i></button>
                         </div>
                         <div class="otp-code-box has-cells svc-code" role="button" tabindex="0" data-id="${id}" title="Click to copy" aria-label="2FA code of ${nm}. Press to copy"></div>
                         <div class="svc-time"><span class="tbar" aria-hidden="true"><i class="tbar-fill"></i></span><span class="svc-left"></span></div>
@@ -1980,7 +1981,19 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             const now = Date.now();
             if (!svcBusy && svcList.some(x => now >= x.endAt + 300)) svcLoad(false);        // notun code
         }, 1000);
+        async function svcTogglePin(id) {
+            const x = svcList.find(v => v.id === id);
+            if (!x) return;
+            const was = !!x.pinned;
+            const resort = () => { svcList.sort((a, b) => (!!b.pinned - !!a.pinned) || String(a.name).toLowerCase().localeCompare(String(b.name).toLowerCase())); renderSvcItems(); };
+            x.pinned = !was; resort();                         // sathe sathe dekhai; server fail korle ferot
+            const r = await tfaApi('/api/svc/pin', { id, pinned: !was });
+            if (r.loggedOut) return;
+            if (!r.ok) { x.pinned = was; resort(); showToast(r.data.error || 'Could not save pin. Try again.'); }
+        }
         tfaScroll.addEventListener('click', (e) => {
+            const pb = e.target.closest('.svc-pin');
+            if (pb) { e.preventDefault(); svcTogglePin(pb.dataset.id); return; }
             const c = e.target.closest('.svc-code');
             if (!c) return;
             const x = svcList.find(v => v.id === c.dataset.id);
