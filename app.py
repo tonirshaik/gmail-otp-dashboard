@@ -1246,14 +1246,33 @@ def _wait_watch_run(acc, mail, stop_event, deadline):
         sock = mail.sock
         lines = _Lines(sock)
         n = 0
+        # Gmail IMAP IDLE watches only the currently selected folder.
+        # Alternate Inbox and Spam so a new message in either folder is detected.
+        folder_groups = (("INBOX",), ("[Gmail]/Spam", "Spam"))
         while not stop_event.is_set():
-            left = deadline - time.time()
-            if left <= 0:
-                break
-            n += 1
-            if _idle_cycle(lines, sock, ("W%d" % n).encode(), min(IDLE_MAX_WAIT, left)) and not stop_event.is_set():
-                time.sleep(1)                       # mail puropuri index hoye jak
-                publish_scan(acc)
+            for folder_group in folder_groups:
+                if stop_event.is_set() or deadline - time.time() <= 0:
+                    break
+                selected = False
+                for folder in folder_group:
+                    try:
+                        typ, _ = mail.select(folder, readonly=True)
+                        if typ == "OK":
+                            selected = True
+                            break
+                    except Exception:
+                        continue
+                if not selected:
+                    continue
+                left = deadline - time.time()
+                if left <= 0:
+                    break
+                n += 1
+                # Short cycles let us switch folders frequently instead of
+                # spending the entire 120-second wait watching Inbox only.
+                if _idle_cycle(lines, sock, ("W%d" % n).encode(), min(10, left)) and not stop_event.is_set():
+                    time.sleep(1)                   # Gmail-er mail index hote ektu shomoy dao
+                    publish_scan(acc)                 # scans both Inbox and Spam
     except Exception as e:
         if not stop_event.is_set():
             print(f"[WAIT] {acc['email']}: {_error_reason(e)} ({type(e).__name__})")
