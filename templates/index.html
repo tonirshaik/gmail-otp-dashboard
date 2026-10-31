@@ -40,7 +40,7 @@
         <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     </noscript>
     
-    <link rel="stylesheet" href="/static/app.css">
+    <link rel="stylesheet" href="/static/app.css?v={{ asset_v('app.css') }}">
 </head>
 <body>
 
@@ -337,7 +337,8 @@
         <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copied!</span>
     </div>
 
-    <script src="/static/app.js" defer></script>
+    <script>window.ASSET_V = { brands: "{{ asset_v('brands.js') }}", jsqr: "{{ asset_v('jsQR.min.js') }}" };</script>
+    <script src="/static/app.js?v={{ asset_v('app.js') }}" defer></script>
 
 </body>
 </html>

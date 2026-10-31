@@ -1651,7 +1651,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                 sc.onerror = () => { sc.remove(); rej(new Error('load failed')); };
                 document.head.appendChild(sc);
             });
-            jsQRPromise = tryLoad('/static/jsQR.min.js')
+            jsQRPromise = tryLoad('/static/jsQR.min.js' + ((window.ASSET_V && window.ASSET_V.jsqr) ? '?v=' + window.ASSET_V.jsqr : ''))
                 .catch(() => tryLoad('https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js'))
                 .catch(() => { jsQRPromise = null; throw new Error('Could not load the QR reader. Check your internet, or that static/jsQR.min.js is on the server.'); });
             return jsQRPromise;
@@ -1765,7 +1765,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             if (!svcBrandsPromise) {
                 svcBrandsPromise = new Promise((res) => {
                     const sc = document.createElement('script');
-                    sc.src = '/static/brands.js';
+                    sc.src = '/static/brands.js' + ((window.ASSET_V && window.ASSET_V.brands) ? '?v=' + window.ASSET_V.brands : '');
                     sc.onload = () => res(!!window.SVC_BRANDS);
                     sc.onerror = () => { svcBrandsPromise = null; res(false); };
                     document.head.appendChild(sc);
