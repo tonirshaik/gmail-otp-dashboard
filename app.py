@@ -39,6 +39,13 @@ from webauthn.helpers.structs import (
 )
 
 app = Flask(__name__)
+
+# ---------- App version (home page-er title-er pashe + "New version available" banner-e dekhay) ----------
+# Niyom (MAJOR.MINOR.PATCH): notun release e ei line-i bodlao, ar kichu na.
+#   1.0.0 -> prothom release        1.0.1 -> chhoto bug fix
+#   1.1.0 -> notun feature          2.0.0 -> boro poriborton
+APP_VERSION = "1.5.0"
+app.jinja_env.globals['app_version'] = APP_VERSION
 # Shudhu nijer site (ORIGIN) cookie-shoho API dakte parbe. Age shob site-ke allow kora chilo.
 # ORIGIN niche (Passkey config) thake -- ekhane age-i pore nei.
 CORS(app, supports_credentials=True, origins=[os.environ.get("ORIGIN", "https://gmail-otp-dashboard.onrender.com")])

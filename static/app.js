@@ -3574,7 +3574,17 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                     location.reload();                            // shudhu page bodlechhe
                 }
             }
-            function showUpdateBanner() {
+            // notun page-er <meta name="app-version"> theke notun version-er nam ane (na pele khali)
+            const curVersion = () => { const m = document.querySelector('meta[name="app-version"]'); return m ? m.content : ''; };
+            const fetchNewVersion = () => fetch('/', { cache: 'no-store' })
+                .then((r) => (r.ok ? r.text() : '')).then((t) => { const m = /name="app-version"\s+content="([^"]+)"/.exec(t); return m ? m[1] : ''; })
+                .catch(() => '');
+            let bannerBusy = false;
+            async function showUpdateBanner() {
+                if (document.getElementById('updateBanner') || bannerBusy) return;
+                bannerBusy = true;
+                const nv = await Promise.race([fetchNewVersion(), new Promise((r) => setTimeout(() => r(''), 2500))]);
+                bannerBusy = false;
                 if (document.getElementById('updateBanner')) return;
                 const bar = document.createElement('div');
                 bar.id = 'updateBanner';
@@ -3583,7 +3593,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                     'background:#1f2937;color:#fff;box-shadow:0 8px 28px rgba(0,0,0,.4);font:500 14px/1.3 system-ui,sans-serif;';
                 const msg = document.createElement('span');
                 msg.style.flex = '1';
-                msg.textContent = 'New version available';
+                msg.textContent = (nv && nv !== curVersion()) ? 'New version available: v' + nv : 'New version available';
                 const btn = document.createElement('button');
                 btn.textContent = 'Update this app';
                 btn.style.cssText = 'border:0;border-radius:10px;padding:9px 14px;background:#3b82f6;color:#fff;font:600 14px system-ui,sans-serif;cursor:pointer;';
