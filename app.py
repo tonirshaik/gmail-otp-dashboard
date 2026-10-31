@@ -1243,50 +1243,41 @@ _waiters_lock = threading.Lock()
 def _wait_watch_run(acc, mail, stop_event, deadline):
     key = _norm_email(acc["email"])
     try:
-        # IMAP IDLE can notify only for the selected folder, and switching folders
-        # while reading the raw socket can miss buffered IMAP responses. Poll both
-        # folders with normal imaplib commands instead; this is reliable for Spam too.
-        folders = (("INBOX", INBOX_SCAN_LIMIT), ("[Gmail]/Spam", SPAM_SCAN_LIMIT))
+        # Poll both folders with normal imaplib commands. IDLE watches only the
+        # selected folder and raw-socket reads can miss buffered IMAP responses.
+        folder_groups = (("INBOX",), ("[Gmail]/Spam", "Spam"))
         last_seen = {}
-        # Establish a baseline before waiting, so old codes are not repeatedly shown.
-        for folder, limit in folders:
-            try:
-                info = scan_folder(mail, acc["email"], folder, limit)
-                last_seen[folder] = info.get("timestamp", 0) if info else 0
-            except Exception as e:
-                print(f"[WAIT BASELINE] {acc['email']} {folder}: {e}")
-                last_seen[folder] = 0
 
-        while not stop_event.is_set() and time.time() < deadline:
-            found_new = []
-            for folder, limit in folders:
-                if stop_event.is_set() or time.time() >= deadline:
-                    break
+        def scan_group(group):
+            for folder in group:
                 try:
-                    info = scan_folder(mail, acc["email"], folder, limit)
-                    if not info:
-                        continue
-                    ts = info.get("timestamp", 0)
-                    if ts > last_seen.get(folder, 0):
-                        last_seen[folder] = ts
-                        found_new.append((ts, info))
+                    info = scan_folder(mail, acc["email"], folder,
+                                       INBOX_SCAN_LIMIT if folder == "INBOX" else SPAM_SCAN_LIMIT)
+                    if info:
+                        return folder, info
                 except Exception as e:
                     print(f"[WAIT SCAN] {acc['email']} {folder}: {e}")
+            return None, None
 
-            # Check the alternate Gmail folder name if the standard Spam folder
-            # name is not available on this account.
-            if not found_new and not stop_event.is_set() and time.time() < deadline:
-                try:
-                    info = scan_folder(mail, acc["email"], "Spam", SPAM_SCAN_LIMIT)
-                    if info:
-                        ts = info.get("timestamp", 0)
-                        if ts > last_seen.get("Spam", 0):
-                            last_seen["Spam"] = ts
-                            found_new.append((ts, info))
-                except Exception as e:
-                    print(f"[WAIT SCAN] {acc['email']} Spam: {e}")
+        # Establish a baseline so old codes are not repeatedly sent as new.
+        for group in folder_groups:
+            folder, info = scan_group(group)
+            for candidate in group:
+                last_seen.setdefault(candidate, 0)
+            if folder and info:
+                last_seen[folder] = info.get("timestamp", 0)
 
-            for ts, info in sorted(found_new, key=lambda pair: pair[0]):
+        while not stop_event.is_set() and time.time() < deadline:
+            for group in folder_groups:
+                if stop_event.is_set() or time.time() >= deadline:
+                    break
+                folder, info = scan_group(group)
+                if not folder or not info:
+                    continue
+                ts = info.get("timestamp", 0)
+                if ts <= last_seen.get(folder, 0):
+                    continue
+                last_seen[folder] = ts
                 item = {"email": acc["email"], **make_entry(info)}
                 broadcast_item(item)
                 try:
@@ -1294,8 +1285,7 @@ def _wait_watch_run(acc, mail, stop_event, deadline):
                 except Exception as e:
                     print(f"[WEBPUSH] notify error: {e}")
 
-            # Short polling interval gives Inbox and Spam equal attention without
-            # holding an IDLE session on only one folder.
+            # Five-second polling makes Inbox and Spam equally responsive.
             stop_event.wait(min(5, max(0, deadline - time.time())))
     except Exception as e:
         if not stop_event.is_set():
