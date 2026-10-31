@@ -1,0 +1,32 @@
+name: Auto version
+
+# main-e kono change merge holei VERSION + CHANGELOG.md nije bere jay.
+# Niyom: scripts/bump_version.py (feat -> minor, breaking -> major, baki -> patch)
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  bump:
+    # bot-er nijer commit dhore abar bump korbe na
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(release)') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Bump version
+        id: bump
+        env:
+          MSG: ${{ github.event.head_commit.message }}
+        run: |
+          NEW=$(python3 scripts/bump_version.py "$MSG")
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add VERSION CHANGELOG.md
+          git commit -m "chore(release): v${{ steps.bump.outputs.new }}"
+          git push

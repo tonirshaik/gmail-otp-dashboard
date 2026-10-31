@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Gmail OTP Dashboard</title>
     <meta name="theme-color" content="#0b0f19">
+    <meta name="app-version" content="{{ app_version }}">
     <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/favicon-32.png">
     <link rel="apple-touch-icon" href="/static/icons/apple-touch-icon.png">
@@ -74,7 +75,7 @@
         <div id="dashboardSection" class="hidden">
             <div class="top-bar">
                 <div class="header-title">
-                    <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard
+                    <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard <span class="app-ver" id="appVer" title="App version">v{{ app_version }}</span>
                 </div>
                 
                 <div class="top-actions">
