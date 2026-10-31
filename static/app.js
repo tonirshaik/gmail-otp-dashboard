@@ -3475,7 +3475,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
 
         // =====================================================================
         // App experience: install (PWA), service worker, alerts (Web Push),
-        // pull-to-refresh, offline
+        // offline
         // =====================================================================
         const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
         const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -3721,64 +3721,3 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             setAlertsMode(mode);
         }
 
-        // ---------- Pull to refresh (phone) ----------
-        (function () {
-            const el = document.getElementById('ptr');
-            const READY = 62;                 // koto px tanle refresh hobe (damped)
-            let startY = 0, startX = 0, dy = 0, active = false, decided = false;
-            const blocked = () => !dashboardIsOpen() || accountsModalOpen() || deleteModalOpen() || paletteOpen()
-                || settingsPopup.classList.contains('active') || isFetching;
-            function show(d) {
-                el.style.transition = 'none';
-                el.style.opacity = String(Math.min(1, d / READ_FADE));
-                el.style.transform = `translate(-50%, ${Math.min(d, 90) - 56}px)`;
-                el.classList.toggle('ready', d >= READY);
-            }
-            const READ_FADE = 40;
-            function hide() {
-                el.classList.remove('ready');
-                el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
-                el.style.opacity = '0';
-                el.style.transform = 'translate(-50%, -60px)';
-            }
-            document.addEventListener('touchstart', (e) => {
-                active = false; dy = 0;
-                if (blocked() || e.touches.length !== 1) return;
-                if ((window.scrollY || document.documentElement.scrollTop) > 0) return;
-                if (e.target.closest('.otp-container') && otpContainer.scrollTop > 0) return;
-                startY = e.touches[0].clientY; startX = e.touches[0].clientX;
-                active = true; decided = false;
-            }, { passive: true });
-            document.addEventListener('touchmove', (e) => {
-                if (!active) return;
-                const t = e.touches[0];
-                const ddy = t.clientY - startY, ddx = t.clientX - startX;
-                if (!decided) {
-                    if (Math.abs(ddx) < 8 && Math.abs(ddy) < 8) return;
-                    if (ddy <= 0 || Math.abs(ddx) > Math.abs(ddy)) { active = false; return; }   // upore ba pashe -> pull na
-                    decided = true;
-                }
-                dy = ddy * 0.55;
-                show(dy);
-            }, { passive: true });
-            function end() {
-                if (!active) return;
-                active = false;
-                if (dy >= READY) {
-                    lightVibrate();
-                    el.classList.remove('ready');
-                    el.querySelector('i').className = 'fa-solid fa-rotate-right rotating';
-                    el.style.transition = 'transform 0.2s ease';
-                    el.style.transform = 'translate(-50%, 18px)';
-                    Promise.resolve().finally(() => {
-                        hide();
-                        setTimeout(() => { el.querySelector('i').className = 'fa-solid fa-arrow-down'; }, 250);
-                    });
-                } else {
-                    hide();
-                }
-                dy = 0;
-            }
-            document.addEventListener('touchend', end, { passive: true });
-            document.addEventListener('touchcancel', end, { passive: true });
-        })();
