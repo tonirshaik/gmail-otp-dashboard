@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.6.4 - 2026-10-31 (patch)
+- Fix on-demand OTP watch for Inbox and Spam
+
 ## v1.6.3 - 2026-10-31 (patch)
 - Update app.css
 
