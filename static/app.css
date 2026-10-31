@@ -1015,6 +1015,11 @@
         :root[data-theme="light"] .mail-tab.active { color: #0369a1; }
         :root[data-theme="light"] .mail-tab.spam.active { color: #92400e; }
         @media (max-width: 420px) { .mail-tab { padding: 5px 8px; font-size: 11.5px; } .mail-ibtn { padding: 6px 7px; } }
+        .mail-search { display: flex; align-items: center; gap: 8px; margin: 0 0 10px; }
+        .mail-search .tfa-input { flex: 1; min-width: 0; width: auto; padding: 8px 11px; font-size: 13px; }
+        .mail-search .mail-btn { flex: none; white-space: nowrap; }
+        .mail-search .mail-btn:disabled { opacity: 0.6; cursor: wait; }
+        @media (max-width: 420px) { .mail-search { gap: 6px; } .mail-search .mail-btn { padding: 7px 9px; } }
         .mail-back { background: none; border: none; color: var(--accent-cyan); cursor: pointer; font-family: inherit; font-size: 12.5px; font-weight: 700; padding: 0 0 10px; }
         .mail-list { display: flex; flex-direction: column; gap: 8px; }
         .mail-row { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; font-family: inherit; color: var(--text-main); background: var(--ctl-bg); border: 1px solid var(--card-border); border-radius: 12px; padding: 10px 12px; cursor: pointer; }

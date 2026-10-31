@@ -1008,7 +1008,13 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             mailAcct.textContent = '';
             mailEmail = '';
             mailData = null;
-            mailMode = 'latest'; mailItem = null; setMailModeUI();
+            mailMode = 'latest'; mailItem = null; mailSearchActive = false;
+            mailSearchInput.value = '';
+            mailSearchForm.classList.add('hidden');
+            mailSearchForm.reset();
+            mailSearchBtn.disabled = false;
+            mailSearchBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Search';
+            setMailModeUI();
             hideLinkBar();
             if (mailReturnFocus && document.contains(mailReturnFocus)) { try { mailReturnFocus.focus(); } catch (e) {} }
             mailReturnFocus = null;
@@ -1344,13 +1350,16 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             }
         }
         // ---- Inbox / Spam: shesh 3 ta email-er talika ----
-        function renderMailList(d, folder) {
+        function renderMailList(d, folder, isSearch) {
             mailData = null;
             hideLinkBar();
             clearInterval(mailAgoTimer);
             mailScroll.textContent = '';
             const items = d.items || [];
-            if (!items.length) { mailState('No emails in ' + (folder === 'spam' ? 'Spam' : 'Inbox') + ' yet.'); return; }
+            if (!items.length) {
+                mailState(isSearch ? 'No emails found.' : 'No emails in ' + (folder === 'spam' ? 'Spam' : 'Inbox') + ' yet.');
+                return;
+            }
             const list = mkEl('div', 'mail-list');
             items.forEach(it => {
                 const row = mkEl('button', 'mail-row');
@@ -1391,6 +1400,41 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                 if (my === mailReq) mailState('Could not reach the server. Try again.');
             }
         }
+        const mailSearchForm = document.getElementById('mailSearchForm');
+        const mailSearchInput = document.getElementById('mailSearchInput');
+        const mailSearchBtn = document.getElementById('mailSearchBtn');
+        let mailSearchActive = false;
+
+        async function searchMail() {
+            if (!mailEmail || !['inbox', 'spam'].includes(mailMode)) return;
+            const query = mailSearchInput.value.trim();
+            if (!query) { mailSearchInput.focus(); return; }
+            if (query.length > 60) { mailState('Search term must be 60 characters or less.'); return; }
+            const my = ++mailReq;
+            const email = mailEmail, folder = mailMode;
+            mailSearchActive = true;
+            mailItem = null;
+            hideLinkBar();
+            clearInterval(mailAgoTimer);
+            mailSearchBtn.disabled = true;
+            mailSearchBtn.innerHTML = '<i class="fa-solid fa-spinner rotating"></i> Searching';
+            mailState('Searching ' + (folder === 'spam' ? 'Spam' : 'Inbox') + '...', true);
+            try {
+                const r = await mailApi('/api/mail-search', { email, query, folder }, my);
+                if (!r) return;
+                if (!r.ok) { mailState(r.data.error || 'Could not search this Gmail. Try again.'); return; }
+                renderMailList(r.data, folder, true);
+            } catch (err) {
+                if (my === mailReq) mailState('Could not reach the server. Try again.');
+            } finally {
+                if (my === mailReq) {
+                    mailSearchBtn.disabled = false;
+                    mailSearchBtn.innerHTML = '<i class="fa-solid fa-magnifying-glass"></i> Search';
+                }
+            }
+        }
+        mailSearchForm.addEventListener('submit', (e) => { e.preventDefault(); searchMail(); });
+
         function setMailModeUI() {
             const t = { latest: ['fa-regular fa-envelope-open', 'Latest email'], inbox: ['fa-solid fa-inbox', 'Inbox'], spam: ['fa-solid fa-ban', 'Spam'] }[mailMode];
             const title = document.getElementById('mailTitle');
@@ -1402,6 +1446,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                 b.classList.toggle('active', mailMode === k);
                 b.setAttribute('aria-pressed', mailMode === k ? 'true' : 'false');
             });
+            if (mailSearchForm) mailSearchForm.classList.toggle('hidden', mailMode === 'latest');
         }
         function reloadMailView() {
             if (!mailEmail) return;
@@ -1414,13 +1459,19 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             mailMode = (mailMode === k && !mailItem) ? 'latest' : k;
             mailItem = null;
             mailRaw = false;
+            mailSearchActive = false;
+            if (mailSearchForm) mailSearchForm.classList.toggle('hidden', mailMode === 'latest');
+            if (mailSearchInput) mailSearchInput.value = '';
             setMailModeUI();
             reloadMailView();
         }
         function openMailModal(email, trigger) {
             mailEmail = String(email || '');
             mailRaw = false;
-            mailMode = 'latest'; mailItem = null; setMailModeUI();
+            mailMode = 'latest'; mailItem = null; mailSearchActive = false;
+            mailSearchForm.classList.add('hidden');
+            mailSearchInput.value = '';
+            setMailModeUI();
             mailReturnFocus = trigger || null;
             mailAcct.textContent = mailEmail;
             mailModal.classList.remove('hidden');

@@ -1967,6 +1967,101 @@ def mail_list():
         except Exception:
             pass
 
+# ======================= Email search: header-only, readonly =======================
+@app.route('/api/mail-search', methods=['POST'])
+def mail_search():
+    """Inbox / Spam-e sender ba subject diye purono email khuje (shudhu header fetch)."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not _rate_ok("mail-search", 20, 60):
+        return jsonify({"error": "Too many searches. Please wait a minute and try again."}), 429
+
+    data_in = _json_body()
+    email_in = str(data_in.get('email', '')).strip().lower()
+    query = str(data_in.get('query', '')).strip()
+    folder_req = str(data_in.get('folder', '')).strip().lower()
+    if folder_req not in ('inbox', 'spam') or not query or len(query) > 60:
+        return jsonify({"error": "Enter a search term (up to 60 characters)."}), 400
+
+    acc = next((x for x in load_accounts() if str(x.get('email', '')).lower() == email_in), None)
+    if not acc:
+        return jsonify({"error": "Account not found"}), 404
+
+    mail = None
+    try:
+        mail = _imap_login(acc)
+        fname = _select_view_folder(mail, folder_req)
+        items = []
+        if fname:
+            safe_query = query.replace("\\", "\\\\").replace('"', '\\"')
+            if any(ord(ch) > 127 for ch in query):
+                # imaplib defaults to ASCII. Gmail supports UTF8=ACCEPT for X-GM-RAW.
+                try:
+                    mail.enable('UTF8=ACCEPT')
+                except Exception:
+                    pass
+                mail._encoding = 'utf-8'
+                raw_query = '{from:("' + safe_query + '") subject:("' + safe_query + '")}'
+                status, data = mail.uid('search', None, 'X-GM-RAW', '"' + raw_query.replace('"', '\\"') + '"')
+            else:
+                quoted = '"' + safe_query + '"'
+                status, data = mail.uid('search', None, 'OR', 'FROM', quoted, 'SUBJECT', quoted)
+
+            uids = data[0].split()[-15:] if status == 'OK' and data and data[0] else []
+            for uid in reversed(uids):
+                try:
+                    fetch_status, md = mail.uid(
+                        'fetch', uid,
+                        '(INTERNALDATE BODY.PEEK[HEADER.FIELDS (FROM SUBJECT DATE)])'
+                    )
+                    if fetch_status != 'OK':
+                        continue
+                    msg = None
+                    ts = 0
+                    raw_meta = b' '.join(
+                        (part[0] if isinstance(part, tuple) else part)
+                        for part in (md or []) if isinstance(part, (bytes, tuple))
+                    ).decode('ascii', 'ignore')
+                    m = re.search(r'INTERNALDATE "([^"]+)"', raw_meta)
+                    if m:
+                        try:
+                            ts = datetime.strptime(m.group(1).strip(), "%d-%b-%Y %H:%M:%S %z").timestamp()
+                        except Exception:
+                            ts = 0
+                    for part in md or []:
+                        if isinstance(part, tuple) and len(part) > 1:
+                            msg = email.message_from_bytes(part[1])
+                            break
+                    if msg is None:
+                        continue
+                    subject = decode_hdr(msg.get("Subject"), "(No subject)")
+                    from_name, from_addr = parseaddr(decode_hdr(msg.get("From"), ""))
+                    if not ts:
+                        try:
+                            ts = parsedate_to_datetime(msg.get("Date")).timestamp()
+                        except Exception:
+                            ts = time.time()
+                    items.append({
+                        "uid": uid.decode() if isinstance(uid, bytes) else str(uid),
+                        "from_name": from_name,
+                        "from_addr": from_addr,
+                        "subject": subject,
+                        "timestamp": ts,
+                        "time": datetime.fromtimestamp(ts, ZoneInfo("Asia/Dhaka")).strftime("%d %b, %I:%M %p"),
+                    })
+                except Exception:
+                    continue
+        return _no_store(jsonify({"folder": folder_req.upper(), "items": items}))
+    except Exception as e:
+        print(f"[MAIL-SEARCH] {acc['email']}: {type(e).__name__}")
+        return jsonify({"error": _error_reason(e)}), 502
+    finally:
+        try:
+            if mail is not None:
+                mail.logout()
+        except Exception:
+            pass
+
 # ======================= 2FA (Authenticator / TOTP) =======================
 # Gmail-er "Authenticator app" 2FA secret. Secret MongoDB-te shudhu ENCRYPTED obosthay thake (Fernet/AES).
 # Chabi (TOTP_ENC_KEY) shudhu Render-er Environment-e thake -- code ba database-e na.
