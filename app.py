@@ -1000,7 +1000,7 @@ def _error_reason(e):
         return "Login failed - check App Password"
     return "Connection Error"
 
-def check_gmail(account, mail_data):
+def check_gmail(account, mail_data, include_spam=True):
     try:
         mail = _imap_login(account)
 
@@ -1013,13 +1013,14 @@ def check_gmail(account, mail_data):
             print(f"[INBOX ERROR] {account['email']}: {e}")
 
         # 2. Spam (inbox-e code thakleo dekhbo, jate spam-e notun code ashle miss na hoy)
-        for folder in ["[Gmail]/Spam", "Spam"]:
-            try:
-                spam_res = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
-            except Exception:
-                spam_res = None
-            if spam_res:
-                break
+        if include_spam:
+            for folder in ["[Gmail]/Spam", "Spam"]:
+                try:
+                    spam_res = scan_folder(mail, account['email'], folder, SPAM_SCAN_LIMIT)
+                except Exception:
+                    spam_res = None
+                if spam_res:
+                    break
 
         # 3. Duto-r moddhe jeta shobcheye notun (timestamp boro) seta
         result, label = None, "INBOX"
@@ -1087,7 +1088,9 @@ def broadcast_item(item):
 def publish_scan(acc):
     """Account-ta abar scan kore notun result shobaike pathay."""
     out = []
-    check_gmail(acc, out)
+    # IDLE is watching the Inbox, so scan only that folder here. Avoid a second
+    # login/select/search/fetch pass through Spam on the latency-critical path.
+    check_gmail(acc, out, include_spam=False)
     if out and out[0].get("code") != "Error":      # temporary error diye thik code muche felbo na
         broadcast_item(out[0])
         try:
@@ -1178,7 +1181,6 @@ def watch_account(acc, stop_event, holder):
             while not stop_event.is_set():
                 n += 1
                 if _idle_cycle(lines, sock, ("I%d" % n).encode(), IDLE_MAX_WAIT) and not stop_event.is_set():
-                    time.sleep(1)                   # mail puropuri index hoye jak
                     publish_scan(acc)
         except Exception as e:
             if stop_event.is_set():
@@ -1252,7 +1254,6 @@ def _wait_watch_run(acc, mail, stop_event, deadline):
                 break
             n += 1
             if _idle_cycle(lines, sock, ("W%d" % n).encode(), min(IDLE_MAX_WAIT, left)) and not stop_event.is_set():
-                time.sleep(1)                       # mail puropuri index hoye jak
                 publish_scan(acc)
     except Exception as e:
         if not stop_event.is_set():
