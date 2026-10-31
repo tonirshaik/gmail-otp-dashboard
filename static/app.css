@@ -57,6 +57,12 @@
             position: relative;
         }
 
+        .app-ver {
+            -webkit-text-fill-color: var(--text-muted); color: var(--text-muted);
+            font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+            padding: 2px 8px; border-radius: 999px; border: 1px solid var(--card-border);
+            background: rgba(148, 163, 184, 0.10); align-self: center;
+        }
         .header-title {
             font-size: 20px;
             font-weight: 700;
