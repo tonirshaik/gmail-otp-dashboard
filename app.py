@@ -1,4 +1,5 @@
 import os
+import concurrent.futures
 import base64
 import struct
 import imaplib
@@ -1051,41 +1052,62 @@ def check_gmail(account, mail_data):
         })
 
 REFRESH_DEADLINE = 25      # sekend. Gunicorn-er default 30s timeout-er age e shesh korte hobe
+MAX_SCAN_WORKERS = 32      # Gmail scan-er jonno ekshathe shorboccho worker; account beshi hole queue-te thakbe
+_SCAN_EXECUTOR = concurrent.futures.ThreadPoolExecutor(
+    max_workers=MAX_SCAN_WORKERS,
+    thread_name_prefix="gmail-scan",
+)
 
 def get_latest_otps(only=None):
     """only = email-er set hole shudhu sei account gulo check kore (jemon pin kora gulo)."""
     accounts = load_accounts()
     if only is not None:
         accounts = [a for a in accounts if str(a.get('email', '')).lower() in only]
-    all_codes = []
-    threads = []
-    lock = threading.Lock()
+    if not accounts:
+        return []
 
     def worker(acc):
         local_data = []
         check_gmail(acc, local_data)
-        if local_data:
-            with lock:
-                all_codes.extend(local_data)
+        return local_data
 
-    for acc in accounts:
-        t = threading.Thread(target=worker, args=(acc,), daemon=True)
-        threads.append(t)
-        t.start()
+    # Reuse a fixed-size pool instead of creating one OS thread per Gmail account.
+    # Pending scans continue in the background after the response deadline, just as
+    # the old daemon threads did; this keeps large account lists from spawning
+    # hundreds of simultaneous threads without silently dropping queued accounts.
+    futures = {
+        _SCAN_EXECUTOR.submit(worker, acc): acc
+        for acc in accounts
+    }
+    done, _pending = concurrent.futures.wait(
+        futures,
+        timeout=REFRESH_DEADLINE,
+        return_when=concurrent.futures.ALL_COMPLETED,
+    )
 
-    deadline = time.time() + REFRESH_DEADLINE
-    for t in threads:
-        t.join(max(0, deadline - time.time()))
-
-    with lock:
-        results = list(all_codes)
-
-    # Deadline-er moddhe jara sesh kore ni tader "Timeout" card dekhai
-    done = {r["email"] for r in results}
-    for acc in accounts:
-        if acc["email"] not in done:
+    results = []
+    for future in done:
+        acc = futures[future]
+        try:
+            results.extend(future.result())
+        except Exception as e:
+            print(f"Error reading {acc.get('email', 'unknown')}: {e}")
             results.append({
-                "email": acc["email"],
+                "email": acc.get("email", ""),
+                "sender": "Connection Error",
+                "subject": "Failed to login/fetch",
+                "code": "Error",
+                "time": "N/A",
+                "timestamp": 0,
+            })
+
+    # Deadline-er moddhe jara sesh kore ni tader "Timeout" card dekhai.
+    # Queued/running future cancel kori na, jate account scan silently বাদ না pore.
+    done_accounts = {futures[future].get("email") for future in done}
+    for acc in accounts:
+        if acc.get("email") not in done_accounts:
+            results.append({
+                "email": acc.get("email", ""),
                 "sender": "Timeout - Refresh again",
                 "subject": "Took too long",
                 "code": "Error",
@@ -2722,7 +2744,6 @@ def add_account():
 # ======================= Backup / Import / Bulk add =======================
 # Backup file: shob Gmail + App Password ekta password diye ENCRYPT kora (PBKDF2-SHA256 + Fernet/AES).
 # File-er password server-e save hoy na -- bhule gele file khola jabe na.
-import concurrent.futures
 
 BACKUP_KDF_ITER = 600000
 BACKUP_MAX_ACCOUNTS = 500        # ekta backup file-e max
