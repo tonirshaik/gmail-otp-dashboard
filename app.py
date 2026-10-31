@@ -2257,7 +2257,8 @@ def _svc_clean(data):
 def _svc_public(doc, now):
     """Ekta service-er ekhonkar code. Secret kokhono ferot dey na."""
     out = {"id": doc["sid"], "name": doc.get("name", ""), "label": doc.get("label", ""),
-           "period": doc.get("period", 30), "digits": doc.get("digits", 6)}
+           "period": doc.get("period", 30), "digits": doc.get("digits", 6),
+           "pinned": bool(doc.get("pinned"))}
     try:
         plain = json.loads(_totp_fernet.decrypt(doc["secret_enc"].encode()).decode())
         if plain.get("i") != doc["sid"]:                  # onno service-er secret ulte-palte rakha hole code dei na
@@ -2281,7 +2282,7 @@ def svc_list():
     except Exception as e:
         print(f"[SVC] list: {type(e).__name__}")
         return jsonify({"error": "Could not load services. Try again."}), 500
-    docs.sort(key=lambda d: (str(d.get("name", "")).lower(), d.get("created_at") or datetime.min))
+    docs.sort(key=lambda d: (not d.get("pinned"), str(d.get("name", "")).lower(), d.get("created_at") or datetime.min))
     now = time.time()
     return _no_store(jsonify({"services": [_svc_public(d, now) for d in docs], "server_time": int(now)}))
 
@@ -2358,6 +2359,27 @@ def svc_update():
         print(f"[SVC] update: {type(e).__name__}")
         return jsonify({"error": "Could not save. Try again."}), 500
     return _no_store(jsonify({"message": "Service updated"}))
+
+@app.route('/api/svc/pin', methods=['POST'])
+def svc_pin():
+    """Service-ke list-er upore pin / unpin. Secret na, tai password lage na (Gmail pin-er moto)."""
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if svc_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    if not _rate_ok("svc-pin", 60, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    data = _json_body()
+    sid = str(data.get('id', '')).strip()
+    pinned = bool(data.get('pinned'))
+    try:
+        r = svc_collection.update_one({"sid": sid}, {"$set": {"pinned": pinned}})
+    except Exception as e:
+        print(f"[SVC] pin: {type(e).__name__}")
+        return jsonify({"error": "Could not save pin. Try again."}), 500
+    if r.matched_count == 0:
+        return jsonify({"error": "Service not found"}), 404
+    return _no_store(jsonify({"pinned": pinned}))
 
 @app.route('/api/svc/delete', methods=['POST'])
 def svc_delete():

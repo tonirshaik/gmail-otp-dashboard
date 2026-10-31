@@ -1092,6 +1092,15 @@
         .svc-prev { flex: none; }
         .svc-prev:empty { display: none; }
         .svc-info { flex: 1; min-width: 0; }
+        .svc-pin {
+            flex: none; background: none; border: none; color: var(--text-muted); cursor: pointer;
+            font-size: 16px; padding: 8px; min-width: 40px; min-height: 40px; border-radius: 8px;
+            touch-action: manipulation; -webkit-tap-highlight-color: transparent;
+        }
+        .svc-pin:hover { color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
+        .svc-pin.pinned { color: #fbbf24; }
+        :root[data-theme="light"] .svc-pin.pinned { color: #d97706; }
+        .svc-pinned .svc-item { border-color: rgba(251, 191, 36, 0.35); }
         .svc-name { font-weight: 700; font-size: 14px; color: var(--text-main); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .svc-label { font-size: 11.5px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
         .svc-code { cursor: pointer; }
