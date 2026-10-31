@@ -1632,8 +1632,9 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             }
         }
         // ---------- QR: chobi upload / camera scan ----------
-        let qrStream = null, qrRaf = 0;
+        let qrStream = null, qrRaf = 0, qrGen = 0;      // qrGen: stop howar por der-te ashle camera chalu na hoy
         function stopQrCamera() {
+            qrGen++;
             if (qrRaf) { cancelAnimationFrame(qrRaf); qrRaf = 0; }
             if (qrStream) { qrStream.getTracks().forEach(t => t.stop()); qrStream = null; }
             const b = document.getElementById('tfaCamBox');
@@ -1692,12 +1693,16 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
         }
         async function startQrCamera(secretEl, errEl, host, onRead) {
             stopQrCamera();
+            const gen = qrGen;
             const fail = (m) => { errEl.textContent = m; errEl.classList.remove('hidden'); };
             errEl.classList.add('hidden');
             if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { fail('Camera works only on HTTPS (or localhost). Upload a QR image instead.'); return; }
             try {
                 const jsQR = await loadJsQR();
-                qrStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+                if (gen !== qrGen) return;                         // modal bondho / onno kaj shuru hoye geche
+                const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
+                if (gen !== qrGen) { stream.getTracks().forEach(t => t.stop()); return; }     // wait-er shomoy bondho hole camera chhere dei
+                qrStream = stream;
                 const box = mkEl('div', 'tfa-cam'); box.id = 'tfaCamBox';
                 const v = document.createElement('video');
                 v.setAttribute('playsinline', ''); v.muted = true; v.srcObject = qrStream;
@@ -1706,6 +1711,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                 box.appendChild(v); box.appendChild(stop);
                 host.appendChild(box);
                 await v.play();
+                if (gen !== qrGen) return;
                 const cv = document.createElement('canvas');
                 const ctx = cv.getContext('2d', { willReadFrequently: true });
                 const tick = () => {
@@ -1722,6 +1728,7 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
                 };
                 qrRaf = requestAnimationFrame(tick);
             } catch (e) {
+                if (gen !== qrGen) return;                          // user nije bondho korechhe -- error dekhai na
                 stopQrCamera();
                 fail(e && (e.name === 'NotAllowedError' || e.name === 'SecurityError') ? 'Camera permission was denied.' :
                      e && e.name === 'NotFoundError' ? 'No camera found on this device.' : (e && e.message) || 'Could not start the camera.');
