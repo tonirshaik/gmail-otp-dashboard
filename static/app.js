@@ -260,7 +260,6 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
         let allItems = [];          // shob account (code thak ba na thak)
         let newCardEmails = [];     // home-e "new" dot dekhabe jegulo-te
         let hasLoaded = false;
-        const HOME_MAX = 2;         // home-e maximum koyta card
 
         function isValidItem(item) {
             return !!(item.code && item.code !== 'Code not found' && item.code !== 'No emails found' && item.code !== 'Error');
@@ -301,8 +300,6 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             const ts = revealedAt.get(codeKey(item));
             return !!ts && (Date.now() - ts) < REVEAL_MS;
         }
-        function maskText(code) { return '•'.repeat(Math.min(String(code).length, 10)); }
-
         function setBoxRevealed(box, revealed) {
             box.classList.toggle('masked', !revealed);
             box.innerHTML = codeCellsHTML(box.dataset.code, !revealed);
@@ -453,8 +450,6 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
         setInterval(() => {
             document.querySelectorAll('.checked-ago').forEach(el => { el.textContent = checkedAgoText(el.dataset.email); });
         }, 15000);
-        function homeMax() { return window.matchMedia('(min-width: 1024px)').matches ? 6 : HOME_MAX; }
-
         const BRAND_ICONS = {
             github: ['fa-brands fa-github', '#6e7681'], google: ['fa-brands fa-google', '#4285f4'],
             facebook: ['fa-brands fa-facebook-f', '#1877f2'], instagram: ['fa-brands fa-instagram', '#d6249f'],
@@ -784,38 +779,6 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
         });
         document.getElementById('accountsCloseBtn').addEventListener('click', closeAccountsModal);
         accountsModal.addEventListener('click', (e) => { if (e.target === accountsModal) closeAccountsModal(); });
-
-        function renderOTPs(otps) {
-            hasLoaded = true;
-            allItems = (otps || []).map(normalizeExpiry);
-            allItems.forEach(i => checkedAt.set(String(i.email).toLowerCase(), Date.now()));
-
-            // kon kon card notun ta check kora
-            newCardEmails = [];
-            if (previousCodes.length > 0) {
-                allItems.forEach(item => {
-                    if (isValidItem(item) && item.expiresAt > Date.now()) {
-                        const prev = previousCodes.find(p => p.email === item.email);
-                        if (!prev || (prev.code !== item.code && !prev.ph)) newCardEmails.push(item.email);
-                    }
-                });
-            } else if (allItems[0] && isValidItem(allItems[0]) && allItems[0].expiresAt > Date.now()) {
-                newCardEmails.push(allItems[0].email);
-            }
-
-            previousCodes = allItems.map(item => ({ email: item.email, code: item.code }));
-            // je account ekhono check hoyni, tar pore pawa code "notun" dhora hobe na
-            accountList.forEach(em => {
-                if (!previousCodes.some(p => String(p.email).toLowerCase() === em)) previousCodes.push({ email: em, code: '', ph: true });
-            });
-
-            renderHome();
-            if (accountsModalOpen()) renderAll();
-            if (waiting) {
-                const hit = newCardEmails.find(waitMatches);
-                if (hit) stopWaiting(true, hit);
-            }
-        }
 
         // ======================= alert (sound + vibration) =======================
         let audioCtx = null;
@@ -1934,10 +1897,6 @@ const tfaActive = new Map();                 // email -> { code, endAt, period, 
             let hh = 0;
             for (const c of String(name)) hh = (hh * 31 + c.charCodeAt(0)) >>> 0;
             return 'hsl(' + (hh % 360) + ' 55% 42%)';
-        }
-        function svcFmt(code) {
-            code = String(code || '');
-            return code.length === 6 ? code.slice(0, 3) + ' ' + code.slice(3) : code.length === 8 ? code.slice(0, 4) + ' ' + code.slice(4) : code;
         }
         async function svcLoad(showErr) {
             if (svcBusy) return;
