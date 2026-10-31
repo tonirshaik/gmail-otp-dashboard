@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.6.5 - 2026-10-31 (patch)
+- Fix Spam OTP detection in on-demand watcher
+
 ## v1.6.4 - 2026-10-31 (patch)
 - Fix on-demand OTP watch for Inbox and Spam
 
