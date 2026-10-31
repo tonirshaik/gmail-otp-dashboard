@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.6.3 - 2026-10-31 (patch)
+- Update app.css
+
 ## v1.6.2 - 2026-10-31 (patch)
 - Update app.js
 
