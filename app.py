@@ -3257,6 +3257,12 @@ def passkey_auth_verify():
     return jsonify({"success": True})
 
 
+@app.route('/design-preview')
+def design_preview():
+    """Visual-only design lab; uses fictional sample data and does not call Gmail APIs."""
+    return render_template('design-options.html')
+
+
 ensure_accounts_unique_index()
 migrate_account_passwords()
 
