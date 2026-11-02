@@ -409,18 +409,6 @@ body:has(#dashboardSection.hidden) {
 /* 2FA Services has its own nav item, so the shortcut inside the accounts popup is hidden */
 #tfaServiceBtn { display: none !important; }
 
-/* phone: settings opens as a sheet above the bottom bar (the top gear button is hidden) */
-@media (max-width: 1023px) {
-  .settings-popup {
-    position: fixed;
-    top: auto; right: 16px; left: 16px;
-    bottom: calc(104px + env(safe-area-inset-bottom));
-    width: auto; max-width: 520px; margin: 0 auto;
-    max-height: calc(100dvh - 160px);
-    overflow-y: auto;
-    z-index: 450;
-  }
-}
 
 /* ==========================================================
    App pages: Accounts and 2FA Services fill the main area
@@ -483,4 +471,38 @@ body:has(#dashboardSection.hidden) {
 }
 @media (min-width: 1700px) {
   #allContainer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+/* Settings = full app page (like Accounts / 2FA Services) */
+.settings-popup {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  max-width: none;
+  max-height: none;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none !important;
+  background: var(--bg-color);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  z-index: 300;
+  animation: none;
+  padding: max(22px, env(safe-area-inset-top)) 16px calc(116px + env(safe-area-inset-bottom));
+}
+.settings-auth,
+.settings-content { max-width: 720px; margin: 0 auto; }
+.settings-popup .popup-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -.4px;
+  text-transform: none;
+  color: var(--text-main);
+  margin-bottom: 16px;
+}
+.settings-popup .popup-title i { color: var(--m-accent); }
+@media (min-width: 1024px) {
+  .settings-popup { left: 252px; padding: 36px 44px 48px; }
+  .settings-popup .popup-title { font-size: 28px; }
 }

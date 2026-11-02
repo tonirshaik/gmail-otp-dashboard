@@ -2701,10 +2701,14 @@ def delete_account():
 def add_account():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    if not session.get('settings_unlocked'):
-        return jsonify({"error": "Settings locked. Unlock first."}), 403
+    if not _rate_ok("add-account", 10, 60):
+        return jsonify({"error": "Too many tries. Wait a minute."}), 429
 
     data = _json_body()
+    # App Password and Settings password are different: settings password is required every time here
+    bad = _settings_pw_check({"password": data.get('settings_password')})
+    if bad is not None:
+        return bad
     email_input = str(data.get('email') or '').strip().lower()
     password_input = re.sub(r"\s+", "", str(data.get('password') or ''))   # App Password-er majher space bad
 
