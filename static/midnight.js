@@ -38,6 +38,7 @@
         var b = e.target.closest('.nav-item');
         if (!b) return;
         var name = b.getAttribute('data-nav');
+        e.stopPropagation(); // app.js closes the settings popup on any outside click; keep it open when opened from the nav
         if (name === 'home') {
             closeAll();
             window.scrollTo({ top: 0, behavior: 'smooth' });
