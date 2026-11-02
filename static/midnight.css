@@ -403,10 +403,11 @@ body:has(#dashboardSection.hidden) {
   .toast { bottom: calc(104px + env(safe-area-inset-bottom)) !important; top: auto !important; }
 }
 
-/* phone: the bottom bar already has Accounts + Settings, so hide the top mail/gear buttons */
-@media (max-width: 1023px) {
-  .top-actions { display: none; }
-}
+/* the nav (bottom bar / sidebar) already has Accounts + Settings, so the top mail/gear buttons are hidden everywhere
+   (the buttons stay in the DOM: the nav clicks them) */
+.top-actions { display: none; }
+/* 2FA Services has its own nav item, so the shortcut inside the accounts popup is hidden */
+#tfaServiceBtn { display: none !important; }
 
 /* phone: settings opens as a sheet above the bottom bar (the top gear button is hidden) */
 @media (max-width: 1023px) {
