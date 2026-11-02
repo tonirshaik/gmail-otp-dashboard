@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.11.0 - 2026-11-02 (minor)
+- Feat/settings page add account
+
 ## v1.10.0 - 2026-11-02 (minor)
 - feat(ui): Accounts and 2FA Services open as in-app pages, not popups
 
