@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.9.0 - 2026-11-02 (minor)
+- feat(ui): separate Accounts and 2FA Services nav; drop duplicate top …
+
 ## v1.8.0 - 2026-11-02 (minor)
 - feat(ui): hide top mail/gear buttons on phone; settings opens as bott…
 
