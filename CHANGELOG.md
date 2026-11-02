@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.8.0 - 2026-11-02 (minor)
+- feat(ui): hide top mail/gear buttons on phone; settings opens as bott…
+
 ## v1.7.0 - 2026-11-02 (minor)
 - feat(ui): Midnight mobile-app redesign with desktop sidebar layout
 
