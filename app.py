@@ -471,7 +471,7 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
     window = t[max(0, s - 45):min(len(t), e + 45)]
     n_neg = len(_NEG.findall(window))
     n_neg += len(_NEG_PHONE.findall(t[max(0, s - 14):s] + " " + t[e:e + 4]))
-        if strong_hit:
+    if strong_hit:
         score -= min(n_neg, 2)
     elif had_kw and _LABEL.search(before_line):
         score -= min(n_neg, 1)
