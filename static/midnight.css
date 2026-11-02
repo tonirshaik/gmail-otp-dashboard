@@ -421,3 +421,66 @@ body:has(#dashboardSection.hidden) {
     z-index: 450;
   }
 }
+
+/* ==========================================================
+   App pages: Accounts and 2FA Services fill the main area
+   (no dimmed overlay / floating box). Phone: full screen above
+   the bottom bar. Desktop: the area right of the sidebar.
+   ========================================================== */
+#accountsModal,
+#tfaModal {
+  z-index: 300;                      /* under the nav (400), over the dashboard */
+  background: var(--bg-color);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  align-items: flex-start;
+  justify-content: center;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: max(22px, env(safe-area-inset-top)) 16px calc(116px + env(safe-area-inset-bottom));
+}
+#accountsModal .accounts-box,
+#tfaModal .mail-box {
+  width: 100%;
+  max-width: 720px;
+  max-height: none;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+}
+#accountsModal .accounts-head,
+#tfaModal .mail-title {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -.4px;
+  margin-bottom: 14px;
+}
+#tfaModal .mail-head { margin-bottom: 10px; }
+/* the nav is the way out, so no close "X" on these pages */
+#accountsCloseBtn,
+#tfaCloseBtn { display: none; }
+#allContainer { max-height: none; overflow: visible; padding-right: 0; }
+#tfaModal .mail-scroll { overflow: visible; }
+
+@media (min-width: 1024px) {
+  #accountsModal,
+  #tfaModal {
+    left: 252px;                     /* right of the sidebar */
+    justify-content: flex-start;
+    padding: 36px 44px 48px;
+  }
+  #accountsModal .accounts-box,
+  #tfaModal .mail-box { max-width: 1240px; }
+  #accountsModal .accounts-head,
+  #tfaModal .mail-title { font-size: 28px; margin-bottom: 20px; }
+}
+@media (min-width: 1500px) {
+  #accountsModal .accounts-box,
+  #tfaModal .mail-box { max-width: 1480px; }
+}
+@media (min-width: 1700px) {
+  #allContainer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
