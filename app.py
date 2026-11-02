@@ -454,6 +454,8 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
     score = kw_val
     if _LABEL.search(before_line):
         score += 2
+    if re.search(r"(?i)\bcode\s*(?:is|:)\s*$", before_line):
+        score += 1                   # "code is 7788" / "code: 7788" -- কোডের ঠিক আগেই লেবেল
     if _IMPER.search(before_line):
         score += 2
     if own_line:
