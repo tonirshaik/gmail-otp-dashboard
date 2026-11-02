@@ -47,8 +47,9 @@
             if ($('accountCountBar')) $('accountCountBar').click();
         } else if (name === 'tfa') {
             closeAll();
-            if ($('accountCountBar')) $('accountCountBar').click();
-            setTimeout(function () { if ($('tfaServiceBtn')) $('tfaServiceBtn').click(); }, 200);
+            // open the 2FA services (authenticator) list directly, not through the accounts popup
+            if (typeof openTfaModal === 'function') openTfaModal('services', '', b);
+            else if ($('tfaServiceBtn')) $('tfaServiceBtn').click();
         } else if (name === 'settings') {
             var wasOpen = current() === 'settings';
             closeAll();
