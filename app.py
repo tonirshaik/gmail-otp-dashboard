@@ -2000,7 +2000,7 @@ def mail_search():
 
     data_in = _json_body()
     email_in = str(data_in.get('email', '')).strip().lower()
-    query = re.sub(r"[\\x00-\\x1f\\x7f]", "", str(data_in.get('query', ''))).strip()
+    query = re.sub(r"[\x00-\x1f\x7f]", "", str(data_in.get('query', ''))).strip()
     folder_req = str(data_in.get('folder', '')).strip().lower()
     if folder_req not in ('inbox', 'spam') or not query or len(query) > 60:
         return jsonify({"error": "Enter a search term (up to 60 characters)."}), 400
@@ -2344,7 +2344,7 @@ def totp_delete():
         return jsonify({"error": "Settings locked. Unlock first."}), 403
     if totp_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
-    bad = _settings_pw_check_json_body()   # session unlock thakleo password lagbe
+    bad = bad = _settings_pw_check(_json_body())   # session unlock thakleo password lagbe
     if bad is not None:
         return bad
     email_in = str(_json_body().get('email', '')).strip().lower()
