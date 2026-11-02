@@ -268,7 +268,7 @@ _GLUED_WORD = re.compile(r"(?<![A-Za-z0-9])(\d{4,10})(?=[A-Z][a-z]+(?![A-Za-z0-9
 _SINGLE_CHAR_LINES = re.compile(r"(?m)^[A-Za-z0-9](?:\n[A-Za-z0-9]){3,9}$")
 
 _STRONG_KW = re.compile(r"""(?ix)
-    \botp\b | \bpass\s?code\b | \bpin\b | ওটিপি | পিন |
+    \botp\b | \bpass\s?code\b | (?-i:\bPIN\b) | \bpin\s*(?:code|number)\b | ওটিপি | পিন |
     one[-\s]?time(?:\s+(?:password|passcode|pin|code))? |
     (?:verification|verify|confirmation|security|authentication|authorization|authenticator|
        access|login|log[-\s]?in|sign[-\s]?in|activation|registration|reset|recovery|
@@ -471,10 +471,10 @@ def _score_candidate(t, kws, s, e, kind, text, has_intent):
     window = t[max(0, s - 45):min(len(t), e + 45)]
     n_neg = len(_NEG.findall(window))
     n_neg += len(_NEG_PHONE.findall(t[max(0, s - 14):s] + " " + t[e:e + 4]))
-    if strong_hit:
+        if strong_hit:
         score -= min(n_neg, 2)
-    elif had_kw and kw_val >= 4 and _LABEL.search(before_line):
-        score -= min(n_neg, 1)       # "Your code is 482913. Order total $45" -- code-er thik age label, tai pashe order/total thakleo kom shasti
+    elif had_kw and _LABEL.search(before_line):
+        score -= min(n_neg, 1)
     else:
         score -= min(3 * n_neg, 9)
 
