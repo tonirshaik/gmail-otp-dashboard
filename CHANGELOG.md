@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.10.0 - 2026-11-02 (minor)
+- feat(ui): Accounts and 2FA Services open as in-app pages, not popups
+
 ## v1.9.0 - 2026-11-02 (minor)
 - feat(ui): separate Accounts and 2FA Services nav; drop duplicate top …
 
