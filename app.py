@@ -264,6 +264,7 @@ def _normalize(text):
     return re.sub(r"(?<=[^\x00-\x7f])(?=[0-9])|(?<=[0-9])(?=[^\x00-\x7f])", " ", t)
 
 # Ek-ek character-er line (HTML-er prottek digit alada box/cell) -> ek line-e jora lage
+_GLUED_WORD = re.compile(r"(?<![A-Za-z0-9])(\d{4,10})(?=[A-Z][a-z]+(?![A-Za-z0-9]))")
 _SINGLE_CHAR_LINES = re.compile(r"(?m)^[A-Za-z0-9](?:\n[A-Za-z0-9]){3,9}$")
 
 _STRONG_KW = re.compile(r"""(?ix)
@@ -500,6 +501,7 @@ def extract_otp_scored(text):
     t = re.sub(r" *\n *", "\n", t)
     t = re.sub(r"\n{2,}", "\n", t)
     t = _SINGLE_CHAR_LINES.sub(lambda m: m.group(0).replace("\n", " "), t)
+    t = _GLUED_WORD.sub(r"\1 ", t)
 
     kws = _find_keywords(t)
     if not kws and not _INTENT.search(t):
