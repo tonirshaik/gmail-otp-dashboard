@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.6.11 - 2026-11-02 (patch)
+- Update app.py
+
 ## v1.6.10 - 2026-11-02 (patch)
 - Update app.py
 
