@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.7.0 - 2026-11-02 (minor)
+- feat(ui): Midnight mobile-app redesign with desktop sidebar layout
+
 ## v1.6.11 - 2026-11-02 (patch)
 - Update app.py
 
