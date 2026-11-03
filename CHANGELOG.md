@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.14.0 - 2026-11-03 (minor)
+- Redesign OTP cards to match reference screenshots
+
 ## v1.13.1 - 2026-11-03 (patch)
 - perf(ui): open 2FA Services instantly (no "Loading..." flash)
 
