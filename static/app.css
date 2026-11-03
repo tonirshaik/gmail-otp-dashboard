@@ -2,3 +2,5 @@
 
 /* Keep the Gmail address beside the service name in OTP cards. */
 .svc-name{display:flex;align-items:center;flex-wrap:wrap;gap:8px;min-width:0}.svc-account-email{font-size:11px;font-weight:500;color:var(--text-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:min(42vw,240px)}.otp-account-email{display:none!important}
+
+.tfa-wait{animation:tfaPulse 1s ease-in-out infinite}@keyframes tfaPulse{0%,100%{opacity:.25}50%{opacity:.8}}@media (prefers-reduced-motion:reduce){.tfa-wait{animation:none}}
