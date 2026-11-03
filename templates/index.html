@@ -111,23 +111,12 @@
 
                     <div class="settings-content hidden" id="settingsContent">
                         <div class="popup-title">
-                            <i class="fa-solid fa-user-plus"></i> Add Gmail Account
+                            <i class="fa-solid fa-gear"></i> Settings
                         </div>
                         <button type="button" class="btn btn-primary hidden" id="registerPasskeyBtn" style="margin-bottom: 12px;">
                             <i class="fa-solid fa-fingerprint"></i> Enable Fingerprint / Face on this device
                         </button>
-                        <form id="addAccountForm">
-                            <div class="input-group">
-                                <input type="email" id="accEmail" placeholder="Gmail Address" required autocomplete="off">
-                            </div>
-                            <div class="input-group">
-                                <input type="password" id="accPassword" placeholder="16-digit App Password" required autocomplete="off">
-                            </div>
-                            <button type="submit" class="btn btn-primary">
-                                <i class="fa-solid fa-floppy-disk"></i> Save Account
-                            </button>
-                        </form>
-                        <button type="button" class="btn btn-ghost" id="openBackupBtn" style="margin-top: 10px;">
+                        <button type="button" class="btn btn-ghost" id="openBackupBtn" style="margin-top: 0;">
                             <i class="fa-solid fa-box-archive"></i> Backup &amp; Import
                         </button>
                     </div>
@@ -162,9 +151,6 @@
             </div><!-- /dash-main -->
             <div class="dash-foot">
                 <div class="kbd-hint">C copy &middot; / search &middot; Ctrl K quick find &middot; Esc close</div>
-                <button type="button" class="btn btn-logout" onclick="logout()">
-                    <i class="fa-solid fa-right-from-bracket"></i> Logout
-                </button>
             </div>
             </div><!-- /dash-grid -->
 
@@ -185,7 +171,6 @@
                 </button>
                 <div class="nav-foot">
                     <span>C copy &middot; / search &middot; <kbd>Ctrl K</kbd> quick find</span>
-                    <button type="button" class="nav-logout" onclick="logout()"><i class="fa-solid fa-right-from-bracket"></i> Logout</button>
                 </div>
             </nav>
         </div>
@@ -270,7 +255,30 @@
                     <input type="text" id="accSearchInput" placeholder="Search Gmail by name..." autocomplete="off" spellcheck="false">
                     <button type="button" class="search-clear" id="accSearchClear" title="Clear"><i class="fa-solid fa-xmark"></i></button>
                 </div>
+                <button type="button" class="svc-open-btn" id="addAccountBtn" title="Add a Gmail account" aria-expanded="false" aria-controls="addAccountPanel"><i class="fa-solid fa-user-plus"></i><span>Add<span class="svc-more"> Account</span></span></button>
                 <button type="button" class="svc-open-btn" id="tfaServiceBtn" title="2FA services (social media, websites and more)" aria-label="2FA Service"><i class="fa-solid fa-layer-group"></i><span>2FA<span class="svc-more"> Service</span></span></button>
+            </div>
+            <div id="addAccountPanel" class="add-panel hidden">
+                <div class="popup-title"><i class="fa-solid fa-user-plus"></i> Add Gmail Account</div>
+                <form id="addGateForm" autocomplete="off">
+                    <div class="input-group"><input type="password" id="addGatePw" placeholder="Enter settings password" required autocomplete="off"></div>
+                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-key"></i> Unlock</button>
+                </form>
+                <div id="addFormWrap" class="hidden">
+                    <form id="addAccountForm">
+                            <div class="input-group">
+                                <input type="email" id="accEmail" placeholder="Gmail Address" required autocomplete="off">
+                            </div>
+                            <div class="input-group">
+                                <input type="password" id="accPassword" placeholder="16-digit App Password" required autocomplete="off">
+                            </div>
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa-solid fa-floppy-disk"></i> Save Account
+                            </button>
+                        </form>
+                </div>
+                <div id="addMsg" class="msg-status" role="status"></div>
+                <button type="button" class="btn btn-cancel" id="addCancelBtn">Cancel</button>
             </div>
             <div class="filter-row" id="filterRow" role="group" aria-label="Filter accounts">
                 <button type="button" class="fchip on" data-filter="all" aria-pressed="true">All <b>0</b></button>
