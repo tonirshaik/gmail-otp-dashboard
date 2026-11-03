@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.0 - 2026-11-03 (minor)
+- Fix truncated Gmail address in OTP card header
+
 ## v1.18.0 - 2026-11-03 (minor)
 - Move Gmail address into OTP card header and remove excess space
 
