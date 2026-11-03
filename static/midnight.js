@@ -140,5 +140,12 @@
         if (typeof sendTestAlert === 'function') sendTestAlert();
     });
 
+    /* ---- 2FA Services opens instantly: the list is preloaded after login and kept in memory.
+       Forget it when the dashboard locks / logs out. ---- */
+    var dash = $('dashboardSection');
+    if (dash) new MutationObserver(function () {
+        if (dash.classList.contains('hidden') && typeof svcList !== 'undefined') { svcList = []; svcLoaded = false; }
+    }).observe(dash, { attributes: true, attributeFilter: ['class'] });
+
     sync();
 })();
