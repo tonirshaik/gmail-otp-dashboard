@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.13.0 - 2026-11-03 (minor)
+- feat(ui): remove Quick find; test notification moves to Settings
+
 ## v1.12.0 - 2026-11-03 (minor)
 - feat(ui): move toolbar buttons into Settings; short blinking "Live" b…
 
