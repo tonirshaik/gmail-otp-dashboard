@@ -1250,3 +1250,29 @@ body:has(#dashboardSection.hidden) {
     font-size: 9px !important;
   }
 }
+
+
+/* Keep every Home OTP card at the same generous size, including unchecked accounts. */
+.otp-container {
+  grid-auto-rows: minmax(212px, auto);
+}
+.otp-container > .otp-swipe,
+.otp-container > .otp-card {
+  min-height: 212px;
+}
+.otp-container > .otp-swipe {
+  display: flex;
+  height: 100%;
+}
+.otp-container > .otp-swipe > .otp-card,
+.otp-container > .otp-card {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 212px;
+  display: flex;
+  flex-direction: column;
+}
+.otp-container .otp-time {
+  margin-top: auto;
+}
