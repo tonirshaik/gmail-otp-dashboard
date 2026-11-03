@@ -147,5 +147,20 @@
         if (dash.classList.contains('hidden') && typeof svcList !== 'undefined') { svcList = []; svcLoaded = false; }
     }).observe(dash, { attributes: true, attributeFilter: ['class'] });
 
+    /* ---- Every card always shows its Gmail address (also before a code is found, on errors, and in 2FA mode) ---- */
+    if (typeof window.cardHTML === 'function' && !window.cardHTML.__emailRow) {
+        var origCard = window.cardHTML;
+        var wrappedCard = function (item) {
+            var html = origCard.apply(this, arguments);
+            if (!item || html.indexOf('class="svc-row"') !== -1) return html;
+            var addr = String(item.email || '');
+            var row = '<div class="svc-row">' + avatarHTML({ code: '', email: addr }) +
+                '<div class="svc-text"><div class="svc-name svc-name-email" title="' + escAttr(addr) + '">' + escAttr(addr) + '</div></div></div>';
+            return html.replace('<div class="otp-time">', function () { return row + '<div class="otp-time">'; });
+        };
+        wrappedCard.__emailRow = true;
+        window.cardHTML = wrappedCard;
+    }
+
     sync();
 })();
