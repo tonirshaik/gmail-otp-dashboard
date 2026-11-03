@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.5 - 2026-11-03 (patch)
+- fix: always show Gmail address on OTP cards (css)
+
 ## v1.19.4 - 2026-11-03 (patch)
 - Delete gmail-address-on-cards.patch
 
