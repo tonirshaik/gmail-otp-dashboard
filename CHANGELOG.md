@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.13.1 - 2026-11-03 (patch)
+- perf(ui): open 2FA Services instantly (no "Loading..." flash)
+
 ## v1.13.0 - 2026-11-03 (minor)
 - feat(ui): remove Quick find; test notification moves to Settings
 
