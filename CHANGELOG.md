@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.12.0 - 2026-11-03 (minor)
+- feat(ui): move toolbar buttons into Settings; short blinking "Live" b…
+
 ## v1.11.0 - 2026-11-03 (minor)
 - feat(ui): Settings as a page, Add Account on Accounts page, remove Lo…
 
