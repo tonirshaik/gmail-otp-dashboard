@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.12 - 2026-11-03 (patch)
+- fix: 2FA icon - revert wait-for-server change so the card reacts instantly again
+
 ## v1.19.11 - 2026-11-03 (patch)
 - fix: 2FA cards - repaint timer bars right after re-render so old cards do not lag
 
