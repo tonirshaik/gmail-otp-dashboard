@@ -743,8 +743,8 @@ body:has(#dashboardSection.hidden) {
   color: #10150d;
   font-size: 25px;
 }
-.otp-card .tfa-code { order: 0; }
-.otp-card .tfa-time {
+.otp-card .tfa-code { order: 1; }
+.otp-card .tfa-time { order: 2;
   order: 1;
   display: flex;
   align-items: center;
@@ -753,7 +753,7 @@ body:has(#dashboardSection.hidden) {
   color: var(--otp-card-accent);
 }
 .otp-card .tfa-left { min-width: 42px; color: var(--otp-card-accent); font: 700 14px var(--m-code); }
-.otp-card:has(.tfa-box) > .otp-email { order: -2; margin: -66px 0 20px 68px; min-height: 48px; }
+.otp-card:has(.tfa-box) > .otp-email { order: 0; margin: 0 0 12px; min-height: 24px; }
 .otp-card:has(.tfa-box) > .otp-email > span:not(.health-dot) { font-size: 15px; }
 .otp-card:has(.tfa-box) .tfa-code .ch {
   width: clamp(46px, 9vw, 58px);
