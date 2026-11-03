@@ -134,5 +134,11 @@
             .observe(am, { attributes: true, attributeFilter: ['class'] });
     }
 
+    /* ---- Settings > Preferences: test notification (was a Quick find command) ---- */
+    var testBtn = $('testAlertBtn');
+    if (testBtn) testBtn.addEventListener('click', function () {
+        if (typeof sendTestAlert === 'function') sendTestAlert();
+    });
+
     sync();
 })();
