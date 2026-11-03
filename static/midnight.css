@@ -409,19 +409,6 @@ body:has(#dashboardSection.hidden) {
 /* 2FA Services has its own nav item, so the shortcut inside the accounts popup is hidden */
 #tfaServiceBtn { display: none !important; }
 
-/* phone: settings opens as a sheet above the bottom bar (the top gear button is hidden) */
-@media (max-width: 1023px) {
-  .settings-popup {
-    position: fixed;
-    top: auto; right: 16px; left: 16px;
-    bottom: calc(104px + env(safe-area-inset-bottom));
-    width: auto; max-width: 520px; margin: 0 auto;
-    max-height: calc(100dvh - 160px);
-    overflow-y: auto;
-    z-index: 450;
-  }
-}
-
 /* ==========================================================
    App pages: Accounts and 2FA Services fill the main area
    (no dimmed overlay / floating box). Phone: full screen above
@@ -484,3 +471,50 @@ body:has(#dashboardSection.hidden) {
 @media (min-width: 1700px) {
   #allContainer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
+
+/* ==========================================================
+   Settings is a page too (same treatment as Accounts / 2FA)
+   ========================================================== */
+#settingsPopup {
+  position: fixed;
+  top: 0; right: 0; bottom: 0; left: 0;
+  z-index: 300;
+  width: auto; max-width: none; margin: 0;
+  max-height: none;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--bg-color);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  animation: none;
+  padding: max(22px, env(safe-area-inset-top)) 16px calc(116px + env(safe-area-inset-bottom));
+}
+#settingsPopup .settings-auth,
+#settingsPopup .settings-content { max-width: 560px; margin: 0 auto; }
+#settingsPopup .popup-title {
+  font-size: 24px; font-weight: 700; letter-spacing: -.4px; margin-bottom: 14px;
+  color: var(--text-main); text-transform: none;
+}
+#settingsPopup .popup-title i { color: var(--m-accent); }
+@media (min-width: 1024px) {
+  #settingsPopup { left: 252px; padding: 36px 44px 48px; }
+  #settingsPopup .settings-auth,
+  #settingsPopup .settings-content { margin: 0; }
+  #settingsPopup .popup-title { font-size: 28px; margin-bottom: 20px; }
+}
+
+/* ---------- Add account panel (Accounts page) ---------- */
+.add-panel {
+  background: var(--m-surface);
+  border: 1px solid var(--m-line);
+  border-radius: 24px;
+  padding: 20px;
+  margin-bottom: 16px;
+  max-width: 520px;
+}
+.add-panel .popup-title { font-size: 17px; font-weight: 700; margin-bottom: 14px; color: var(--text-main); text-transform: none; }
+.add-panel .popup-title i { color: var(--m-accent); }
+.add-panel .btn-cancel { margin-top: 10px; }
+#addMsg { display: none; margin: 10px 0 0; font-size: 13px; text-align: left; }
+#addAccountBtn { white-space: nowrap; }
