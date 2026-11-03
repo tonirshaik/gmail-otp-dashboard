@@ -1215,3 +1215,38 @@ body:has(#dashboardSection.hidden) {
     font-size: 9px !important;
   }
 }
+
+
+/* Give the Gmail address a genuinely usable slot instead of clipping it. */
+.otp-card > .otp-email > span:not(.health-dot) {
+  left: 205px !important;
+  right: 260px !important;
+  top: 35px !important;
+  width: auto !important;
+  max-width: none !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+  font-size: 11px !important;
+}
+@media (max-width: 600px) {
+  /* On narrow screens, use the line below the service title.
+     This keeps the address clear of the five header actions. */
+  .otp-card > .otp-email > span:not(.health-dot) {
+    left: 58px !important;
+    right: 145px !important;
+    top: 48px !important;
+    max-width: none !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    font-size: 10px !important;
+  }
+}
+@media (max-width: 380px) {
+  .otp-card > .otp-email > span:not(.health-dot) {
+    left: 54px !important;
+    right: 138px !important;
+    top: 46px !important;
+    font-size: 9px !important;
+  }
+}
