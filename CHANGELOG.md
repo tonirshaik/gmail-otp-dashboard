@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.16.0 - 2026-11-03 (minor)
+- Polish OTP cards with a smaller, cleaner layout
+
 ## v1.15.0 - 2026-11-03 (minor)
 - Make OTP cards compact on mobile and desktop
 
