@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.13 - 2026-11-03 (patch)
+- fix: 2FA code rollover timing (exact ms remaining, next-code prefetch…
+
 ## v1.19.12 - 2026-11-03 (patch)
 - fix: 2FA icon - revert wait-for-server change so the card reacts instantly again
 
