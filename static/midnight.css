@@ -1144,3 +1144,74 @@ body:has(#dashboardSection.hidden) {
     max-width: calc(100% - 148px);
   }
 }
+
+
+/* Remove the artificial footer void and put the account email in the
+   reserved header slot between the service title and the action buttons. */
+.otp-card,
+:root[data-theme] .otp-card.is-expired,
+:root[data-theme] .otp-card.is-used {
+  padding-bottom: 12px !important;
+}
+.otp-card > .otp-email {
+  display: contents !important;
+}
+.otp-card > .otp-email > span:not(.health-dot) {
+  position: absolute !important;
+  top: 23px !important;
+  left: 190px !important;
+  right: 190px !important;
+  width: auto !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: var(--text-muted) !important;
+  font-size: 11px !important;
+  line-height: 1.25 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+.otp-card > .otp-email .used-badge {
+  position: absolute !important;
+  top: 52px !important;
+  right: 12px !important;
+  margin: 0 !important;
+  font-size: 10px !important;
+  padding: 3px 8px !important;
+}
+.otp-card .svc-row {
+  margin-bottom: 8px !important;
+}
+.otp-card .otp-code-box.has-cells,
+.otp-card .tfa-code {
+  margin-top: 2px !important;
+}
+.otp-card .otp-time {
+  margin-top: 0 !important;
+  padding-top: 6px !important;
+}
+@media (max-width: 600px) {
+  .otp-card > .otp-email > span:not(.health-dot) {
+    left: 132px !important;
+    right: 170px !important;
+    top: 22px !important;
+    font-size: 10px !important;
+  }
+  .otp-card > .otp-email .used-badge {
+    top: 49px !important;
+    right: 10px !important;
+  }
+  .otp-card,
+  :root[data-theme] .otp-card.is-expired,
+  :root[data-theme] .otp-card.is-used {
+    padding-bottom: 10px !important;
+  }
+}
+@media (max-width: 380px) {
+  .otp-card > .otp-email > span:not(.health-dot) {
+    left: 122px !important;
+    right: 154px !important;
+    font-size: 9px !important;
+  }
+}
