@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.2 - 2026-11-03 (patch)
+- Update app.py
+
 ## v1.19.1 - 2026-11-03 (patch)
 - Fix Gmail address placement in OTP card
 
