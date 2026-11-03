@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.7 - 2026-11-03 (patch)
+- fix: show shield icon instead of letter avatar in 2FA mode
+
 ## v1.19.6 - 2026-11-03 (patch)
 - chore: restore .gitignore
 
