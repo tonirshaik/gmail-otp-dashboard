@@ -782,3 +782,202 @@ body:has(#dashboardSection.hidden) {
 @media (prefers-reduced-motion: reduce) {
   .otp-card .tbar-fill { transition: none; }
 }
+
+
+/* ==========================================================
+   Compact responsive OTP cards — phone, tablet and desktop
+   ========================================================== */
+.otp-card,
+:root[data-theme] .otp-card.is-expired,
+:root[data-theme] .otp-card.is-used {
+  padding: 16px 18px 62px;
+  border-radius: 22px;
+}
+.otp-card .svc-row {
+  gap: 10px;
+  min-height: 42px;
+  margin: 0 0 12px;
+}
+.otp-card .svc-avatar {
+  width: 42px;
+  height: 42px;
+  flex-basis: 42px;
+  border-radius: 13px;
+  font-size: 19px;
+}
+.otp-card .svc-avatar i { font-size: 19px; }
+.otp-card .svc-name { font-size: 16px; }
+.otp-card .svc-sub { font-size: 12px; }
+.otp-card > .otp-email {
+  min-height: 24px;
+  margin: 0 0 10px;
+  font-size: 12px;
+  line-height: 1.35;
+}
+.otp-card .otp-code-box.has-cells {
+  min-height: 52px;
+  margin: 0 0 10px;
+  gap: 5px;
+}
+.otp-card .cells { gap: 5px; }
+.otp-card .ch,
+.otp-card .otp-code-box.has-cells:hover .ch {
+  width: clamp(30px, 4vw, 42px);
+  height: 52px;
+  border-radius: 12px;
+  font-size: clamp(22px, 3vw, 29px);
+}
+.otp-card .cells.g3 .ch:nth-child(4),
+.otp-card .cells.g4 .ch:nth-child(5) { margin-left: 9px; }
+.otp-card .otp-code-box.masked .ch { font-size: 23px; }
+.otp-card .otp-expiry {
+  gap: 6px;
+  margin: 0 0 9px;
+  font-size: 12px;
+}
+.otp-card .tbar { height: 6px; }
+.otp-card .otp-time {
+  padding-top: 9px;
+  font-size: 11px;
+}
+.otp-card .tfa-label {
+  gap: 10px;
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+.otp-card .tfa-label i {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  font-size: 20px;
+}
+.otp-card:has(.tfa-box) > .otp-email {
+  margin: 0 0 9px;
+  min-height: 20px;
+}
+.otp-card:has(.tfa-box) > .otp-email > span:not(.health-dot) { font-size: 12px; }
+.otp-card .tfa-code { min-height: 52px; margin-bottom: 9px; }
+.otp-card:has(.tfa-box) .tfa-code .ch {
+  width: clamp(30px, 4vw, 42px);
+  height: 52px;
+  border-radius: 12px;
+  font-size: clamp(22px, 3vw, 29px);
+}
+.otp-card:has(.tfa-box) .tfa-code .cells { gap: 5px; }
+.otp-card:has(.tfa-box) .tfa-code .cells.g3 .ch:nth-child(4) { margin-left: 9px; }
+.otp-card .tfa-time {
+  gap: 8px;
+  margin: 0 0 9px;
+}
+.otp-card .tfa-left { min-width: 32px; font-size: 12px; }
+.otp-card > .otp-email .card-pin,
+.otp-card > .otp-email .card-refresh,
+.otp-card > .otp-email .card-mail,
+.otp-card > .otp-email .card-2fa,
+.otp-card > .otp-email .card-wait {
+  bottom: 10px;
+  width: 38px;
+  min-width: 38px;
+  height: 38px;
+  min-height: 38px;
+  border-radius: 12px;
+  font-size: 16px;
+}
+.otp-card > .otp-email .card-pin { right: 180px; }
+.otp-card > .otp-email .card-wait { right: 136px; }
+.otp-card > .otp-email .card-mail { right: 92px; }
+.otp-card > .otp-email .card-2fa { right: 48px; }
+.otp-card > .otp-email .card-refresh { right: 4px; }
+
+/* Keep card grids readable instead of stretching a hero card across columns. */
+@media (min-width: 1024px) {
+  .otp-container { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+  .otp-container > .otp-swipe:first-child,
+  .otp-container > .otp-card:first-child { grid-column: auto; }
+  .otp-container > .otp-swipe:first-child .ch,
+  .otp-container > .otp-card:first-child .ch { font-size: clamp(22px, 2.2vw, 29px); }
+  #allContainer { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+}
+@media (min-width: 1440px) {
+  .otp-container { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #allContainer { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (min-width: 1800px) {
+  .otp-container { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  #allContainer { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+
+/* Phones: compact cards, proportional code cells and a tidy action row. */
+@media (max-width: 600px) {
+  .otp-container { gap: 12px; }
+  .otp-card,
+  :root[data-theme] .otp-card.is-expired,
+  :root[data-theme] .otp-card.is-used {
+    padding: 14px 14px 58px;
+    border-radius: 20px;
+  }
+  .otp-card .svc-row { margin-bottom: 10px; }
+  .otp-card .svc-avatar,
+  .otp-card .tfa-label i {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+    border-radius: 12px;
+  }
+  .otp-card .svc-name,
+  .otp-card .tfa-label { font-size: 15px; }
+  .otp-card .svc-sub,
+  .otp-card > .otp-email,
+  .otp-card:has(.tfa-box) > .otp-email > span:not(.health-dot) { font-size: 11px; }
+  .otp-card .otp-code-box.has-cells { min-height: 46px; gap: 4px; }
+  .otp-card .cells,
+  .otp-card:has(.tfa-box) .tfa-code .cells { gap: 4px; }
+  .otp-card .ch,
+  .otp-card .otp-code-box.has-cells:hover .ch,
+  .otp-card:has(.tfa-box) .tfa-code .ch {
+    width: clamp(27px, 8.1vw, 39px);
+    height: 46px;
+    border-radius: 10px;
+    font-size: clamp(20px, 6vw, 26px);
+  }
+  .otp-card .cells.g3 .ch:nth-child(4),
+  .otp-card .cells.g4 .ch:nth-child(5),
+  .otp-card:has(.tfa-box) .tfa-code .cells.g3 .ch:nth-child(4) { margin-left: 7px; }
+  .otp-card .otp-code-box.masked .ch { font-size: 20px; }
+  .otp-card .otp-expiry { font-size: 11px; }
+  .otp-card .tbar { height: 5px; }
+  .otp-card .otp-time { padding-top: 8px; }
+  .otp-card .tfa-label { margin-bottom: 9px; }
+  .otp-card .tfa-time { margin-bottom: 8px; }
+  .otp-card > .otp-email .card-pin,
+  .otp-card > .otp-email .card-refresh,
+  .otp-card > .otp-email .card-mail,
+  .otp-card > .otp-email .card-2fa,
+  .otp-card > .otp-email .card-wait {
+    bottom: 9px;
+    width: 36px;
+    min-width: 36px;
+    height: 36px;
+    min-height: 36px;
+    border-radius: 11px;
+  }
+  .otp-card > .otp-email .card-pin { right: 168px; }
+  .otp-card > .otp-email .card-wait { right: 128px; }
+  .otp-card > .otp-email .card-mail { right: 88px; }
+  .otp-card > .otp-email .card-2fa { right: 48px; }
+  .otp-card > .otp-email .card-refresh { right: 8px; }
+}
+@media (max-width: 360px) {
+  .otp-card,
+  :root[data-theme] .otp-card.is-expired,
+  :root[data-theme] .otp-card.is-used { padding-left: 10px; padding-right: 10px; }
+  .otp-card .ch,
+  .otp-card .otp-code-box.has-cells:hover .ch,
+  .otp-card:has(.tfa-box) .tfa-code .ch {
+    width: clamp(25px, 7.7vw, 28px);
+    height: 42px;
+    font-size: 19px;
+  }
+  .otp-card .cells,
+  .otp-card:has(.tfa-box) .tfa-code .cells { gap: 3px; }
+}
