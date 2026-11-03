@@ -558,3 +558,227 @@ body:has(#dashboardSection.hidden) {
 .add-panel .btn-cancel { margin-top: 10px; }
 #addMsg { display: none; margin: 10px 0 0; font-size: 13px; text-align: left; }
 #addAccountBtn { white-space: nowrap; }
+
+
+/* ---------- Reference OTP card treatment ---------- */
+.otp-container { gap: 16px; }
+.otp-card,
+:root[data-theme] .otp-card.is-expired,
+:root[data-theme] .otp-card.is-used {
+  --otp-card-accent: #f5a900;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  min-height: 0;
+  padding: 22px 24px 76px;
+  overflow: hidden;
+  border: 1px solid #273142;
+  border-radius: 30px;
+  background: #151922;
+  box-shadow: none;
+}
+.otp-card:has(.tfa-box) { --otp-card-accent: #8bea45; }
+:root[data-theme=light] .otp-card,
+:root[data-theme=light] .otp-card.is-expired,
+:root[data-theme=light] .otp-card.is-used {
+  background: #fff;
+  border-color: #dce2ec;
+}
+.otp-card::before { display: none; }
+.otp-card.is-new { border-color: var(--otp-card-accent); }
+.otp-card .svc-row {
+  order: -3;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 0 0 22px;
+  min-height: 54px;
+}
+.otp-card .svc-avatar {
+  width: 54px;
+  height: 54px;
+  flex: 0 0 54px;
+  border-radius: 18px;
+  font-size: 24px;
+}
+.otp-card .svc-avatar i { font-size: 24px; }
+.otp-card .svc-text { min-width: 0; }
+.otp-card .svc-name { color: var(--text-main); font-size: 20px; font-weight: 750; line-height: 1.25; }
+.otp-card .svc-sub { color: var(--text-muted); font-size: 15px; font-weight: 550; margin-top: 2px; }
+.otp-card > .otp-email {
+  order: -2;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 34px;
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.otp-card > .otp-email > span:not(.health-dot) { min-width: 0; overflow-wrap: anywhere; }
+.otp-card > .otp-email .health-dot { display: none; }
+.otp-card > .otp-email .card-pin,
+.otp-card > .otp-email .card-refresh,
+.otp-card > .otp-email .card-mail,
+.otp-card > .otp-email .card-2fa,
+.otp-card > .otp-email .card-wait {
+  position: absolute;
+  z-index: 2;
+  right: auto;
+  bottom: 15px;
+  width: 46px;
+  min-width: 46px;
+  height: 46px;
+  min-height: 46px;
+  margin: 0;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 16px;
+  background: #202735;
+  color: #eef2f8;
+  font-size: 19px;
+}
+.otp-card > .otp-email .card-pin { right: 210px; }
+.otp-card > .otp-email .card-wait { right: 158px; }
+.otp-card > .otp-email .card-mail { right: 106px; }
+.otp-card > .otp-email .card-2fa { right: 54px; }
+.otp-card > .otp-email .card-refresh { right: 2px; }
+.otp-card > .otp-email .card-pin.pinned,
+.otp-card > .otp-email .card-2fa.on,
+.otp-card > .otp-email .card-2fa.set {
+  color: var(--otp-card-accent);
+  background: color-mix(in srgb, var(--otp-card-accent) 16%, #202735);
+}
+.otp-card .otp-code-box.has-cells {
+  order: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 72px;
+  margin: 0 0 14px;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.otp-card .cells { display: flex; align-items: center; justify-content: center; gap: 7px; }
+.otp-card .ch,
+.otp-card .otp-code-box.has-cells:hover .ch {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(42px, 8vw, 58px);
+  min-width: 0;
+  height: 70px;
+  padding: 0;
+  border: 1px solid #2b3547;
+  border-radius: 17px;
+  background: linear-gradient(180deg, #202737 0%, #111720 100%);
+  color: #f2f4f8;
+  font: 500 clamp(27px, 5.6vw, 38px)/1 var(--m-code);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.035);
+}
+.otp-card .cells.g3 .ch:nth-child(4),
+.otp-card .cells.g4 .ch:nth-child(5) { margin-left: 16px; }
+.otp-card .otp-code-box.masked .ch { color: #7b8798; font-size: 30px; }
+.otp-card .otp-code-box .reveal-eye { color: var(--text-muted); font-size: 16px; }
+.otp-card .otp-expiry {
+  order: 1;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: stretch;
+  gap: 9px;
+  margin: 2px 0 12px;
+  color: var(--text-muted);
+  font-size: 14px;
+}
+.otp-card .otp-expiry-lbl { align-self: flex-end; font-weight: 600; }
+.otp-card .otp-expiry-time { color: var(--otp-card-accent); font-family: var(--m-code); }
+.otp-card .tbar {
+  display: block;
+  width: 100%;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #252d3b;
+  -webkit-mask: none;
+  mask: none;
+}
+.otp-card .tbar-fill { height: 100%; border-radius: inherit; background: var(--otp-card-accent); }
+.otp-card .otp-time {
+  order: 2;
+  padding-top: 13px;
+  border-top: 1px solid #283142;
+  color: #778397;
+  font-size: 13px;
+}
+.otp-card .verify-note { order: 1; }
+.otp-card .used-badge { color: var(--otp-card-accent); border-color: var(--otp-card-accent); }
+.otp-card .tfa-box { display: contents; }
+.otp-card .tfa-label {
+  order: -1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 0 0 14px;
+  color: var(--text-main);
+  font-size: 20px;
+  font-weight: 750;
+}
+.otp-card .tfa-label i {
+  width: 54px;
+  height: 54px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 18px;
+  background: var(--otp-card-accent);
+  color: #10150d;
+  font-size: 25px;
+}
+.otp-card .tfa-code { order: 1; }
+.otp-card .tfa-time { order: 2;
+  order: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 14px;
+  color: var(--otp-card-accent);
+}
+.otp-card .tfa-left { min-width: 42px; color: var(--otp-card-accent); font: 700 14px var(--m-code); }
+.otp-card:has(.tfa-box) > .otp-email { order: 0; margin: 0 0 12px; min-height: 24px; }
+.otp-card:has(.tfa-box) > .otp-email > span:not(.health-dot) { font-size: 15px; }
+.otp-card:has(.tfa-box) .tfa-code .ch {
+  width: clamp(46px, 9vw, 58px);
+  height: 78px;
+  font-size: clamp(30px, 6vw, 40px);
+}
+.otp-card:has(.tfa-box) .tfa-code .cells { gap: 7px; }
+.otp-card:has(.tfa-box) .tfa-code .cells.g3 .ch:nth-child(4) { margin-left: 16px; }
+@media (max-width: 420px) {
+  .otp-card,
+  :root[data-theme] .otp-card.is-expired,
+  :root[data-theme] .otp-card.is-used { padding: 18px 16px 72px; border-radius: 26px; }
+  .otp-card .ch,
+  .otp-card .otp-code-box.has-cells:hover .ch { width: clamp(35px, 11vw, 48px); height: 62px; font-size: clamp(24px, 7vw, 32px); }
+  .otp-card .cells { gap: 5px; }
+  .otp-card .cells.g3 .ch:nth-child(4),
+  .otp-card .cells.g4 .ch:nth-child(5) { margin-left: 9px; }
+  .otp-card .svc-name { font-size: 18px; }
+  .otp-card .svc-sub { font-size: 13px; }
+  .otp-card > .otp-email .card-pin { right: 196px; }
+  .otp-card > .otp-email .card-wait { right: 148px; }
+  .otp-card > .otp-email .card-mail { right: 98px; }
+  .otp-card > .otp-email .card-2fa { right: 49px; }
+  .otp-card > .otp-email .card-refresh { right: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .otp-card .tbar-fill { transition: none; }
+}
