@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.10 - 2026-11-03 (patch)
+- fix: 2FA icon - skip the three-dot loading view, show the code directly
+
 ## v1.19.9 - 2026-11-03 (patch)
 - fix: phone account cards - smaller action icons and Gmail text so address fits
 
