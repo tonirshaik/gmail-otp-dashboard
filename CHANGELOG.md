@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.17.0 - 2026-11-03 (minor)
+- Move compact account actions to the top-right of OTP cards
+
 ## v1.16.0 - 2026-11-03 (minor)
 - Polish OTP cards with a smaller, cleaner layout
 
