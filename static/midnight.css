@@ -1257,3 +1257,29 @@ body:has(#dashboardSection.hidden) {
 /* 2FA mode: the shield icon replaces the letter avatar, the separate "2FA code" row is hidden */
 .otp-card .svc-avatar.tfa-avatar { background: var(--otp-card-accent, #8bea45) !important; color: #10150d; }
 .otp-card .tfa-box .tfa-label { display: none !important; }
+
+/* fix-phone-compact-icons */
+@media (max-width: 600px) {
+  .otp-card > .otp-email .card-pin,
+  .otp-card > .otp-email .card-wait,
+  .otp-card > .otp-email .card-mail,
+  .otp-card > .otp-email .card-2fa,
+  .otp-card > .otp-email .card-refresh {
+    width: 22px !important;
+    min-width: 22px !important;
+    height: 22px !important;
+    min-height: 22px !important;
+    top: 19px !important;
+    padding: 0 !important;
+    border-radius: 7px !important;
+    font-size: 11px !important;
+  }
+  .otp-card > .otp-email .card-refresh { right: 8px !important; }
+  .otp-card > .otp-email .card-2fa { right: 33px !important; }
+  .otp-card > .otp-email .card-mail { right: 58px !important; }
+  .otp-card > .otp-email .card-wait { right: 83px !important; }
+  .otp-card > .otp-email .card-pin { right: 108px !important; }
+  .otp-card .svc-text,
+  .otp-card .tfa-label { max-width: calc(100% - 166px) !important; }
+  .otp-card .svc-name.svc-name-email { font-size: 10px !important; }
+}
