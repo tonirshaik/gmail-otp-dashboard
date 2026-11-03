@@ -1074,3 +1074,73 @@ body:has(#dashboardSection.hidden) {
   .otp-card .otp-code-box.has-cells:hover .ch,
   .otp-card:has(.tfa-box) .tfa-code .ch { width: 34px !important; height: 42px !important; font-size: 23px !important; }
 }
+
+
+/* Move the five account actions into the top-right header row. */
+.otp-card > .otp-email .card-pin,
+.otp-card > .otp-email .card-wait,
+.otp-card > .otp-email .card-mail,
+.otp-card > .otp-email .card-2fa,
+.otp-card > .otp-email .card-refresh {
+  top: 12px !important;
+  bottom: auto !important;
+  width: 29px !important;
+  min-width: 29px !important;
+  height: 29px !important;
+  min-height: 29px !important;
+  border-radius: 9px !important;
+  font-size: 13px !important;
+}
+.otp-card > .otp-email .card-refresh { right: 12px !important; }
+.otp-card > .otp-email .card-2fa { right: 47px !important; }
+.otp-card > .otp-email .card-mail { right: 82px !important; }
+.otp-card > .otp-email .card-wait { right: 117px !important; }
+.otp-card > .otp-email .card-pin { right: 152px !important; }
+
+/* Reserve a clean action lane so titles and email text never sit underneath icons. */
+.otp-card .svc-text {
+  max-width: calc(100% - 168px);
+}
+.otp-card .svc-name,
+.otp-card .svc-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.otp-card .tfa-label {
+  max-width: calc(100% - 168px);
+}
+.otp-card > .otp-email > span:not(.health-dot) {
+  max-width: calc(100% - 168px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.otp-card:has(.tfa-box) > .otp-email {
+  padding-right: 0 !important;
+}
+@media (max-width: 380px) {
+  .otp-card > .otp-email .card-pin,
+  .otp-card > .otp-email .card-wait,
+  .otp-card > .otp-email .card-mail,
+  .otp-card > .otp-email .card-2fa,
+  .otp-card > .otp-email .card-refresh {
+    width: 26px !important;
+    min-width: 26px !important;
+    height: 26px !important;
+    min-height: 26px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+    top: 10px !important;
+  }
+  .otp-card > .otp-email .card-refresh { right: 9px !important; }
+  .otp-card > .otp-email .card-2fa { right: 40px !important; }
+  .otp-card > .otp-email .card-mail { right: 71px !important; }
+  .otp-card > .otp-email .card-wait { right: 102px !important; }
+  .otp-card > .otp-email .card-pin { right: 133px !important; }
+  .otp-card .svc-text,
+  .otp-card .tfa-label,
+  .otp-card > .otp-email > span:not(.health-dot) {
+    max-width: calc(100% - 148px);
+  }
+}
