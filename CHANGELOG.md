@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.8 - 2026-11-03 (patch)
+- fix: change accounts search placeholder to 'Search Gmail address...'
+
 ## v1.19.7 - 2026-11-03 (patch)
 - fix: show shield icon instead of letter avatar in 2FA mode
 
