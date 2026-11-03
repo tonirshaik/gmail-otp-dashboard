@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.9 - 2026-11-03 (patch)
+- fix: phone account cards - smaller action icons and Gmail text so address fits
+
 ## v1.19.8 - 2026-11-03 (patch)
 - fix: change accounts search placeholder to 'Search Gmail address...'
 
