@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.6 - 2026-11-03 (patch)
+- chore: restore .gitignore
+
 ## v1.19.5 - 2026-11-03 (patch)
 - fix: always show Gmail address on OTP cards (css)
 
