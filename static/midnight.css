@@ -1253,3 +1253,7 @@ body:has(#dashboardSection.hidden) {
 
 /* Always-visible Gmail address row on every OTP card */
 .otp-card .svc-name.svc-name-email { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 700; }
+
+/* 2FA mode: the shield icon replaces the letter avatar, the separate "2FA code" row is hidden */
+.otp-card .svc-avatar.tfa-avatar { background: var(--otp-card-accent, #8bea45) !important; color: #10150d; }
+.otp-card .tfa-box .tfa-label { display: none !important; }
