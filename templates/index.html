@@ -76,7 +76,7 @@
         <div id="dashboardSection" class="hidden">
             <div class="top-bar">
                 <div class="header-title">
-                    <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard <span class="app-ver" id="appVer" title="App version">v{{ app_version }}</span>
+                    <i class="fa-solid fa-envelope-open-text"></i> OTP Dashboard <span class="app-ver" id="appVer" title="App version">v{{ app_version }}</span> <span id="liveStatus" role="status" aria-live="polite"></span>
                 </div>
                 
                 <div class="top-actions">
@@ -91,6 +91,21 @@
                 </div>
 
                 <div class="settings-popup" id="settingsPopup">
+                    <div class="popup-title page-title"><i class="fa-solid fa-gear"></i> Settings</div>
+                    <div class="settings-prefs">
+                        <div class="sec-label">Preferences</div>
+                        <div class="chip-row">
+                            <button type="button" id="autoCopyBtn" class="mini-toggle on" title="Copy new codes automatically when they arrive live">
+                                <i class="fa-regular fa-copy"></i> Auto-copy: <b>ON</b>
+                            </button>
+                            <button type="button" id="themeBtn" class="mini-toggle"></button>
+                            <button type="button" id="findBtn" class="mini-toggle" title="Find an account or run a command">
+                                <i class="fa-solid fa-magnifying-glass"></i> Quick find <kbd>Ctrl K</kbd>
+                            </button>
+                            <button type="button" id="alertsBtn" class="mini-toggle hidden"></button>
+                            <button type="button" id="installBtn" class="mini-toggle hidden"><i class="fa-solid fa-download"></i> Install app</button>
+                        </div>
+                    </div>
                     <div class="settings-auth" id="settingsAuth">
                         <div class="popup-title">
                             <i class="fa-solid fa-lock"></i> Enter Settings Password
@@ -111,7 +126,7 @@
 
                     <div class="settings-content hidden" id="settingsContent">
                         <div class="popup-title">
-                            <i class="fa-solid fa-gear"></i> Settings
+                            <i class="fa-solid fa-shield-halved"></i> Security &amp; backup
                         </div>
                         <button type="button" class="btn btn-primary hidden" id="registerPasskeyBtn" style="margin-bottom: 12px;">
                             <i class="fa-solid fa-fingerprint"></i> Enable Fingerprint / Face on this device
@@ -127,18 +142,6 @@
 
             <div class="dash-grid">
             <div class="dash-side">
-            <div id="liveStatus"></div>
-            <div class="chip-row">
-                <button type="button" id="autoCopyBtn" class="mini-toggle on" title="Copy new codes automatically when they arrive live">
-                    <i class="fa-regular fa-copy"></i> Auto-copy: <b>ON</b>
-                </button>
-                <button type="button" id="themeBtn" class="mini-toggle"></button>
-                <button type="button" id="findBtn" class="mini-toggle" title="Find an account or run a command">
-                    <i class="fa-solid fa-magnifying-glass"></i> Quick find <kbd>Ctrl K</kbd>
-                </button>
-                <button type="button" id="alertsBtn" class="mini-toggle hidden"></button>
-                <button type="button" id="installBtn" class="mini-toggle hidden"><i class="fa-solid fa-download"></i> Install app</button>
-            </div>
             </div><!-- /dash-side -->
 
             <div class="dash-main">
