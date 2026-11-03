@@ -2208,6 +2208,14 @@ def totp_at(secret_b32, digits, period, algo, t):
     num = struct.unpack(">I", mac[off:off + 4])[0] & 0x7FFFFFFF
     return str(num % (10 ** digits)).zfill(digits), period - int(t % period)
 
+def totp_window(secret_b32, digits, period, algo, t):
+    """Ekhonkar code + porer code + thik (millisecond) baki somoy. Browser porer code age-i pay,
+    tai somoy sesh hoyei network-er opekkha chhara notun code dekhate pare."""
+    code, left = totp_at(secret_b32, digits, period, algo, t)
+    nxt, _ = totp_at(secret_b32, digits, period, algo, (int(t // period) + 1) * period)
+    ms = max(1, int(round((period - (t % period)) * 1000)))
+    return {"code": code, "next_code": nxt, "remaining": left, "remaining_ms": ms}
+
 _rl_hits = {}
 _rl_lock = threading.Lock()
 def _rate_ok(name, limit, window):
@@ -2289,7 +2297,7 @@ def totp_add():
         return jsonify({"error": "Account not found"}), 404
     try:
         p = parse_totp_input(data.get('secret'))
-        code, left = totp_at(p["secret"], p["digits"], p["period"], p["algo"], time.time())
+        win = totp_window(p["secret"], p["digits"], p["period"], p["algo"], time.time())
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception:
@@ -2306,8 +2314,8 @@ def totp_add():
         print(f"[TOTP] add: {type(e).__name__}")
         return jsonify({"error": "Could not save. Try again."}), 500
     # Prothom code sathe-i dei, jate Google-er "Verify" ghor-e sathe sathe bosano jay
-    return _no_store(jsonify({"message": "2FA added", "code": code, "remaining": left,
-                              "period": p["period"], "digits": p["digits"]}))
+    return _no_store(jsonify(dict(win, message="2FA added",
+                                  period=p["period"], digits=p["digits"])))
 
 @app.route('/api/totp/code', methods=['POST'])
 def totp_code():
@@ -2331,12 +2339,12 @@ def totp_code():
         if plain.get("e") != email_in:                    # onno account-er secret ulte-palte rakha hole code dei na
             raise ValueError("mismatch")
         now = time.time()
-        code, left = totp_at(plain["s"], doc["digits"], doc["period"], doc["algo"], now)
+        win = totp_window(plain["s"], doc["digits"], doc["period"], doc["algo"], now)
     except Exception:
         return jsonify({"error": "Could not read the saved 2FA key (is TOTP_ENC_KEY the same as before?)"}), 500
-    return _no_store(jsonify({"code": code, "remaining": left, "period": doc["period"],
-                              "digits": doc["digits"], "issuer": doc.get("issuer", ""),
-                              "server_time": int(now)}))
+    return _no_store(jsonify(dict(win, period=doc["period"],
+                                  digits=doc["digits"], issuer=doc.get("issuer", ""),
+                                  server_time=int(now))))
 
 @app.route('/api/totp/delete', methods=['POST'])
 def totp_delete():
@@ -2383,8 +2391,7 @@ def _svc_public(doc, now):
         plain = json.loads(_totp_fernet.decrypt(doc["secret_enc"].encode()).decode())
         if plain.get("i") != doc["sid"]:                  # onno service-er secret ulte-palte rakha hole code dei na
             raise ValueError("mismatch")
-        code, left = totp_at(plain["s"], doc["digits"], doc["period"], doc["algo"], now)
-        out.update({"code": code, "remaining": left})
+        out.update(totp_window(plain["s"], doc["digits"], doc["period"], doc["algo"], now))
     except Exception:
         out.update({"code": "", "remaining": out["period"], "unreadable": True})
     return out

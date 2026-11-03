@@ -2,7 +2,7 @@
    - app shell offline-e kaj kore (login page + shell)
    - /api/* KOKHONO cache hoy na (OTP private data)
    - Web Push: tab/app bondho thakleo notification dekhay */
-const VERSION = 'v9';
+const VERSION = 'v10';
 const SHELL_CACHE = 'otp-shell-' + VERSION;
 const ASSET_CACHE = 'otp-assets-' + VERSION;
 const SHELL = ['/', '/manifest.webmanifest', '/static/icons/icon-192.png', '/static/icons/icon-512.png',
