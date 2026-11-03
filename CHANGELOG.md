@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.18.0 - 2026-11-03 (minor)
+- Move Gmail address into OTP card header and remove excess space
+
 ## v1.17.0 - 2026-11-03 (minor)
 - Move compact account actions to the top-right of OTP cards
 
