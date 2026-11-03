@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.11 - 2026-11-03 (patch)
+- fix: 2FA cards - repaint timer bars right after re-render so old cards do not lag
+
 ## v1.19.10 - 2026-11-03 (patch)
 - fix: 2FA icon - skip the three-dot loading view, show the code directly
 
