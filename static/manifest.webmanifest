@@ -38,11 +38,6 @@
       "name": "Refresh codes",
       "short_name": "Refresh",
       "url": "/?action=refresh"
-    },
-    {
-      "name": "Quick find",
-      "short_name": "Find",
-      "url": "/?action=find"
     }
   ]
 }
