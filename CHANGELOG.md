@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.15.0 - 2026-11-03 (minor)
+- Make OTP cards compact on mobile and desktop
+
 ## v1.14.0 - 2026-11-03 (minor)
 - Redesign OTP cards to match reference screenshots
 
