@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.3 - 2026-11-03 (patch)
+- Add files via upload
+
 ## v1.19.2 - 2026-11-03 (patch)
 - Update app.py
 
