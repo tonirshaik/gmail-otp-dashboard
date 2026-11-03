@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.1 - 2026-11-03 (patch)
+- Fix Gmail address placement in OTP card
+
 ## v1.19.0 - 2026-11-03 (minor)
 - Fix truncated Gmail address in OTP card header
 
