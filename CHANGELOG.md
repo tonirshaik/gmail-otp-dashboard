@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.14 - 2026-11-03 (patch)
+- fix: faster 2FA reveal (prefetch on hover/touch, request before re-re…
+
 ## v1.19.13 - 2026-11-03 (patch)
 - fix: 2FA code rollover timing (exact ms remaining, next-code prefetch…
 
