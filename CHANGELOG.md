@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.20.0 - 2026-11-04 (minor)
+- feat: blinking light on cards with a new code
+
 ## v1.19.16 - 2026-11-04 (patch)
 - fix: 2FA shield button only highlights when on
 
