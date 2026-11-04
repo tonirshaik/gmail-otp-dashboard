@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.16 - 2026-11-04 (patch)
+- fix: 2FA shield button only highlights when on
+
 ## v1.19.15 - 2026-11-04 (patch)
 - fix: keep wait timer inside the hourglass button
 
