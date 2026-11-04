@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.20.2 - 2026-11-04 (patch)
+- fix: card refresh always leaves 2FA view
+
 ## v1.20.1 - 2026-11-04 (patch)
 - fix: refresh with a new code leaves 2FA view automatically
 
