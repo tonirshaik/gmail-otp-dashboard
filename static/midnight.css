@@ -1309,3 +1309,28 @@ body:has(#dashboardSection.hidden) {
 :root[data-theme=light] .otp-card > .otp-email .card-2fa.set:not(.on) {
   color: var(--text-main) !important;
 }
+
+
+/* new-code-blink: small blinking light at bottom-right of a card with a new code */
+.otp-card.is-new::after {
+  content: "";
+  position: absolute;
+  right: 16px;
+  bottom: 15px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--otp-card-accent, #8bea45);
+  box-shadow: 0 0 0 0 var(--otp-card-accent, #8bea45);
+  animation: newCodeBlink 1.4s ease-in-out infinite;
+  pointer-events: none;
+  z-index: 3;
+}
+.otp-card.is-new .otp-time { padding-right: 24px !important; }
+@keyframes newCodeBlink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: .15; transform: scale(.7); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .otp-card.is-new::after { animation: none !important; }
+}
