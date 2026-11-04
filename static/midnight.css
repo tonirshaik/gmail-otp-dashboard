@@ -1299,3 +1299,13 @@ body:has(#dashboardSection.hidden) {
   font-weight: 700 !important;
   letter-spacing: -.2px !important;
 }
+
+
+/* shield-set-normal: 2FA button looks normal unless it is switched on */
+.otp-card > .otp-email .card-2fa.set:not(.on) {
+  color: #eef2f8 !important;
+  background: #202735 !important;
+}
+:root[data-theme=light] .otp-card > .otp-email .card-2fa.set:not(.on) {
+  color: var(--text-main) !important;
+}
