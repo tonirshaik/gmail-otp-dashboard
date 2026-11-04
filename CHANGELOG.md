@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.19.15 - 2026-11-04 (patch)
+- fix: keep wait timer inside the hourglass button
+
 ## v1.19.14 - 2026-11-03 (patch)
 - fix: faster 2FA reveal (prefetch on hover/touch, request before re-re…
 
