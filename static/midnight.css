@@ -1283,3 +1283,19 @@ body:has(#dashboardSection.hidden) {
   .otp-card .tfa-label { max-width: calc(100% - 166px) !important; }
   .otp-card .svc-name.svc-name-email { font-size: 10px !important; }
 }
+
+
+/* wait-timer-fit: keep timer inside the hourglass button */
+.otp-card > .otp-email .card-wait.active {
+  flex-direction: column !important;
+  gap: 1px !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+  overflow: hidden !important;
+}
+.otp-card > .otp-email .card-wait.active i { font-size: 10px !important; }
+.otp-card > .otp-email .card-wait.active .wtime {
+  font-size: 9px !important;
+  font-weight: 700 !important;
+  letter-spacing: -.2px !important;
+}
