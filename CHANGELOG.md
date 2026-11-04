@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.20.1 - 2026-11-04 (patch)
+- fix: refresh with a new code leaves 2FA view automatically
+
 ## v1.20.0 - 2026-11-04 (minor)
 - feat: blinking light on cards with a new code
 
