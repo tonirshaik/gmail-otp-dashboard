@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.25.3 - 2026-11-05 (patch)
+- fix: faster extension unlock and show loading state
+
 ## v1.25.2 - 2026-11-05 (patch)
 - fix: extension shows only the Google account being signed in
 
