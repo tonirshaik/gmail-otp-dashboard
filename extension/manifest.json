@@ -3,7 +3,7 @@
   "name": "OTP Dashboard helper",
   "version": "1.0.0",
   "description": "Copy or auto-fill the latest code from your OTP Dashboard.",
-  "permissions": ["activeTab"],
+  "permissions": ["activeTab", "storage"],
   "host_permissions": ["@@ORIGIN@@/*"],
   "background": { "service_worker": "background.js" },
   "action": { "default_title": "OTP Dashboard", "default_popup": "popup.html" },

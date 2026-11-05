@@ -2562,9 +2562,52 @@ def _ext_match(host, domain, name):
     slug = re.sub(r"[^a-z0-9]", "", str(name or "").lower())
     return bool(slug) and slug == label
 
+EXT_TOKEN_TTL = 24 * 3600     # extension-er chabi 24 ghonta
+
+def _ext_sign(payload):
+    key = hashlib.sha256(b"ext-token|" + SECRET_KEY.encode("utf-8")).digest()
+    return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
+
+def _ext_token_ok():
+    """Authorization: Bearer ... thik o meyad-er moddhe ache kina. Ei chabi shudhu /api/ext/code-e kaj kore."""
+    h = request.headers.get("Authorization", "")
+    if not h.startswith("Bearer "):
+        return False
+    parts = h[7:].strip().split(".")
+    if len(parts) != 3 or parts[0] != "ext":
+        return False
+    try:
+        exp = int(parts[1])
+    except ValueError:
+        return False
+    if exp < time.time():
+        return False
+    return hmac.compare_digest(_ext_sign("ext.%d" % exp), parts[2])
+
+@app.route('/api/ext/login', methods=['POST'])
+def ext_login():
+    """Extension popup-er jonno 24 ghontar chabi. Master password lage; lockout dashboard login-er motoi."""
+    if not MASTER_PASSWORD:
+        return jsonify({"error": "Server not configured (MASTER_PASSWORD missing)"}), 503
+    bucket = _login_bucket()
+    secs = max(lock_remaining(bucket), lock_remaining('login-all'))
+    if secs:
+        return locked_response(secs)
+    password = _json_body().get('password')
+    if password and pw_equal(password, MASTER_PASSWORD):
+        clear_fails(bucket)
+        exp = int(time.time()) + EXT_TOKEN_TTL
+        token = "ext.%d.%s" % (exp, _ext_sign("ext.%d" % exp))
+        return _no_store(jsonify({"token": token, "expires_at": exp}))
+    all_locked, _ = register_fail('login-all', LOGIN_GLOBAL_MAX)
+    locked, left = register_fail(bucket)
+    if locked or all_locked:
+        return locked_response(locked or all_locked)
+    return jsonify({"error": f"Wrong password! ({left} attempt(s) left)"}), 401
+
 @app.route('/api/ext/code', methods=['POST'])
 def ext_code():
-    if not session.get('logged_in'):
+    if not _ext_token_ok():
         return jsonify({"error": "Unauthorized Access"}), 401
     if not _rate_ok("ext-code", 40, 60):
         return jsonify({"error": "Too many requests. Wait a moment."}), 429

@@ -14,3 +14,13 @@ body { width: 320px; background: #0B0D12; color: #F2F4F8; padding: 14px; }
 .btn { flex: 1; border: 0; border-radius: 12px; padding: 9px; font-size: 13px; font-weight: 600; cursor: pointer; background: #1F2633; color: #F2F4F8; }
 .btn.primary { background: #B6FF5C; color: #0B0D12; }
 .btn:hover { filter: brightness(1.15); }
+
+.csub.wrap { white-space: normal; line-height: 1.5; margin: 4px 0 10px; }
+.pw { width: 100%; background: #0B0D12; border: 1px solid #2C3546; border-radius: 12px; color: #F2F4F8; padding: 10px; font-size: 13px; margin-bottom: 8px; outline: 0; }
+.pw:focus { border-color: #B6FF5C; }
+.err { color: #ff7b7b; font-size: 12px; line-height: 1.4; margin-bottom: 8px; }
+.err:empty { display: none; }
+.foot { margin-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.foot .btn { flex: none; }
+.fnote { font-size: 11px; color: #9AA3B2; text-align: center; }
+.btn:disabled { opacity: .6; cursor: wait; }
