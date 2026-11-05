@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.25.0 - 2026-11-05 (minor)
+- feat: SMS OTP page via webhook
+
 ## v1.24.0 - 2026-11-05 (minor)
 - feat: extension manual refresh button, remove Gmail auto-polling
 
