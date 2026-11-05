@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.22.0 - 2026-11-05 (minor)
+- feat: extension 24-hour login token (popup unlock + lock button)
+
 ## v1.21.0 - 2026-11-05 (minor)
 - feat: browser extension to copy or auto-fill the latest code
 
