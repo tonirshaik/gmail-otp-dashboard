@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.20.3 - 2026-11-05 (patch)
+- fix: git bash push test
+
 ## v1.20.2 - 2026-11-04 (patch)
 - fix: card refresh always leaves 2FA view
 
