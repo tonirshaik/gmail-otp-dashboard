@@ -24,3 +24,7 @@ body { width: 320px; background: #0B0D12; color: #F2F4F8; padding: 14px; }
 .foot .btn { flex: none; }
 .fnote { font-size: 11px; color: #9AA3B2; text-align: center; }
 .btn:disabled { opacity: .6; cursor: wait; }
+
+.frow { display: flex; gap: 8px; }
+.frow .btn { flex: 1; }
+.btn.ref { border: 1px solid #B6FF5C; }

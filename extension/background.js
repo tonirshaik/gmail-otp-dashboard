@@ -11,7 +11,7 @@ async function getTok() {
   return null;
 }
 
-async function api(host) {
+async function api(host, mode) {
   const t = await getTok();
   if (!t) return { ok: false, status: 401, data: { error: "locked" } };
   try {
@@ -19,7 +19,7 @@ async function api(host) {
       method: "POST",
       credentials: "omit",
       headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t.token },
-      body: JSON.stringify({ host: host })
+      body: JSON.stringify({ host: host, mode: mode || "full" })
     });
     let data = {};
     try { data = await r.json(); } catch (e) {}
@@ -63,7 +63,7 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
       send({ ok: false, status: 0, data: { error: "no host" } });
       return;
     }
-    api(host.toLowerCase()).then(send);
+    api(host.toLowerCase(), sender.tab ? "full" : String(msg.mode || "full")).then(send);
     return true;
   }
   if (sender.tab) return;

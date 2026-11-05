@@ -1,5 +1,4 @@
 const DASH = "@@ORIGIN@@";
-const POLL_MS = 10000;
 const box = document.getElementById("box");
 const hostEl = document.getElementById("host");
 let tab = null, host = "", foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
@@ -94,12 +93,8 @@ function render(d, t1) {
   });
   if (!n) note("এই সাইটের জন্য কোনো কোড পাওয়া যায়নি।");
 }
-function patch(d, t1) {
-  if (d.email && emailCard) {
-    emailCard.sub.textContent = emailSub(d.email);
-    emailCard.codeEl.classList.toggle("dim", !!d.email.expired);
-  }
-  (d.tfa || []).forEach((t) => {
+function patchTfa(list, t1) {
+  (list || []).forEach((t) => {
     const it = tfaItems.find((x) => x.id === t.id);
     if (!it) return;
     it.next = t.next_code || "";
@@ -108,11 +103,24 @@ function patch(d, t1) {
     if (it.c.code !== t.code) { it.c.code = t.code; it.c.codeEl.textContent = fmt(t.code); }
   });
 }
+function patch(d, t1) {
+  if (d.email && emailCard) {
+    emailCard.sub.textContent = emailSub(d.email);
+    emailCard.codeEl.classList.toggle("dim", !!d.email.expired);
+  }
+  patchTfa(d.tfa, t1);
+}
 
 function setFoot(on) {
   if (!on) { if (foot) { foot.remove(); foot = null; } return; }
   if (foot) return;
   foot = el("div", "foot");
+  const row = el("div", "frow");
+  if (host) {
+    const rf = el("button", "btn ref", "↻ রিফ্রেশ");
+    rf.addEventListener("click", () => load("refresh", rf));
+    row.appendChild(rf);
+  }
   const lk = el("button", "btn", "লক করুন");
   lk.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({ type: "lock" });
@@ -121,12 +129,13 @@ function setFoot(on) {
     emailCard = null;
     if (!host) note(NOPAGE); else showLogin("");
   });
-  foot.appendChild(lk);
+  row.appendChild(lk);
+  foot.appendChild(row);
   foot.appendChild(el("div", "fnote", "আনলক আছে · ২৪ ঘণ্টার মধ্যে শেষ হবে"));
   document.body.appendChild(foot);
 }
 function afterUnlock() {
-  if (!host) { note(NOPAGE); setFoot(true); } else load(false);
+  if (!host) { note(NOPAGE); setFoot(true); } else load("full");
 }
 function showLogin(msg) {
   tfaItems = [];
@@ -164,21 +173,34 @@ function showLogin(msg) {
   setTimeout(() => { try { inp.focus(); } catch (e) {} }, 30);
 }
 
-async function load(silent) {
+async function load(mode, btn) {
   if (busy) return;
   busy = true;
+  let msg = "";
+  if (btn) {
+    btn.dataset.t = btn.dataset.t || btn.textContent;
+    btn.disabled = true;
+    btn.textContent = "চেক হচ্ছে…";
+  }
   try {
-    const r = await chrome.runtime.sendMessage({ type: "get", host: host });
+    const r = await chrome.runtime.sendMessage({ type: "get", host: host, mode: mode });
     const t1 = Date.now();
-    if (!r || r.status === 0) { if (!silent) note("ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।"); return; }
+    if (!r || r.status === 0) { if (mode === "full") note("ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।"); else msg = "সার্ভার পাইনি"; return; }
     if (r.status === 401) { setFoot(false); showLogin(""); return; }
-    if (r.status === 429) { if (!silent) note("একটু পরে আবার চেষ্টা করুন।"); return; }
-    if (!r.ok) { if (!silent) note((r.data && r.data.error) || "কোড আনা যায়নি।"); return; }
+    if (r.status === 429) { if (mode === "full") note("একটু পরে আবার চেষ্টা করুন।"); else msg = "একটু পরে চাপুন"; return; }
+    if (!r.ok) { if (mode === "full") note((r.data && r.data.error) || "কোড আনা যায়নি।"); else msg = "হয়নি"; return; }
     setFoot(true);
-    if (silent && sig(r.data) === curSig) patch(r.data, t1);
+    if (mode === "tfa") patchTfa(r.data.tfa, t1);
+    else if (sig(r.data) === curSig) patch(r.data, t1);
     else render(r.data, t1);
+    if (btn) msg = "হয়েছে";
   } finally {
     busy = false;
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = msg || btn.dataset.t;
+      if (msg) setTimeout(() => { btn.textContent = btn.dataset.t; }, 1200);
+    }
   }
 }
 
@@ -199,10 +221,8 @@ setInterval(() => {
     const s = Math.max(0, Math.ceil((it.at - now) / 1000));
     it.left.textContent = "বদলাবে " + s + " সেকেন্ডে";
   });
-  if (sync && now - lastSync > 2000) { lastSync = now; load(true); }
+  if (sync && !busy && now - lastSync > 2000) { lastSync = now; load("tfa"); }
 }, 250);
-
-setInterval(() => { if (host && foot) load(true); }, POLL_MS);
 
 (async () => {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -217,5 +237,5 @@ setInterval(() => { if (host && foot) load(true); }, POLL_MS);
   }
   host = u.hostname;
   hostEl.textContent = host;
-  load(false);
+  load("full");
 })();

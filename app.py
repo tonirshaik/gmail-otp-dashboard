@@ -2533,10 +2533,10 @@ _ext_cache = {"t": 0.0, "items": []}
 _ext_lock = threading.Lock()
 EXT_CACHE_SECONDS = 8
 
-def _ext_items():
+def _ext_items(force=False):
     import concurrent.futures as cf
     with _ext_lock:
-        if time.time() - _ext_cache["t"] < EXT_CACHE_SECONDS:
+        if time.time() - _ext_cache["t"] < (3 if force else EXT_CACHE_SECONDS):
             return _ext_cache["items"]
         def one(a):
             r = []
@@ -2611,11 +2611,15 @@ def ext_code():
         return jsonify({"error": "Unauthorized Access"}), 401
     if not _rate_ok("ext-code", 40, 60):
         return jsonify({"error": "Too many requests. Wait a moment."}), 429
-    host = str(_json_body().get("host", "")).strip().lower()[:253]
+    _b = _json_body()
+    host = str(_b.get("host", "")).strip().lower()[:253]
+    _mode = str(_b.get("mode", "full"))
+    if _mode == "refresh" and not _rate_ok("ext-refresh", 10, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
     if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", host):
         return jsonify({"error": "Bad host"}), 400
     try:
-        items = _ext_items()
+        items = [] if _mode == "tfa" else _ext_items(_mode == "refresh")
     except Exception as e:
         print(f"[EXT] scan: {type(e).__name__}")
         return jsonify({"error": "Could not read the codes"}), 500
