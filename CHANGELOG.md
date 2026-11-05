@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.23.0 - 2026-11-05 (minor)
+- feat: extension instant 2FA rollover + auto-refresh email code
+
 ## v1.22.0 - 2026-11-05 (minor)
 - feat: extension 24-hour login token (popup unlock + lock button)
 
