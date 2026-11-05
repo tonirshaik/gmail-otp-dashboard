@@ -15,6 +15,7 @@ import unicodedata
 import select
 import queue
 import uuid
+import secrets
 import gzip
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime, parseaddr
@@ -103,6 +104,7 @@ prefs_collection = None
 push_collection = None
 totp_collection = None
 svc_collection = None
+sms_collection = None
 
 if MONGO_URI:
     try:
@@ -115,6 +117,7 @@ if MONGO_URI:
         push_collection = db['push_subs']      # notification subscription (device-wise)
         totp_collection = db['totp']           # Gmail-wise 2FA (Authenticator) secret -- ENCRYPTED
         svc_collection = db['totp_services']   # onno shob service-er (social media / website / app) 2FA secret -- ENCRYPTED
+        sms_collection = db['sms_codes']
         print("MongoDB Connected Successfully!")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
@@ -1567,6 +1570,167 @@ def push_test():
     return jsonify({"error": "Could not reach the push service"}), 502
 
 
+# ======================= SMS OTP (Android SMS forward app -> webhook) =======================
+# Phone-er SMS forward app ei server-e POST kore (/api/sms/hook). Secret token database-e shudhu hash hishebe thake.
+# Shudhu code, sender, shomoy rakhi (puro SMS na). 24 ghonta pore auto muche jay.
+SMS_KEEP_SECONDS = 24 * 3600
+SMS_MAX_KEEP = 200
+SMS_HOOK_ID = "sms_hook"
+
+def ensure_sms_index():
+    if sms_collection is None:
+        return
+    try:
+        sms_collection.create_index("created_at", expireAfterSeconds=SMS_KEEP_SECONDS, name="sms_ttl")
+    except Exception as e:
+        print(f"[SMS] index error: {type(e).__name__}")
+
+ensure_sms_index()
+
+def _sms_token_hash(tok):
+    return hashlib.sha256(("sms-hook|" + tok).encode("utf-8")).hexdigest()
+
+def _sms_pick(d, keys, limit):
+    for k in keys:
+        v = d.get(k)
+        if isinstance(v, (str, int, float)) and str(v).strip():
+            return str(v).strip()[:limit]
+    return ""
+
+@app.route('/api/sms/token', methods=['POST'])
+def sms_token():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not session.get('settings_unlocked'):
+        return jsonify({"error": "Settings locked. Unlock first."}), 403
+    if prefs_collection is None or sms_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    data = _json_body()
+    bad = _settings_pw_check(data)
+    if bad is not None:
+        return bad
+    if not _rate_ok("sms-token", 10, 600):
+        return jsonify({"error": "Too many tries. Wait a few minutes."}), 429
+    tok = "sms_" + secrets.token_urlsafe(24)
+    try:
+        prefs_collection.update_one(
+            {"_id": SMS_HOOK_ID},
+            {"$set": {"hash": _sms_token_hash(tok), "created_at": datetime.now()}},
+            upsert=True)
+    except Exception as e:
+        print(f"[SMS] token save: {type(e).__name__}")
+        return jsonify({"error": "Could not create the link. Try again."}), 500
+    return _no_store(jsonify({"token": tok}))
+
+@app.route('/api/sms/hook', methods=['POST'])
+def sms_hook():
+    if prefs_collection is None or sms_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    bucket = "smshook:" + str(request.remote_addr or "unknown")[:60]
+    secs = lock_remaining(bucket)
+    if secs:
+        return locked_response(secs)
+    if (request.content_length or 0) > 20000:
+        return jsonify({"error": "Too big"}), 413
+    data = {}
+    data.update(request.args.to_dict())
+    data.update(request.form.to_dict())
+    js = request.get_json(silent=True)
+    if isinstance(js, dict):
+        data.update(js)
+    given = ""
+    auth_h = request.headers.get("Authorization", "")
+    if auth_h.startswith("Bearer "):
+        given = auth_h[7:].strip()
+    given = given or request.headers.get("X-Token", "").strip() or str(data.get("token") or "").strip()
+    try:
+        doc = prefs_collection.find_one({"_id": SMS_HOOK_ID}) or {}
+    except Exception as e:
+        print(f"[SMS] read: {type(e).__name__}")
+        return jsonify({"error": "Server error"}), 500
+    stored = str(doc.get("hash") or "")
+    if not (given and stored and hmac.compare_digest(_sms_token_hash(given), stored)):
+        locked, _left = register_fail(bucket, 10)
+        if locked:
+            return locked_response(locked)
+        return jsonify({"error": "Unauthorized"}), 401
+    clear_fails(bucket)
+    if not _rate_ok("sms-hook", 60, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    sender = _sms_pick(data, ("from", "sender", "number", "phone", "address", "title"), 60)
+    text = _sms_pick(data, ("message", "text", "body", "content", "msg", "sms"), 2000)
+    if not text:
+        return jsonify({"error": "message is empty"}), 400
+    code, score = extract_otp_scored(text)
+    if code == "Code not found":
+        return _no_store(jsonify({"ok": True, "found": False}))
+    now = time.time()
+    msg_hash = hashlib.sha1((sender + "\n" + text).encode("utf-8")).hexdigest()
+    try:
+        if sms_collection.find_one({"h": msg_hash, "ts": {"$gt": now - 120}}, {"_id": 1}):
+            return _no_store(jsonify({"ok": True, "found": True, "duplicate": True}))
+        sms_collection.insert_one({
+            "_id": uuid.uuid4().hex,
+            "h": msg_hash,
+            "sender": sender,
+            "service": service_name(sender, "") or sender or "SMS",
+            "code": code,
+            "confidence": "high" if score >= CONF_HIGH_SCORE else "low",
+            "ttl": extract_ttl(text) or OTP_TTL_SECONDS,
+            "ts": now,
+            "created_at": datetime.now(timezone.utc),
+        })
+        cnt = sms_collection.count_documents({})
+        if cnt > SMS_MAX_KEEP:
+            old = [d["_id"] for d in sms_collection.find({}, {"_id": 1}).sort("ts", 1).limit(cnt - SMS_MAX_KEEP)]
+            sms_collection.delete_many({"_id": {"$in": old}})
+    except Exception as e:
+        print(f"[SMS] save: {type(e).__name__}")
+        return jsonify({"error": "Could not save"}), 500
+    return _no_store(jsonify({"ok": True, "found": True}))
+
+@app.route('/api/sms/list')
+def sms_list():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if sms_collection is None:
+        return _no_store(jsonify({"items": []}))
+    if not _rate_ok("sms-list", 120, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    now = time.time()
+    try:
+        docs = list(sms_collection.find({"ts": {"$gt": now - SMS_KEEP_SECONDS}}).sort("ts", -1).limit(50))
+    except Exception as e:
+        print(f"[SMS] list: {type(e).__name__}")
+        return jsonify({"error": "Could not load SMS codes"}), 500
+    items = [{
+        "id": d["_id"],
+        "sender": d.get("sender", ""),
+        "service": d.get("service", ""),
+        "code": d.get("code", ""),
+        "confidence": d.get("confidence", "high"),
+        "ttl_seconds": int(d.get("ttl") or OTP_TTL_SECONDS),
+        "timestamp": d.get("ts", 0),
+        "age_seconds": max(0, int(now - d.get("ts", now))),
+    } for d in docs]
+    return _no_store(jsonify({"items": items}))
+
+@app.route('/api/sms/delete', methods=['POST'])
+def sms_delete():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if sms_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    sid = str(_json_body().get('id', '')).strip()
+    if not re.fullmatch(r"[0-9a-f]{32}", sid):
+        return jsonify({"error": "Bad request"}), 400
+    try:
+        sms_collection.delete_one({"_id": sid})
+    except Exception as e:
+        print(f"[SMS] delete: {type(e).__name__}")
+        return jsonify({"error": "Could not delete"}), 500
+    return jsonify({"ok": True})
+
 # ======================= Idle timeout (server-side) =======================
 # Kono kaj na korle IDLE_TIMEOUT sekend por session shesh. Browser-er auto-lock (5 min) er sathe mil rekhe.
 # "Kaj kora" mane: login howa ba kono authenticated request (browser kaj korle prottek ~1 min-e /api/ping pathay).
@@ -1576,7 +1740,7 @@ _last_user_activity = time.time()                 # SSE stream idle hole bondho 
 _IDLE_SKIP = ('/api/push-status',)                # login lage na, check-er dorkar nai
 _IDLE_PUBLIC = ('/api/login', '/api/logout',      # session shesh hole-o ei gulo cholte hobe, nahole abar login kora jabe na
                 '/api/passkey/auth/options', '/api/passkey/auth/verify')
-_IDLE_BACKGROUND = ('/api/stream', '/api/ext/code')               # background connection, "kaj kora" na
+_IDLE_BACKGROUND = ('/api/stream', '/api/ext/code', '/api/sms/list')               # background connection, "kaj kora" na
 
 def _mark_active():
     global _last_user_activity

@@ -1334,3 +1334,39 @@ body:has(#dashboardSection.hidden) {
 @media (prefers-reduced-motion: reduce) {
   .otp-card.is-new::after { animation: none !important; }
 }
+
+
+/* sms-otp: SMS page + cards */
+#smsModal{z-index:300;background:var(--bg-color);-webkit-backdrop-filter:none;backdrop-filter:none;align-items:flex-start;justify-content:center;overflow-y:auto;overscroll-behavior:contain;padding:max(22px,env(safe-area-inset-top)) 16px calc(116px + env(safe-area-inset-bottom))}
+#smsModal .mail-box{width:100%;max-width:720px;max-height:none;padding:0;background:transparent;border:0;border-radius:0;box-shadow:none;animation:none}
+#smsModal .mail-title{font-size:24px;font-weight:700;letter-spacing:-.4px;margin-bottom:14px}
+#smsModal .mail-scroll{overflow:visible}
+#smsCloseBtn{display:none}
+@media (min-width:1024px){
+  #smsModal{left:252px;justify-content:flex-start;padding:36px 44px 48px}
+  #smsModal .mail-box{max-width:1240px}
+  #smsModal .mail-title{font-size:28px;margin-bottom:20px}
+}
+.sms-list{display:flex;flex-direction:column;gap:12px}
+@media (min-width:1024px){.sms-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}}
+@media (min-width:1440px){.sms-list{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.sms-card{background:var(--m-surface);border:1px solid var(--m-line);border-radius:18px;padding:12px 14px}
+.sms-card .svc-row{margin:0 0 8px}
+.sms-card .svc-name{font-size:14px;font-weight:700}
+.sms-card .svc-sub{font-size:11px;color:var(--text-muted)}
+.sms-card.is-expired .svc-row{opacity:.55}
+.sms-del{margin-left:auto;flex:none;width:34px;height:34px;border:0;border-radius:11px;background:var(--m-surface2);color:var(--text-main);cursor:pointer}
+.sms-del:hover{color:var(--accent-red)}
+.sms-card .otp-code-box.has-cells{display:flex;align-items:center;justify-content:center;gap:5px;min-height:46px;margin:0 0 8px;padding:0;cursor:pointer}
+.sms-card .cells{gap:4px}
+.sms-card .ch,
+.sms-card .otp-code-box.has-cells:hover .ch{width:clamp(27px,8vw,38px);height:44px;min-width:0;padding:0;border:1px solid var(--m-line2);border-radius:9px;background:var(--m-surface2);color:var(--text-main);font:500 clamp(20px,5.2vw,25px)/1 var(--m-code)}
+.sms-card .otp-code-box.has-cells:hover .ch{color:var(--m-accent)}
+.sms-card .cells.g3 .ch:nth-child(4),
+.sms-card .cells.g4 .ch:nth-child(5){margin-left:7px}
+.sms-card .otp-code-box.masked .ch{color:var(--text-muted)}
+.sms-card .otp-code-box.expired-box{height:40px;font-size:13px}
+.sms-card .otp-expiry{display:flex;align-items:center;gap:10px;margin:0;font-size:11px;color:var(--text-muted)}
+.sms-card .tbar{flex:1}
+.sms-card.expiring .tbar-fill{background:var(--accent-red)}
+.sms-note{font-size:11px;color:var(--warn-text);margin:0 0 8px}

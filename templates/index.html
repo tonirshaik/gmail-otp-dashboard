@@ -133,6 +133,19 @@
                             <i class="fa-solid fa-box-archive"></i> Backup &amp; Import
                         </button>
                         <a class="btn btn-ghost" href="/api/ext/download" style="margin-top: 10px; text-decoration: none;"><i class="fa-solid fa-puzzle-piece"></i> Browser extension (download)</a>
+                        <button type="button" class="btn btn-ghost" id="smsSetupBtn" style="margin-top: 10px;"><i class="fa-solid fa-message"></i> SMS OTP setup</button>
+                        <div id="smsSetup" class="bk-sec hidden" style="margin-top: 10px;">
+                            <div class="bk-title">SMS OTP</div>
+                            <div class="bk-note">Create a secret link and paste it into your Android SMS forward app (method POST, send the sender as "from" and the text as "message"). Creating a new link stops the old one.</div>
+                            <div class="input-group"><input type="password" id="smsPw" placeholder="Settings password" autocomplete="off"></div>
+                            <button type="button" class="btn btn-primary" id="smsMakeBtn"><i class="fa-solid fa-link"></i> Create secret link</button>
+                            <div id="smsLinkBox" class="hidden" style="margin-top: 10px;">
+                                <div class="bk-note">Copy it now. It will not be shown again.</div>
+                                <div class="input-group"><input type="text" id="smsLinkOut" readonly autocomplete="off"></div>
+                                <button type="button" class="btn btn-ghost" id="smsCopyBtn"><i class="fa-regular fa-copy"></i> Copy link</button>
+                            </div>
+                            <div id="smsSetupMsg" class="msg-status" role="status"></div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -167,6 +180,9 @@
                 </button>
                 <button type="button" class="nav-item" data-nav="tfa" aria-label="2FA services">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span class="nav-lbl">2FA Services</span>
+                </button>
+                <button type="button" class="nav-item" data-nav="sms" aria-label="SMS codes">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span class="nav-lbl">SMS</span>
                 </button>
                 <button type="button" class="nav-item" data-nav="settings" aria-label="Settings">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.3 3h-4l-.3 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.3 2.7h4l.3-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg><span class="nav-lbl">Settings</span>
@@ -360,6 +376,18 @@
             </div>
             <div class="mail-acct" id="tfaAcct"></div>
             <div class="mail-scroll" id="tfaScroll"></div>
+        </div>
+    </div>
+
+    <!-- SMS OTP page -->
+    <div id="smsModal" class="modal-overlay mail-overlay hidden" role="dialog" aria-modal="true" aria-label="SMS codes">
+        <div class="mail-box">
+            <div class="mail-head">
+                <span class="mail-title"><i class="fa-solid fa-message"></i> SMS OTP</span>
+                <button type="button" class="mail-ibtn" id="smsCloseBtn" title="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div class="mail-acct">Codes forwarded from your Android phone</div>
+            <div class="mail-scroll" id="smsScroll"></div>
         </div>
     </div>
 
