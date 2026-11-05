@@ -155,11 +155,13 @@ function showLogin(msg) {
     const pw = inp.value;
     if (!pw) { inp.focus(); return; }
     b.disabled = true;
+    b.textContent = "আনলক হচ্ছে…";
     err.textContent = "";
     const r = await chrome.runtime.sendMessage({ type: "login", password: pw });
     inp.value = "";
     b.disabled = false;
-    if (r && r.ok) { afterUnlock(); return; }
+    b.textContent = "আনলক করুন";
+    if (r && r.ok) { note("কোড খোঁজা হচ্ছে… একটু অপেক্ষা করুন"); afterUnlock(); return; }
     if (r && r.error) err.textContent = r.error;
     else if (r && r.status === 0) err.textContent = "ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।";
     else err.textContent = "পাসওয়ার্ড ভুল।";

@@ -2716,6 +2716,22 @@ def _ext_items(force=False):
         _ext_cache["t"] = time.time()
         return out
 
+_ext_one_cache = {}
+
+def _ext_items_for(addr, force=False):
+    """শুধু ১টা Gmail স্ক্যান করে (সব অ্যাকাউন্ট নয়), তাই দ্রুত।"""
+    hit = _ext_one_cache.get(addr)
+    if hit and time.time() - hit[0] < (3 if force else EXT_CACHE_SECONDS):
+        return hit[1]
+    acc = next((a for a in load_accounts() if str(a.get("email", "")).lower() == addr), None)
+    out = []
+    if acc:
+        check_gmail(acc, out)
+    if len(_ext_one_cache) > 50:
+        _ext_one_cache.clear()
+    _ext_one_cache[addr] = (time.time(), out)
+    return out
+
 def _ext_match(host, domain, name):
     rd_ = site_domain(host)
     if not rd_:
@@ -2786,7 +2802,7 @@ def ext_code():
     if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", host):
         return jsonify({"error": "Bad host"}), 400
     try:
-        items = [] if _mode == "tfa" else _ext_items(_mode == "refresh")
+        items = [] if _mode == "tfa" else (_ext_items_for(hint, _mode == "refresh") if hint else _ext_items(_mode == "refresh"))
     except Exception as e:
         print(f"[EXT] scan: {type(e).__name__}")
         return jsonify({"error": "Could not read the codes"}), 500
