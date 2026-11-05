@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.21.0 - 2026-11-05 (minor)
+- feat: browser extension to copy or auto-fill the latest code
+
 ## v1.20.3 - 2026-11-05 (patch)
 - fix: git bash push test
 
