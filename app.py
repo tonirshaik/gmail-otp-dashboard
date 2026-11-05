@@ -1576,7 +1576,7 @@ _last_user_activity = time.time()                 # SSE stream idle hole bondho 
 _IDLE_SKIP = ('/api/push-status',)                # login lage na, check-er dorkar nai
 _IDLE_PUBLIC = ('/api/login', '/api/logout',      # session shesh hole-o ei gulo cholte hobe, nahole abar login kora jabe na
                 '/api/passkey/auth/options', '/api/passkey/auth/verify')
-_IDLE_BACKGROUND = ('/api/stream',)               # background connection, "kaj kora" na
+_IDLE_BACKGROUND = ('/api/stream', '/api/ext/code')               # background connection, "kaj kora" na
 
 def _mark_active():
     global _last_user_activity
@@ -2527,6 +2527,107 @@ def svc_delete():
     if r.deleted_count == 0:
         return jsonify({"error": "Service not found"}), 404
     return jsonify({"message": "Service removed"})
+
+# ======================= Browser extension API =======================
+_ext_cache = {"t": 0.0, "items": []}
+_ext_lock = threading.Lock()
+EXT_CACHE_SECONDS = 8
+
+def _ext_items():
+    import concurrent.futures as cf
+    with _ext_lock:
+        if time.time() - _ext_cache["t"] < EXT_CACHE_SECONDS:
+            return _ext_cache["items"]
+        def one(a):
+            r = []
+            check_gmail(a, r)
+            return r
+        out = []
+        accs = load_accounts()
+        if accs:
+            with cf.ThreadPoolExecutor(max_workers=5) as pool:
+                for r in pool.map(one, accs):
+                    out.extend(r)
+        _ext_cache["items"] = out
+        _ext_cache["t"] = time.time()
+        return out
+
+def _ext_match(host, domain, name):
+    rd_ = site_domain(host)
+    if not rd_:
+        return False
+    if domain and rd_ == domain:
+        return True
+    label = rd_.split(".")[0]
+    slug = re.sub(r"[^a-z0-9]", "", str(name or "").lower())
+    return bool(slug) and slug == label
+
+@app.route('/api/ext/code', methods=['POST'])
+def ext_code():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not _rate_ok("ext-code", 40, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    host = str(_json_body().get("host", "")).strip().lower()[:253]
+    if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", host):
+        return jsonify({"error": "Bad host"}), 400
+    try:
+        items = _ext_items()
+    except Exception as e:
+        print(f"[EXT] scan: {type(e).__name__}")
+        return jsonify({"error": "Could not read the codes"}), 500
+    now = time.time()
+    best = None
+    for it in items:
+        if it.get("kind") != "code" or it.get("auth_fail"):
+            continue
+        if not _ext_match(host, it.get("domain", ""), it.get("service")):
+            continue
+        if best is None or it["timestamp"] > best["timestamp"]:
+            best = it
+    email_out = None
+    if best:
+        age = max(0, int(now - best["timestamp"]))
+        ttl = int(best.get("ttl_seconds") or OTP_TTL_SECONDS)
+        email_out = {"email": best["email"], "service": best.get("service") or best.get("sender"),
+                     "code": best["code"], "age": age, "ttl": ttl, "expired": age >= ttl,
+                     "confidence": best.get("confidence", "high")}
+    tfa = []
+    if _svc_ready():
+        try:
+            for d in svc_collection.find({}, {"_id": 0}):
+                if _ext_match(host, "", d.get("name")):
+                    p = _svc_public(d, now)
+                    if p.get("code"):
+                        tfa.append({"id": p["id"], "name": p["name"], "label": p.get("label", ""),
+                                    "code": p["code"], "remaining": p.get("remaining", 30)})
+        except Exception as e:
+            print(f"[EXT] svc: {type(e).__name__}")
+    return _no_store(jsonify({"email": email_out, "tfa": tfa}))
+
+@app.route('/api/ext/download')
+def ext_download():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not session.get('settings_unlocked'):
+        return jsonify({"error": "Settings locked. Unlock first."}), 403
+    import io, zipfile
+    root = os.path.join(app.root_path, 'extension')
+    if not os.path.isdir(root):
+        return jsonify({"error": "Extension files not found"}), 404
+    origin = ORIGIN.rstrip('/')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        for name in sorted(os.listdir(root)):
+            p = os.path.join(root, name)
+            if not os.path.isfile(p):
+                continue
+            with open(p, 'r', encoding='utf-8') as f:
+                txt = f.read().replace('@@ORIGIN@@', origin)
+            z.writestr('otp-extension/' + name, txt)
+    resp = Response(buf.getvalue(), mimetype='application/zip')
+    resp.headers['Content-Disposition'] = 'attachment; filename="otp-extension.zip"'
+    return _no_store(resp)
 
 @app.route('/api/push-status')
 def push_status():

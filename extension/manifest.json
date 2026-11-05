@@ -1,0 +1,13 @@
+{
+  "manifest_version": 3,
+  "name": "OTP Dashboard helper",
+  "version": "1.0.0",
+  "description": "Copy or auto-fill the latest code from your OTP Dashboard.",
+  "permissions": ["activeTab"],
+  "host_permissions": ["@@ORIGIN@@/*"],
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "OTP Dashboard", "default_popup": "popup.html" },
+  "content_scripts": [
+    { "matches": ["https://*/*"], "js": ["content.js"], "run_at": "document_idle" }
+  ]
+}
