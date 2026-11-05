@@ -2643,7 +2643,9 @@ def ext_code():
                     p = _svc_public(d, now)
                     if p.get("code"):
                         tfa.append({"id": p["id"], "name": p["name"], "label": p.get("label", ""),
-                                    "code": p["code"], "remaining": p.get("remaining", 30)})
+                                    "code": p["code"], "remaining": p.get("remaining", 30),
+                                    "remaining_ms": p.get("remaining_ms"), "next_code": p.get("next_code", ""),
+                                    "period": p.get("period", 30)})
         except Exception as e:
             print(f"[EXT] svc: {type(e).__name__}")
     return _no_store(jsonify({"email": email_out, "tfa": tfa}))

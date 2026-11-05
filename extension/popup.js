@@ -1,7 +1,8 @@
 const DASH = "@@ORIGIN@@";
+const POLL_MS = 10000;
 const box = document.getElementById("box");
 const hostEl = document.getElementById("host");
-let tab = null, host = "", ends = [], foot = null;
+let tab = null, host = "", foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
 const NOPAGE = "এই পাতায় কাজ করে না। কোনো https সাইটে খুলুন।";
 
 function el(tag, cls, text) {
@@ -45,39 +46,67 @@ function card(title, sub, code, expired) {
   c.appendChild(el("div", "ctitle", title));
   const s = el("div", "csub", sub);
   c.appendChild(s);
-  c.appendChild(el("div", "code" + (expired ? " dim" : ""), fmt(code)));
+  const codeEl = el("div", "code" + (expired ? " dim" : ""), fmt(code));
+  c.appendChild(codeEl);
+  const o = { node: c, sub: s, codeEl: codeEl, code: code };
   const row = el("div", "row");
   const cp = el("button", "btn", "কপি");
   cp.addEventListener("click", () => {
-    navigator.clipboard.writeText(code).then(() => flash(cp, "কপি হয়েছে"), () => flash(cp, "হয়নি"));
+    navigator.clipboard.writeText(o.code).then(() => flash(cp, "কপি হয়েছে"), () => flash(cp, "হয়নি"));
   });
   const fl = el("button", "btn primary", "অটো-ফিল");
-  fl.addEventListener("click", () => fillIt(code, fl));
+  fl.addEventListener("click", () => fillIt(o.code, fl));
   row.appendChild(cp);
   row.appendChild(fl);
   c.appendChild(row);
-  return { node: c, sub: s };
+  return o;
 }
-function render(d) {
+function sig(d) {
+  return (d.email ? d.email.email + "|" + d.email.code : "") + "#" + (d.tfa || []).map((t) => t.id).join(",");
+}
+function emailSub(e) {
+  return e.email + " · " + (e.expired ? "মেয়াদ শেষ · " : "") + ago(e.age);
+}
+function endAt(t, t1) {
+  return t1 + (t.remaining_ms != null ? t.remaining_ms : (t.remaining || 30) * 1000);
+}
+function render(d, t1) {
   box.textContent = "";
-  ends = [];
+  tfaItems = [];
+  emailCard = null;
+  curSig = sig(d);
   let n = 0;
   if (d.email) {
     const e = d.email;
-    const c = card(e.service || "Email code", e.email + " · " + (e.expired ? "মেয়াদ শেষ · " : "") + ago(e.age), e.code, e.expired);
+    const c = card(e.service || "Email code", emailSub(e), e.code, e.expired);
+    emailCard = c;
     box.appendChild(c.node);
     n++;
   }
   (d.tfa || []).forEach((t) => {
-    const c = card(t.name + " 2FA", t.label || "", t.code, false);
+    const c = card(t.name + " 2FA", "", t.code, false);
     c.sub.textContent = (t.label ? t.label + " · " : "");
     const left = el("span", "", "");
     c.sub.appendChild(left);
-    ends.push({ at: Date.now() + (t.remaining || 30) * 1000, node: left });
+    tfaItems.push({ id: t.id, c: c, left: left, next: t.next_code || "", per: (t.period || 30) * 1000, at: endAt(t, t1) });
     box.appendChild(c.node);
     n++;
   });
   if (!n) note("এই সাইটের জন্য কোনো কোড পাওয়া যায়নি।");
+}
+function patch(d, t1) {
+  if (d.email && emailCard) {
+    emailCard.sub.textContent = emailSub(d.email);
+    emailCard.codeEl.classList.toggle("dim", !!d.email.expired);
+  }
+  (d.tfa || []).forEach((t) => {
+    const it = tfaItems.find((x) => x.id === t.id);
+    if (!it) return;
+    it.next = t.next_code || "";
+    it.per = (t.period || 30) * 1000;
+    it.at = endAt(t, t1);
+    if (it.c.code !== t.code) { it.c.code = t.code; it.c.codeEl.textContent = fmt(t.code); }
+  });
 }
 
 function setFoot(on) {
@@ -88,7 +117,8 @@ function setFoot(on) {
   lk.addEventListener("click", async () => {
     await chrome.runtime.sendMessage({ type: "lock" });
     setFoot(false);
-    ends = [];
+    tfaItems = [];
+    emailCard = null;
     if (!host) note(NOPAGE); else showLogin("");
   });
   foot.appendChild(lk);
@@ -96,10 +126,11 @@ function setFoot(on) {
   document.body.appendChild(foot);
 }
 function afterUnlock() {
-  if (!host) { note(NOPAGE); setFoot(true); } else load();
+  if (!host) { note(NOPAGE); setFoot(true); } else load(false);
 }
 function showLogin(msg) {
-  ends = [];
+  tfaItems = [];
+  emailCard = null;
   box.textContent = "";
   const c = el("div", "card");
   c.appendChild(el("div", "ctitle", "লগইন করুন"));
@@ -133,26 +164,45 @@ function showLogin(msg) {
   setTimeout(() => { try { inp.focus(); } catch (e) {} }, 30);
 }
 
-async function load() {
-  const r = await chrome.runtime.sendMessage({ type: "get", host: host });
-  if (!r || r.status === 0) { note("ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।"); return; }
-  if (r.status === 401) { setFoot(false); showLogin(""); return; }
-  if (r.status === 429) { note("একটু পরে আবার চেষ্টা করুন।"); return; }
-  if (!r.ok) { note((r.data && r.data.error) || "কোড আনা যায়নি।"); return; }
-  setFoot(true);
-  render(r.data);
+async function load(silent) {
+  if (busy) return;
+  busy = true;
+  try {
+    const r = await chrome.runtime.sendMessage({ type: "get", host: host });
+    const t1 = Date.now();
+    if (!r || r.status === 0) { if (!silent) note("ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।"); return; }
+    if (r.status === 401) { setFoot(false); showLogin(""); return; }
+    if (r.status === 429) { if (!silent) note("একটু পরে আবার চেষ্টা করুন।"); return; }
+    if (!r.ok) { if (!silent) note((r.data && r.data.error) || "কোড আনা যায়নি।"); return; }
+    setFoot(true);
+    if (silent && sig(r.data) === curSig) patch(r.data, t1);
+    else render(r.data, t1);
+  } finally {
+    busy = false;
+  }
 }
+
 setInterval(() => {
-  if (!ends.length) return;
+  if (!tfaItems.length) return;
   const now = Date.now();
-  let reload = false;
-  ends.forEach((x) => {
-    const s = Math.max(0, Math.ceil((x.at - now) / 1000));
-    x.node.textContent = "বদলাবে " + s + " সেকেন্ডে";
-    if (s <= 0) reload = true;
+  let sync = false;
+  tfaItems.forEach((it) => {
+    if (now >= it.at) {
+      if (it.next) {
+        it.c.code = it.next;
+        it.c.codeEl.textContent = fmt(it.next);
+        it.next = "";
+        it.at += it.per;
+      }
+      sync = true;
+    }
+    const s = Math.max(0, Math.ceil((it.at - now) / 1000));
+    it.left.textContent = "বদলাবে " + s + " সেকেন্ডে";
   });
-  if (reload) { ends = []; load(); }
-}, 1000);
+  if (sync && now - lastSync > 2000) { lastSync = now; load(true); }
+}, 250);
+
+setInterval(() => { if (host && foot) load(true); }, POLL_MS);
 
 (async () => {
   const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -167,5 +217,5 @@ setInterval(() => {
   }
   host = u.hostname;
   hostEl.textContent = host;
-  load();
+  load(false);
 })();
