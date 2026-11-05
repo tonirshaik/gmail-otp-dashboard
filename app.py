@@ -2816,6 +2816,22 @@ def ext_code():
                                     "period": p.get("period", 30)})
         except Exception as e:
             print(f"[EXT] svc: {type(e).__name__}")
+    if _totp_ready() and _ext_match(host, "google.com", "Google"):
+        try:
+            for d in totp_collection.find({}, {"_id": 0}):
+                em = str(d.get("email", "")).lower()
+                try:
+                    plain = json.loads(_totp_fernet.decrypt(d["secret_enc"].encode()).decode())
+                    if plain.get("e") != em:
+                        continue
+                    w = totp_window(plain["s"], d["digits"], d["period"], d["algo"], now)
+                except Exception:
+                    continue
+                tfa.append({"id": "gm:" + em, "name": "Google", "label": em, "code": w["code"],
+                            "remaining": w["remaining"], "remaining_ms": w["remaining_ms"],
+                            "next_code": w["next_code"], "period": d["period"]})
+        except Exception as e:
+            print(f"[EXT] gmail-2fa: {type(e).__name__}")
     return _no_store(jsonify({"email": email_out, "tfa": tfa}))
 
 @app.route('/api/ext/download')
