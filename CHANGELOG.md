@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.25.2 - 2026-11-05 (patch)
+- fix: extension shows only the Google account being signed in
+
 ## v1.25.1 - 2026-11-05 (patch)
 - fix: extension shows Gmail Authenticator codes on Google pages
 
