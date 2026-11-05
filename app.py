@@ -38,7 +38,7 @@ from webauthn.helpers.structs import (
     AuthenticatorAttachment, ResidentKeyRequirement, UserVerificationRequirement,
 )
 
-app = Flask(__name__)
+app = Flask(__name__)  # gitbash-test
 
 # ---------- App version (home page-er title-er pashe + "New version available" banner-e dekhay) ----------
 # Niyom (MAJOR.MINOR.PATCH) -- auto: main-e merge holei GitHub Action VERSION file bere dey, hate bodlano lage na.
