@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.24.0 - 2026-11-05 (minor)
+- feat: extension manual refresh button, remove Gmail auto-polling
+
 ## v1.23.0 - 2026-11-05 (minor)
 - feat: extension instant 2FA rollover + auto-refresh email code
 
