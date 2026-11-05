@@ -58,6 +58,21 @@
     return true;
   }
 
+  function pageEmail() {
+    if (!/(^|\.)google\.com$/.test(location.hostname)) return "";
+    var found = {}, i;
+    var els = document.querySelectorAll("[data-email],[data-identifier]");
+    for (i = 0; i < els.length; i++) {
+      var v = (els[i].getAttribute("data-email") || els[i].getAttribute("data-identifier") || "").toLowerCase();
+      if (/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)) found[v] = 1;
+    }
+    if (!Object.keys(found).length) {
+      var m = (document.body.innerText || "").match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g) || [];
+      for (i = 0; i < m.length; i++) found[m[i].toLowerCase()] = 1;
+    }
+    var k = Object.keys(found);
+    return k.length === 1 ? k[0] : "";
+  }
   function stop(finish) {
     if (timer) { clearInterval(timer); timer = null; }
     if (finish) {
@@ -68,7 +83,7 @@
   function ask() {
     return new Promise(function (res) {
       try {
-        chrome.runtime.sendMessage({ type: "get" }, function (r) {
+        chrome.runtime.sendMessage({ type: "get", hint: pageEmail() }, function (r) {
           void chrome.runtime.lastError;
           res(r);
         });
@@ -107,6 +122,7 @@
   }
 
   chrome.runtime.onMessage.addListener(function (m, s, send) {
+    if (m && m.type === "email") { send({ email: pageEmail() }); return; }
     if (m && m.type === "fill" && typeof m.code === "string" && CODE_OK.test(m.code)) {
       var t = findTargets();
       send({ ok: !!(t && fill(t, m.code, true)) });

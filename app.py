@@ -2778,6 +2778,9 @@ def ext_code():
     _b = _json_body()
     host = str(_b.get("host", "")).strip().lower()[:253]
     _mode = str(_b.get("mode", "full"))
+    hint = str(_b.get("hint", "")).strip().lower()[:254]
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", hint):
+        hint = ""
     if _mode == "refresh" and not _rate_ok("ext-refresh", 10, 60):
         return jsonify({"error": "Too many requests. Wait a moment."}), 429
     if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", host):
@@ -2790,7 +2793,7 @@ def ext_code():
     now = time.time()
     best = None
     for it in items:
-        if it.get("kind") != "code" or it.get("auth_fail"):
+        if it.get("kind") != "code" or it.get("auth_fail") or (hint and str(it.get("email", "")).lower() != hint):
             continue
         if not _ext_match(host, it.get("domain", ""), it.get("service")):
             continue
@@ -2820,6 +2823,8 @@ def ext_code():
         try:
             for d in totp_collection.find({}, {"_id": 0}):
                 em = str(d.get("email", "")).lower()
+                if hint and em != hint:
+                    continue
                 try:
                     plain = json.loads(_totp_fernet.decrypt(d["secret_enc"].encode()).decode())
                     if plain.get("e") != em:

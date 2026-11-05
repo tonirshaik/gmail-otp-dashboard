@@ -1,7 +1,7 @@
 const DASH = "@@ORIGIN@@";
 const box = document.getElementById("box");
 const hostEl = document.getElementById("host");
-let tab = null, host = "", foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
+let tab = null, host = "", pageHint = "", foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
 const NOPAGE = "এই পাতায় কাজ করে না। কোনো https সাইটে খুলুন।";
 
 function el(tag, cls, text) {
@@ -183,7 +183,7 @@ async function load(mode, btn) {
     btn.textContent = "চেক হচ্ছে…";
   }
   try {
-    const r = await chrome.runtime.sendMessage({ type: "get", host: host, mode: mode });
+    const r = await chrome.runtime.sendMessage({ type: "get", host: host, mode: mode, hint: pageHint });
     const t1 = Date.now();
     if (!r || r.status === 0) { if (mode === "full") note("ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।"); else msg = "সার্ভার পাইনি"; return; }
     if (r.status === 401) { setFoot(false); showLogin(""); return; }
@@ -237,5 +237,6 @@ setInterval(() => {
   }
   host = u.hostname;
   hostEl.textContent = host;
+  try { const er = await chrome.tabs.sendMessage(tab.id, { type: "email" }); pageHint = (er && er.email) || ""; } catch (e) {}
   load("full");
 })();
