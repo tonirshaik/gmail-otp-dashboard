@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.25.1 - 2026-11-05 (patch)
+- fix: extension shows Gmail Authenticator codes on Google pages
+
 ## v1.25.0 - 2026-11-05 (minor)
 - feat: SMS OTP page via webhook
 
