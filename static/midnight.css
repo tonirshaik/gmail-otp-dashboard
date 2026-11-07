@@ -1403,3 +1403,7 @@ body:has(#dashboardSection.hidden) {
 /* gmail-backup-codes */
 .grp-row{display:flex;flex-wrap:wrap;gap:6px}
 .grp-row .svc-bk{padding:4px 11px}
+
+/* login-btn-reveal */
+#loginForm button[type=submit] { display: none !important; }
+#loginForm.has-pw button[type=submit] { display: flex !important; }

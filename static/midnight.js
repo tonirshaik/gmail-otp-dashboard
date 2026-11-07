@@ -378,3 +378,13 @@
 
     sync();
 })();
+
+/* login-btn-reveal */
+(function () {
+    var f = document.getElementById('loginForm'), p = document.getElementById('masterPasswordInput');
+    if (!f || !p) return;
+    function s() { f.classList.toggle('has-pw', p.value.length > 0); }
+    ['input', 'change', 'keyup'].forEach(function (e) { p.addEventListener(e, s); });
+    setInterval(s, 400);
+    s();
+})();
