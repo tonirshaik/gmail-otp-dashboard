@@ -1466,6 +1466,23 @@ _tg = {}
 def telegram_ready():
     return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
 
+TELEGRAM_DELETE_AFTER = 120   # সেকেন্ড: পাঠানোর ২ মিনিট পর মেসেজ মুছে যাবে
+
+def _telegram_schedule_delete(message_id):
+    def _run():
+        try:
+            import urllib.request
+            url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/deleteMessage"
+            body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "message_id": message_id}).encode("utf-8")
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=10).close()
+            print("[TELEGRAM] message deleted")
+        except Exception as e:
+            print("[TELEGRAM] delete failed: " + type(e).__name__)
+    t = threading.Timer(TELEGRAM_DELETE_AFTER, _run)
+    t.daemon = True
+    t.start()
+
 def _telegram_worker(item):
     try:
         import urllib.request
@@ -1481,15 +1498,28 @@ def _telegram_worker(item):
                            "disable_web_page_preview": True}).encode("utf-8")
         t0 = time.time()
         url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage"
+        mid = None
         try:
             import requests
             if "s" not in _tg:
                 _tg["s"] = requests.Session()
-            _tg["s"].post(url, data=body, headers={"Content-Type": "application/json"}, timeout=10).close()
+            r = _tg["s"].post(url, data=body, headers={"Content-Type": "application/json"}, timeout=10)
+            try:
+                mid = (r.json().get("result") or {}).get("message_id")
+            except Exception:
+                mid = None
+            r.close()
         except ImportError:
             req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
-            urllib.request.urlopen(req, timeout=10).close()
+            resp = urllib.request.urlopen(req, timeout=10)
+            try:
+                mid = (json.loads(resp.read().decode("utf-8")).get("result") or {}).get("message_id")
+            except Exception:
+                mid = None
+            resp.close()
         print("[TELEGRAM] sent in %d ms" % int((time.time() - t0) * 1000))
+        if mid:
+            _telegram_schedule_delete(mid)
     except Exception as e:
         print("[TELEGRAM] send failed: " + type(e).__name__)
 
