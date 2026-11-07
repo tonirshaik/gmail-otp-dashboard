@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.27.0 - 2026-11-07 (minor)
+- feat: 2FA service backup codes (encrypted)
+
 ## v1.26.0 - 2026-11-07 (minor)
 - feat: gmail account groups (tag, filter)
 
