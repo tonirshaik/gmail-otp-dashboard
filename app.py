@@ -1952,13 +1952,60 @@ def ping():
         return jsonify({"error": "Unauthorized Access"}), 401
     return jsonify({"ok": True})
 
+# device_hint_v1: login alert-e asol IP + phone-er model dekhanor jonno (shudhu alert-er text, login lock-e hat dei na)
+@app.after_request
+def client_hints_header(resp):
+    resp.headers["Accept-CH"] = "Sec-CH-UA-Model, Sec-CH-UA-Platform, Sec-CH-UA-Platform-Version"
+    return resp
+
+def _client_ip_for_alert():
+    import ipaddress
+    h = request.headers
+    for name in ("CF-Connecting-IP", "True-Client-IP"):
+        v = (h.get(name) or "").strip()
+        if v:
+            try:
+                ipaddress.ip_address(v)
+                return v
+            except ValueError:
+                pass
+    for part in (h.get("X-Forwarded-For") or "").split(","):
+        p = part.strip()
+        try:
+            a = ipaddress.ip_address(p)
+        except ValueError:
+            continue
+        if not (a.is_private or a.is_loopback or a.is_link_local):
+            return p
+    return str(request.remote_addr or "unknown")
+
+def _device_for_alert():
+    h = request.headers
+    ua = str(h.get("User-Agent", "unknown"))
+    model = (h.get("Sec-CH-UA-Model") or "").strip().strip('"')
+    plat = (h.get("Sec-CH-UA-Platform") or "").strip().strip('"')
+    pver = (h.get("Sec-CH-UA-Platform-Version") or "").strip().strip('"')
+    browser = ""
+    for key, name in (("Edg/", "Edge"), ("OPR/", "Opera"), ("Firefox/", "Firefox"), ("Chrome/", "Chrome"), ("Safari/", "Safari")):
+        if key in ua:
+            browser = name
+            break
+    if model:
+        parts = [model]
+        if plat:
+            parts.append((plat + " " + pver).strip())
+        if browser:
+            parts.append(browser)
+        return " \u00b7 ".join(parts)
+    return ua[:90] + " (model hidden)"
+
 def _login_alert(kind):
     """login_alert_v1: login / vul password / lock hole Telegram-e sathe sathe jani dey."""
     if not telegram_ready():
         return
     try:
-        ip = html_lib.escape(str(request.remote_addr or "unknown")[:60])
-        ua = html_lib.escape(str(request.headers.get("User-Agent", "unknown"))[:90])
+        ip = html_lib.escape(_client_ip_for_alert()[:60])
+        ua = html_lib.escape(_device_for_alert()[:120])
         when = datetime.now(ZoneInfo("Asia/Dhaka")).strftime("%d %b %Y, %I:%M %p")
     except Exception:
         return
