@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.28.0 - 2026-11-07 (minor)
+- feat: backup codes for Gmail 2FA cards
+
 ## v1.27.0 - 2026-11-07 (minor)
 - feat: 2FA service backup codes (encrypted)
 
