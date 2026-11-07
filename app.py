@@ -1608,6 +1608,108 @@ def notify_push(item):
     if telegram_ready():
         threading.Thread(target=_telegram_worker, args=(dict(item),), daemon=True).start()
 
+# tg_cmd_v1: Telegram bot-e "/code email" likhle sorboshesh code pathay. Shudhu TELEGRAM_CHAT_ID-er chat-er kotha shone.
+def _tg_call(method, payload):
+    import urllib.request
+    url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/" + method
+    body = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=10) as r:
+        return json.loads(r.read().decode("utf-8"))
+
+def _tg_secret():
+    return hashlib.sha256(("tg-hook|" + SECRET_KEY).encode("utf-8")).hexdigest()[:48]
+
+def _tg_reply(text):
+    try:
+        res = _tg_call("sendMessage", {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML",
+                                       "disable_web_page_preview": True})
+        mid = (res.get("result") or {}).get("message_id")
+        fn = globals().get("_telegram_schedule_delete")
+        if mid and fn:
+            fn(mid)
+    except Exception as e:
+        print("[TG-CMD] reply failed: " + type(e).__name__)
+
+def _tg_handle_code(arg):
+    try:
+        accs = load_accounts()
+        arg = str(arg or "").strip().lower()
+        acc = None
+        if arg:
+            exact = [a for a in accs if str(a.get("email", "")).lower() == arg]
+            part = [a for a in accs if arg in str(a.get("email", "")).lower()]
+            if exact:
+                acc = exact[0]
+            elif len(part) == 1:
+                acc = part[0]
+        elif len(accs) == 1:
+            acc = accs[0]
+        if acc is None:
+            lst = "\n".join(html_lib.escape(str(a.get("email", ""))) for a in accs[:30])
+            _tg_reply("Usage: /code email\n\n" + lst)
+            return
+        out = []
+        check_gmail(acc, out)
+        it = out[0] if out else None
+        em = html_lib.escape(str(acc.get("email", "")))
+        if not it:
+            _tg_reply("Could not check " + em)
+            return
+        code = it.get("code")
+        if code == "Error":
+            _tg_reply("Could not check %s: %s" % (em, html_lib.escape(str(it.get("sender", "")))))
+            return
+        if not code or code in ("No emails found", "Code not found"):
+            _tg_reply("No recent code found for " + em)
+            return
+        service = html_lib.escape(str(it.get("service") or it.get("sender") or "Code"))
+        if it.get("auth_fail"):
+            _tg_reply("\u26a0 <b>%s</b>\nSuspicious email for %s - don't use this code" % (service, em))
+            return
+        if it.get("kind") == "link":
+            _tg_reply("\U0001f517 <b>%s</b>\nVerify link for %s (open the dashboard)" % (service, em))
+            return
+        age = int(it.get("age_seconds") or 0)
+        ttl = int(it.get("ttl_seconds") or OTP_TTL_SECONDS)
+        ago = "%dm %ds ago" % (age // 60, age % 60)
+        note = " (expired)" if age >= ttl else ""
+        _tg_reply("\U0001f510 <b>%s</b>\n<code>%s</code>\n%s\n%s%s" % (service, html_lib.escape(str(code)), em, ago, note))
+    except Exception as e:
+        print("[TG-CMD] error: " + type(e).__name__)
+
+@app.route('/api/telegram/webhook', methods=['POST'])
+def telegram_webhook():
+    if not telegram_ready():
+        return jsonify({"ok": True})
+    given = request.headers.get("X-Telegram-Bot-Api-Secret-Token", "")
+    if not hmac.compare_digest(given.encode("utf-8"), _tg_secret().encode("utf-8")):
+        return jsonify({"error": "Unauthorized"}), 401
+    upd = _json_body()
+    msg = upd.get("message") or {}
+    chat = msg.get("chat") or {}
+    if str(chat.get("id")) != TELEGRAM_CHAT_ID:
+        return jsonify({"ok": True})
+    if not _rate_ok("tg-cmd", 20, 60):
+        return jsonify({"ok": True})
+    text = str(msg.get("text") or "").strip()
+    m = re.match(r"^/(code|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
+    if m:
+        threading.Thread(target=_tg_handle_code, args=((m.group(2) or "") if m.group(1) == "code" else "",), daemon=True).start()
+    return jsonify({"ok": True})
+
+def _tg_register_webhook():
+    if not telegram_ready() or not ORIGIN.startswith("https://"):
+        return
+    def _run():
+        try:
+            res = _tg_call("setWebhook", {"url": ORIGIN.rstrip("/") + "/api/telegram/webhook",
+                                          "secret_token": _tg_secret(), "allowed_updates": ["message"]})
+            print("[TG-CMD] webhook set: %s" % res.get("ok"))
+        except Exception as e:
+            print("[TG-CMD] webhook failed: " + type(e).__name__)
+    threading.Thread(target=_run, daemon=True).start()
+
 @app.route('/api/push/config')
 def push_config():
     if not session.get('logged_in'):
@@ -4042,6 +4144,7 @@ def passkey_auth_verify():
 
 ensure_accounts_unique_index()
 migrate_account_passwords()
+_tg_register_webhook()
 
 if ENABLE_PUSH:
     start_push()
