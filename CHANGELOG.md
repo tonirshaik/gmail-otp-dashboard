@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.31.0 - 2026-11-07 (minor)
+- feat: show Login button only when password is typed
+
 ## v1.30.1 - 2026-11-07 (patch)
 - fix: watch Spam folder with IDLE so spam codes arrive instantly
 
