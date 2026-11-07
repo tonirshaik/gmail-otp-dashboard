@@ -1461,6 +1461,7 @@ def _push_worker(item):
 # ---------- Telegram bot notification (Render Environment: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) ----------
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+_tg = {}
 
 def telegram_ready():
     return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
@@ -1478,9 +1479,17 @@ def _telegram_worker(item):
             text = "\U0001f510 <b>%s</b>\n<code>%s</code>\n%s" % (service, html_lib.escape(str(item.get("code"))), email_addr)
         body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML",
                            "disable_web_page_preview": True}).encode("utf-8")
-        req = urllib.request.Request("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage",
-                                     data=body, headers={"Content-Type": "application/json"})
-        urllib.request.urlopen(req, timeout=10).close()
+        t0 = time.time()
+        url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage"
+        try:
+            import requests
+            if "s" not in _tg:
+                _tg["s"] = requests.Session()
+            _tg["s"].post(url, data=body, headers={"Content-Type": "application/json"}, timeout=10).close()
+        except ImportError:
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=10).close()
+        print("[TELEGRAM] sent in %d ms" % int((time.time() - t0) * 1000))
     except Exception as e:
         print("[TELEGRAM] send failed: " + type(e).__name__)
 
