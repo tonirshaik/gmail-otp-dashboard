@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.32.1 - 2026-11-07 (patch)
+- fix: show real IP and phone model in login alert
+
 ## v1.32.0 - 2026-11-07 (minor)
 - feat: Telegram alert on login, wrong password and lockout
 
