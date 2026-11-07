@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.33.0 - 2026-11-07 (minor)
+- feat: Telegram /code command to get latest code
+
 ## v1.32.2 - 2026-11-07 (patch)
 - fix: count login lock per real client IP
 
