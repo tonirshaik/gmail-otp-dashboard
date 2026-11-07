@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.35.0 - 2026-11-07 (minor)
+- feat: weekly encrypted auto backup sent to Telegram
+
 ## v1.34.0 - 2026-11-07 (minor)
 - feat: Telegram alert when a Gmail App Password stops working
 
