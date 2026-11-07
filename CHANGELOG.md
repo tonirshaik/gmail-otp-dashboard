@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.32.2 - 2026-11-07 (patch)
+- fix: count login lock per real client IP
+
 ## v1.32.1 - 2026-11-07 (patch)
 - fix: show real IP and phone model in login alert
 
