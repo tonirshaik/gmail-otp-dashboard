@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.38.0 - 2026-11-07 (minor)
+- feat: Telegram /code shows tap buttons for each Gmail
+
 ## v1.37.0 - 2026-11-07 (minor)
 - feat: clear clipboard 30s after copying a code
 
