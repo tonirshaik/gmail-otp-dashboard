@@ -4178,9 +4178,90 @@ def passkey_auth_verify():
     return jsonify({"success": True})
 
 
+# ======================= Auto backup (প্রতি সপ্তাহে এনক্রিপ্টেড ব্যাকআপ -> Telegram) =======================
+# Render Environment-এ AUTO_BACKUP_PASSWORD (কমপক্ষে ৮ অক্ষর) দিলে চালু হয়। পাসওয়ার্ড কোডে/ডাটাবেসে থাকে না।
+# ব্যাকআপ ফাইলটা আগের Backup/Import-এর ফাইলের মতোই -- Settings থেকে Import করা যায় (ওই পাসওয়ার্ড দিয়ে)।
+AUTO_BACKUP_PASSWORD = os.environ.get("AUTO_BACKUP_PASSWORD", "")
+AUTO_BACKUP_DAYS = 7
+AUTO_BACKUP_ID = "auto_backup"
+
+def _auto_backup_ready():
+    return bool(len(AUTO_BACKUP_PASSWORD) >= 8 and Fernet is not None and accounts_collection is not None
+                and prefs_collection is not None and telegram_ready())
+
+def _tg_send_file(filename, data, caption):
+    import urllib.request
+    boundary = "----bk" + secrets.token_hex(12)
+    parts = []
+    for n, v in (("chat_id", TELEGRAM_CHAT_ID), ("caption", caption)):
+        parts.append(("--%s\r\nContent-Disposition: form-data; name=\"%s\"\r\n\r\n%s\r\n" % (boundary, n, v)).encode("utf-8"))
+    parts.append(("--%s\r\nContent-Disposition: form-data; name=\"document\"; filename=\"%s\"\r\nContent-Type: application/octet-stream\r\n\r\n" % (boundary, filename)).encode("utf-8"))
+    parts.append(data)
+    parts.append(("\r\n--%s--\r\n" % boundary).encode("utf-8"))
+    url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendDocument"
+    req = urllib.request.Request(url, data=b"".join(parts),
+                                 headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return json.loads(r.read().decode("utf-8")).get("ok") is True
+
+def _auto_backup_run():
+    docs = list(accounts_collection.find({}, {'_id': 0, 'email': 1, 'password': 1}))
+    accounts = []
+    for d in docs:
+        plain = pw_decrypt(d.get('email'), d.get('password'))
+        if d.get('email') and plain:
+            accounts.append({"email": d['email'], "password": plain})
+    if not accounts:
+        return True                                   # পাঠানোর মতো কিছু নেই
+    totp_out, svc_out, _bad = _export_2fa()
+    payload = json.dumps({"app": "gmail-otp-dashboard", "exported_at": datetime.now(timezone.utc).isoformat(),
+                          "accounts": accounts, "totp": totp_out, "services": svc_out}).encode("utf-8")
+    salt = os.urandom(16)
+    token = Fernet(_backup_key(AUTO_BACKUP_PASSWORD, salt, BACKUP_KDF_ITER)).encrypt(payload).decode()
+    blob = {"v": 1, "kdf": "pbkdf2-sha256", "iter": BACKUP_KDF_ITER,
+            "salt": base64.b64encode(salt).decode(), "data": token}
+    name = "otp-backup-%s.otpbak" % datetime.now(ZoneInfo("Asia/Dhaka")).strftime("%Y%m%d-%H%M")
+    caption = "Weekly encrypted backup - %d Gmail, %d 2FA" % (len(accounts), len(totp_out) + len(svc_out))
+    return _tg_send_file(name, json.dumps(blob).encode("utf-8"), caption)
+
+def _auto_backup_loop():
+    time.sleep(90)
+    try:
+        prefs_collection.update_one({"_id": AUTO_BACKUP_ID}, {"$setOnInsert": {"last": 0}}, upsert=True)
+    except Exception:
+        pass
+    while True:
+        old = None
+        try:
+            now = time.time()
+            old = prefs_collection.find_one_and_update(      # একসাথে কয়েকটা worker থাকলেও শুধু একজন ধরবে
+                {"_id": AUTO_BACKUP_ID, "last": {"$lte": now - AUTO_BACKUP_DAYS * 86400}},
+                {"$set": {"last": now}})
+            if old is not None:
+                ok = _auto_backup_run()
+                print("[AUTO-BACKUP] sent" if ok else "[AUTO-BACKUP] send failed")
+                if not ok:
+                    prefs_collection.update_one({"_id": AUTO_BACKUP_ID}, {"$set": {"last": old.get("last", 0)}})
+        except Exception as e:
+            print("[AUTO-BACKUP] error: " + type(e).__name__)
+            if old is not None:                               # ব্যর্থ হলে পরের ঘণ্টায় আবার চেষ্টা
+                try:
+                    prefs_collection.update_one({"_id": AUTO_BACKUP_ID}, {"$set": {"last": old.get("last", 0)}})
+                except Exception:
+                    pass
+        time.sleep(3600)
+
+def _start_auto_backup():
+    if not _auto_backup_ready():
+        print("[AUTO-BACKUP] বন্ধ (AUTO_BACKUP_PASSWORD / Telegram / database ঠিক নেই)")
+        return
+    threading.Thread(target=_auto_backup_loop, daemon=True).start()
+    print("[AUTO-BACKUP] চালু (প্রতি %d দিনে)" % AUTO_BACKUP_DAYS)
+
 ensure_accounts_unique_index()
 migrate_account_passwords()
 _tg_register_webhook()
+_start_auto_backup()
 
 if ENABLE_PUSH:
     start_push()
