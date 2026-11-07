@@ -1099,7 +1099,7 @@ def check_gmail(account, mail_data):
 
         if result:
             print(f"[{label}] Found OTP for {account['email']}")      # code log-e rakhi na
-            mail_data.append({"email": account['email'], **make_entry(result)})
+            mail_data.append({"email": account['email'], "folder": label, **make_entry(result)})
         else:
             mail_data.append({
                 "email": account['email'],
@@ -1378,7 +1378,7 @@ def _wait_watch_run(acc, mail, stop_event, deadline):
                 if ts <= last_seen.get(folder, 0):
                     continue
                 last_seen[folder] = ts
-                item = {"email": acc["email"], **make_entry(info)}
+                item = {"email": acc["email"], "folder": "SPAM" if "spam" in folder.lower() else "INBOX", **make_entry(info)}
                 broadcast_item(item)
                 try:
                     notify_push(item)
@@ -1586,7 +1586,8 @@ def _telegram_worker(item):
         elif item.get("kind") == "link":
             text = "\U0001f517 <b>%s</b>\nVerify link for %s (open the dashboard)" % (service, email_addr)
         else:
-            text = "\U0001f510 <b>%s</b>\n<code>%s</code>\n%s" % (service, html_lib.escape(str(item.get("code"))), email_addr)
+            tag = "\u26a0 Spam" if item.get("folder") == "SPAM" else "Inbox"
+            text = "\U0001f510 <b>%s</b> \u00b7 %s\n<code>%s</code>\n%s" % (service, tag, html_lib.escape(str(item.get("code"))), email_addr)
         body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML",
                            "disable_web_page_preview": True}).encode("utf-8")
         t0 = time.time()
@@ -1710,7 +1711,8 @@ def _tg_handle_code(arg):
         ttl = int(it.get("ttl_seconds") or OTP_TTL_SECONDS)
         ago = "%dm %ds ago" % (age // 60, age % 60)
         note = " (expired)" if age >= ttl else ""
-        _tg_reply("\U0001f510 <b>%s</b>\n<code>%s</code>\n%s\n%s%s" % (service, html_lib.escape(str(code)), em, ago, note))
+        tag = "\u26a0 Spam" if it.get("folder") == "SPAM" else "Inbox"
+        _tg_reply("\U0001f510 <b>%s</b> \u00b7 %s\n<code>%s</code>\n%s\n%s%s" % (service, tag, html_lib.escape(str(code)), em, ago, note))
     except Exception as e:
         print("[TG-CMD] error: " + type(e).__name__)
 
