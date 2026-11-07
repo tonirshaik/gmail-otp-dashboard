@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.30.0 - 2026-11-07 (minor)
+- feat: auto-delete Telegram code messages after 2 minutes
+
 ## v1.29.2 - 2026-11-07 (patch)
 - chore: add Telegram debug logs
 
