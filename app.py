@@ -226,9 +226,32 @@ def clear_fails(bucket):
     with _fail_lock:
         _fail_state.pop(bucket, None)
 
+def _client_ip_for_lock():
+    """lock_ip_v1: lock-er jonno asol IP. Cloudflare-er dewa header age; na thakle X-Forwarded-For-er DAN dik theke
+    prothom public IP (bam dik nokol kora jay, tai nei). Kichui na pele remote_addr."""
+    import ipaddress
+    h = request.headers
+    for name in ("CF-Connecting-IP", "True-Client-IP"):
+        v = (h.get(name) or "").strip()
+        if v:
+            try:
+                ipaddress.ip_address(v)
+                return v
+            except ValueError:
+                pass
+    parts = [p.strip() for p in (h.get("X-Forwarded-For") or "").split(",") if p.strip()]
+    for p in reversed(parts):
+        try:
+            a = ipaddress.ip_address(p)
+        except ValueError:
+            continue
+        if not (a.is_private or a.is_loopback or a.is_link_local):
+            return p
+    return str(request.remote_addr or "unknown")
+
 def _login_bucket():
-    """Ei client-er IP-r login lock bucket (ProxyFix-er pore asol IP)."""
-    return "login:" + str(request.remote_addr or "unknown")[:60]
+    """Ei client-er IP-r login lock bucket (asol IP onujayi, Render-er bhetorer IP na)."""
+    return "login:" + _client_ip_for_lock()[:60]
 
 def locked_response(secs):
     mins = max(1, math.ceil(secs / 60))
