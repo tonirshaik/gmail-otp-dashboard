@@ -1458,9 +1458,35 @@ def _push_worker(item):
             "url": "/?action=find", "ts": int(time.time() * 1000),
         })
 
+# ---------- Telegram bot notification (Render Environment: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID) ----------
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+
+def telegram_ready():
+    return bool(TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID)
+
+def _telegram_worker(item):
+    try:
+        import urllib.request
+        email_addr = html_lib.escape(str(item.get("email", "")))
+        service = html_lib.escape(str(item.get("service") or item.get("sender") or "New code"))
+        if item.get("auth_fail"):
+            text = "\u26a0 <b>%s</b>\nSuspicious email for %s - don't use this code" % (service, email_addr)
+        elif item.get("kind") == "link":
+            text = "\U0001f517 <b>%s</b>\nVerify link for %s (open the dashboard)" % (service, email_addr)
+        else:
+            text = "\U0001f510 <b>%s</b>\n<code>%s</code>\n%s" % (service, html_lib.escape(str(item.get("code"))), email_addr)
+        body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML",
+                           "disable_web_page_preview": True}).encode("utf-8")
+        req = urllib.request.Request("https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage",
+                                     data=body, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=10).close()
+    except Exception as e:
+        print("[TELEGRAM] send failed: " + type(e).__name__)
+
 def notify_push(item):
     """Notun, fresh code/link hole shob subscribed device-e notification pathay (background thread-e)."""
-    if not push_ready():
+    if not (push_ready() or telegram_ready()):
         return
     code = item.get("code")
     if not code or code in ("No emails found", "Error", "Code not found"):
@@ -1478,7 +1504,10 @@ def notify_push(item):
         if key in _notified:
             return
         _notified[key] = now
-    threading.Thread(target=_push_worker, args=(dict(item),), daemon=True).start()
+    if push_ready():
+        threading.Thread(target=_push_worker, args=(dict(item),), daemon=True).start()
+    if telegram_ready():
+        threading.Thread(target=_telegram_worker, args=(dict(item),), daemon=True).start()
 
 @app.route('/api/push/config')
 def push_config():
