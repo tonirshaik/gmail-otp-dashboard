@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.29.0 - 2026-11-07 (minor)
+- feat: Telegram bot notification for new codes
+
 ## v1.28.0 - 2026-11-07 (minor)
 - feat: backup codes for Gmail 2FA cards
 
