@@ -388,3 +388,34 @@
     setInterval(s, 400);
     s();
 })();
+
+/* clip-autoclear: কপির ৩০ সেকেন্ড পর ক্লিপবোর্ড খালি হয় (ট্যাব খোলা থাকলে) */
+(function () {
+    var CLEAR_MS = 30000, timer = null;
+    function schedule() {
+        clearTimeout(timer);
+        timer = setTimeout(function () {
+            try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                    navigator.clipboard.writeText("").catch(function () {});
+                }
+            } catch (e) {}
+        }, CLEAR_MS);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText && !navigator.clipboard.writeText.__ac) {
+        var orig = navigator.clipboard.writeText.bind(navigator.clipboard);
+        var wrapped = function (t) {
+            var p = orig(t);
+            if (String(t) !== "") p.then(schedule, function () {});
+            return p;
+        };
+        wrapped.__ac = true;
+        try { navigator.clipboard.writeText = wrapped; } catch (e) {}
+    }
+    if (typeof window.fallbackCopy === "function" && !window.fallbackCopy.__ac) {
+        var of = window.fallbackCopy;
+        var wf = function () { var ok = of.apply(this, arguments); if (ok) schedule(); return ok; };
+        wf.__ac = true;
+        window.fallbackCopy = wf;
+    }
+})();
