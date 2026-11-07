@@ -1399,3 +1399,7 @@ body:has(#dashboardSection.hidden) {
 .sbk-undo{flex:none;padding:6px 8px;border:0;border-radius:8px;background:var(--m-surface2);color:var(--text-main);font:600 11px 'Plus Jakarta Sans',sans-serif;cursor:pointer}
 .sbk-box .tfa-input{margin-bottom:8px}
 .sbk-ta{min-height:140px;resize:vertical;font-family:var(--mono)}
+
+/* gmail-backup-codes */
+.grp-row{display:flex;flex-wrap:wrap;gap:6px}
+.grp-row .svc-bk{padding:4px 11px}

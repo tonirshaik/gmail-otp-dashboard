@@ -2429,11 +2429,13 @@ def totp_status():
     if not _totp_ready():
         return _no_store(jsonify({"enabled": False, "emails": []}))
     try:
-        emails = [d["email"] for d in totp_collection.find({}, {"_id": 0, "email": 1})]
+        docs = list(totp_collection.find({}, {"_id": 0, "email": 1, "bk_n": 1, "bk_left": 1}))
+        emails = [d["email"] for d in docs]
+        bk = {d["email"]: [int(d.get("bk_n") or 0), int(d.get("bk_left") or 0)] for d in docs if d.get("bk_n")}
     except Exception as e:
         print(f"[TOTP] status: {type(e).__name__}")
         return jsonify({"error": "Could not load 2FA list"}), 500
-    return _no_store(jsonify({"enabled": True, "emails": emails}))
+    return _no_store(jsonify({"enabled": True, "emails": emails, "bk": bk}))
 
 @app.route('/api/totp/add', methods=['POST'])
 def totp_add():
@@ -2692,10 +2694,25 @@ def svc_delete():
         return jsonify({"error": "Service not found"}), 404
     return jsonify({"message": "Service removed"})
 
-# ======================= 2FA Services: backup (recovery) codes =======================
-# Facebook / GitHub-er recovery code gulo encrypted obosthay thake (TOTP_ENC_KEY diye). Dekhte hole settings password lage.
+# ======================= 2FA backup (recovery) codes: 2FA Services + Gmail 2FA =======================
+# Recovery code gulo encrypted obosthay thake (TOTP_ENC_KEY diye). Dekhte hole settings password lage.
+# id "gm:email" = Gmail-er 2FA, nahole 2FA Service-er id.
 BK_MAX_CODES = 20
 BK_OPEN_SECONDS = 150
+
+def _bk_target(raw):
+    """(collection, query, bound-key-name, bound-value, normal-id) ferot dey. Na pele None."""
+    sid = str(raw or "").strip()
+    if _totp_fernet is None:
+        return None
+    if sid.startswith("gm:"):
+        em = sid[3:].strip().lower()
+        if em and totp_collection is not None:
+            return totp_collection, {"email": em}, "e", em, "gm:" + em
+        return None
+    if sid and svc_collection is not None:
+        return svc_collection, {"sid": sid}, "i", sid, sid
+    return None
 
 def _bk_parse(text):
     codes = []
@@ -2712,23 +2729,23 @@ def _bk_parse(text):
         raise ValueError("Too many codes (max 20)")
     return codes
 
-def _bk_read(doc):
+def _bk_read(doc, kn, kv):
     blob = doc.get("bk_enc")
     if not blob:
         return []
     plain = json.loads(_totp_fernet.decrypt(blob.encode()).decode())
-    if plain.get("i") != doc.get("sid"):
+    if plain.get(kn) != kv:
         raise ValueError("mismatch")
     return [{"v": str(c.get("v", "")), "u": bool(c.get("u"))} for c in plain.get("c", []) if isinstance(c, dict)]
 
-def _bk_blob(sid, items):
-    return _totp_fernet.encrypt(json.dumps({"i": sid, "c": items}).encode()).decode()
+def _bk_blob(kn, kv, items):
+    return _totp_fernet.encrypt(json.dumps({kn: kv, "c": items}).encode()).decode()
 
 @app.route('/api/svc/bk/get', methods=['POST'])
 def svc_bk_get():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    if not _svc_ready():
+    if _totp_fernet is None:
         return _totp_off()
     if not _rate_ok("svc-bk-get", 30, 60):
         return jsonify({"error": "Too many tries. Wait a minute."}), 429
@@ -2736,49 +2753,55 @@ def svc_bk_get():
     bad = _settings_pw_check(data)
     if bad is not None:
         return bad
-    sid = str(data.get('id', '')).strip()
+    t = _bk_target(data.get('id'))
+    if t is None:
+        return jsonify({"error": "Not found"}), 404
+    coll, query, kn, kv, nid = t
     try:
-        doc = svc_collection.find_one({"sid": sid}, {"_id": 0})
+        doc = coll.find_one(query, {"_id": 0})
     except Exception as e:
-        print(f"[SVC-BK] get: {type(e).__name__}")
+        print(f"[BK] get: {type(e).__name__}")
         return jsonify({"error": "Could not load. Try again."}), 500
     if not doc:
-        return jsonify({"error": "Service not found"}), 404
+        return jsonify({"error": "Not found"}), 404
     try:
-        items = _bk_read(doc)
+        items = _bk_read(doc, kn, kv)
     except Exception:
         return jsonify({"error": "Could not read the saved codes (is TOTP_ENC_KEY the same as before?)"}), 500
     session['bk_ok_at'] = time.time()
-    session['bk_ok_sid'] = sid
+    session['bk_ok_sid'] = nid
     return _no_store(jsonify({"codes": items}))
 
 @app.route('/api/svc/bk/use', methods=['POST'])
 def svc_bk_use():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    if not _svc_ready():
+    if _totp_fernet is None:
         return _totp_off()
     data = _json_body()
-    sid = str(data.get('id', '')).strip()
-    if session.get('bk_ok_sid') != sid or time.time() - float(session.get('bk_ok_at') or 0) > BK_OPEN_SECONDS:
+    t = _bk_target(data.get('id'))
+    if t is None:
+        return jsonify({"error": "Not found"}), 404
+    coll, query, kn, kv, nid = t
+    if session.get('bk_ok_sid') != nid or time.time() - float(session.get('bk_ok_at') or 0) > BK_OPEN_SECONDS:
         return jsonify({"error": "Locked. Open the codes again with the password.", "need_password": True}), 403
     try:
         idx = int(data.get('index'))
     except (TypeError, ValueError):
         return jsonify({"error": "Bad request"}), 400
     try:
-        doc = svc_collection.find_one({"sid": sid}, {"_id": 0})
+        doc = coll.find_one(query, {"_id": 0})
         if not doc:
-            return jsonify({"error": "Service not found"}), 404
-        items = _bk_read(doc)
+            return jsonify({"error": "Not found"}), 404
+        items = _bk_read(doc, kn, kv)
         if not (0 <= idx < len(items)):
             return jsonify({"error": "Bad request"}), 400
         items[idx]["u"] = bool(data.get('used'))
         left = sum(1 for c in items if not c["u"])
-        svc_collection.update_one({"sid": sid}, {"$set": {"bk_enc": _bk_blob(sid, items), "bk_left": left,
-                                                          "updated_at": datetime.now()}})
+        coll.update_one(query, {"$set": {"bk_enc": _bk_blob(kn, kv, items), "bk_left": left,
+                                         "updated_at": datetime.now()}})
     except Exception as e:
-        print(f"[SVC-BK] use: {type(e).__name__}")
+        print(f"[BK] use: {type(e).__name__}")
         return jsonify({"error": "Could not save. Try again."}), 500
     return _no_store(jsonify({"left": left}))
 
@@ -2786,7 +2809,7 @@ def svc_bk_use():
 def svc_bk_set():
     if not session.get('logged_in'):
         return jsonify({"error": "Unauthorized Access"}), 401
-    if not _svc_ready():
+    if _totp_fernet is None:
         return _totp_off()
     if not _rate_ok("svc-bk-set", 15, 60):
         return jsonify({"error": "Too many tries. Wait a minute."}), 429
@@ -2794,33 +2817,36 @@ def svc_bk_set():
     bad = _settings_pw_check(data)
     if bad is not None:
         return bad
-    sid = str(data.get('id', '')).strip()
+    t = _bk_target(data.get('id'))
+    if t is None:
+        return jsonify({"error": "Not found"}), 404
+    coll, query, kn, kv, nid = t
     try:
-        doc = svc_collection.find_one({"sid": sid}, {"_id": 0})
+        doc = coll.find_one(query, {"_id": 0})
     except Exception as e:
-        print(f"[SVC-BK] set-find: {type(e).__name__}")
+        print(f"[BK] set-find: {type(e).__name__}")
         return jsonify({"error": "Could not save. Try again."}), 500
     if not doc:
-        return jsonify({"error": "Service not found"}), 404
+        return jsonify({"error": "Not found"}), 404
     try:
         codes = _bk_parse(data.get('codes'))
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     try:
         if not codes:
-            svc_collection.update_one({"sid": sid}, {"$unset": {"bk_enc": ""},
-                                                     "$set": {"bk_n": 0, "bk_left": 0, "updated_at": datetime.now()}})
+            coll.update_one(query, {"$unset": {"bk_enc": ""},
+                                    "$set": {"bk_n": 0, "bk_left": 0, "updated_at": datetime.now()}})
             return _no_store(jsonify({"n": 0, "left": 0}))
         try:
-            used = {c["v"] for c in _bk_read(doc) if c["u"]}
+            used = {c["v"] for c in _bk_read(doc, kn, kv) if c["u"]}
         except Exception:
             used = set()
         items = [{"v": c, "u": c in used} for c in codes]
         left = sum(1 for c in items if not c["u"])
-        svc_collection.update_one({"sid": sid}, {"$set": {"bk_enc": _bk_blob(sid, items), "bk_n": len(items),
-                                                          "bk_left": left, "updated_at": datetime.now()}})
+        coll.update_one(query, {"$set": {"bk_enc": _bk_blob(kn, kv, items), "bk_n": len(items),
+                                         "bk_left": left, "updated_at": datetime.now()}})
     except Exception as e:
-        print(f"[SVC-BK] set: {type(e).__name__}")
+        print(f"[BK] set: {type(e).__name__}")
         return jsonify({"error": "Could not save. Try again."}), 500
     return _no_store(jsonify({"n": len(items), "left": left}))
 
