@@ -1370,3 +1370,15 @@ body:has(#dashboardSection.hidden) {
 .sms-card .tbar{flex:1}
 .sms-card.expiring .tbar-fill{background:var(--accent-red)}
 .sms-note{font-size:11px;color:var(--warn-text);margin:0 0 8px}
+
+/* account-groups */
+.otp-card .grp-row{order:2;margin:0 0 8px}
+.grp-btn{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:4px 11px;border:1px solid var(--m-line2);border-radius:999px;background:transparent;color:var(--text-secondary);font:600 11px 'Plus Jakarta Sans',sans-serif;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+.grp-btn:hover{border-color:var(--m-accent);color:var(--text-main)}
+.grp-btn.has{color:var(--m-accent);border-color:var(--m-accent)}
+#groupRow{margin-top:-2px}
+.grp-who{font-size:12px;color:var(--text-muted);margin:0 0 12px;word-break:break-all}
+.grp-chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 8px}
+.grp-hint{font-size:12px;color:var(--text-muted);margin:0 0 12px}
+.grp-new{display:flex;gap:8px;margin:0 0 4px}
+.grp-new .tfa-input{flex:1;min-width:0;width:auto}

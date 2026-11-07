@@ -2988,6 +2988,58 @@ def merge_pins_api():
         print(f"Pins merge error: {e}")
         return jsonify({"error": "Could not save pins"}), 500
 
+# ======================= Account groups (Facebook / Client ...) =======================
+GROUP_PREFIX = "grp:"
+GROUP_MAX_NAMES = 30
+
+@app.route('/api/groups', methods=['GET'])
+def get_groups():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if prefs_collection is None:
+        return _no_store(jsonify({"groups": {}}))
+    try:
+        res = {}
+        for d in prefs_collection.find({"_id": {"$regex": "^grp:"}}, {"group": 1}):
+            g = d.get("group")
+            if isinstance(g, str) and g:
+                res[str(d["_id"])[len(GROUP_PREFIX):]] = g
+        return _no_store(jsonify({"groups": res}))
+    except Exception as e:
+        print(f"Groups read error: {type(e).__name__}")
+        return jsonify({"error": "Could not load groups"}), 500
+
+@app.route('/api/groups/set', methods=['POST'])
+def set_group_api():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if prefs_collection is None or accounts_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    if not _rate_ok("grp-set", 60, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    data = _json_body()
+    em = _norm_email(data.get('email'))
+    g = re.sub(r"[\x00-\x1f\x7f]", "", str(data.get('group') or ""))
+    g = re.sub(r"\s+", " ", g).strip()
+    if not em or len(em) > 320:
+        return jsonify({"error": "Email required"}), 400
+    if len(g) > 20:
+        return jsonify({"error": "Group name is too long (max 20)"}), 400
+    try:
+        if not g:
+            prefs_collection.delete_one({"_id": GROUP_PREFIX + em})
+            return jsonify({"ok": True})
+        if accounts_collection.find_one({"email": em}, {"_id": 1}) is None:
+            return jsonify({"error": "Account not found"}), 404
+        names = {d.get("group") for d in prefs_collection.find({"_id": {"$regex": "^grp:"}}, {"group": 1})}
+        if g not in names and len(names) >= GROUP_MAX_NAMES:
+            return jsonify({"error": "Too many groups (max 30)"}), 400
+        prefs_collection.update_one({"_id": GROUP_PREFIX + em}, {"$set": {"group": g}}, upsert=True)
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"Groups write error: {type(e).__name__}")
+        return jsonify({"error": "Could not save group"}), 500
+
 @app.route('/api/accounts-list')
 def accounts_list():
     """Shudhu Gmail address-er list (Gmail check chhara). Check na kora account popup-e dekhate."""
@@ -3051,6 +3103,7 @@ def delete_account():
     if prefs_collection is not None:
         try:
             prefs_collection.update_one({"_id": PINS_ID}, {"$pull": {"emails": _norm_email(email_input)}})
+            prefs_collection.delete_one({"_id": GROUP_PREFIX + _norm_email(email_input)})
         except Exception as e:
             print(f"Pin cleanup error: {e}")
     return jsonify({"message": "Account removed"})
