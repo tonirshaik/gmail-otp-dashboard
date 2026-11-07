@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.30.1 - 2026-11-07 (patch)
+- fix: watch Spam folder with IDLE so spam codes arrive instantly
+
 ## v1.30.0 - 2026-11-07 (minor)
 - feat: auto-delete Telegram code messages after 2 minutes
 
