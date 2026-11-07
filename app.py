@@ -1952,6 +1952,36 @@ def ping():
         return jsonify({"error": "Unauthorized Access"}), 401
     return jsonify({"ok": True})
 
+def _login_alert(kind):
+    """login_alert_v1: login / vul password / lock hole Telegram-e sathe sathe jani dey."""
+    if not telegram_ready():
+        return
+    try:
+        ip = html_lib.escape(str(request.remote_addr or "unknown")[:60])
+        ua = html_lib.escape(str(request.headers.get("User-Agent", "unknown"))[:90])
+        when = datetime.now(ZoneInfo("Asia/Dhaka")).strftime("%d %b %Y, %I:%M %p")
+    except Exception:
+        return
+    heads = {
+        "ok": "\u2705 <b>Login successful</b>",
+        "ok_pk": "\u2705 <b>Login successful (Fingerprint / Face)</b>",
+        "fail": "\u26a0 <b>Wrong password</b>",
+        "lock": "\U0001f6a8 <b>Login locked (too many wrong attempts)</b>",
+    }
+    text = "%s\nTime: %s\nIP: %s\nDevice: %s" % (heads.get(kind, "Login"), when, ip, ua)
+
+    def _send():
+        try:
+            import urllib.request
+            url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage"
+            body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML",
+                               "disable_web_page_preview": True}).encode("utf-8")
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=10).close()
+        except Exception as e:
+            print("[LOGIN-ALERT] failed: " + type(e).__name__)
+    threading.Thread(target=_send, daemon=True).start()
+
 @app.route('/api/login', methods=['POST'])
 def login():
     if not MASTER_PASSWORD:
@@ -1966,11 +1996,14 @@ def login():
         clear_fails(bucket)                           # shudhu nijer IP-r hishab muchhi, global hishab na
         session['logged_in'] = True
         _mark_active()
+        _login_alert("ok")
         return jsonify({"success": True})
     all_locked, _ = register_fail('login-all', LOGIN_GLOBAL_MAX)
     locked, left = register_fail(bucket)
     if locked or all_locked:
+        _login_alert("lock")
         return locked_response(locked or all_locked)
+    _login_alert("fail")
     return jsonify({"error": f"Wrong password! ({left} attempt(s) left)"}), 401
 
 @app.route('/api/logout', methods=['POST'])
@@ -3928,6 +3961,8 @@ def passkey_auth_verify():
     )
     session['logged_in'] = True
     _mark_active()
+    if purpose == 'login':
+        _login_alert("ok_pk")
     if purpose == 'settings':
         session['settings_unlocked'] = True
     elif purpose == 'delete':
