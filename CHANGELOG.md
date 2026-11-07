@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.29.2 - 2026-11-07 (patch)
+- chore: add Telegram debug logs
+
 ## v1.29.1 - 2026-11-07 (patch)
 - perf: reuse Telegram connection and log send time
 
