@@ -1495,6 +1495,7 @@ def _telegram_worker(item):
 
 def notify_push(item):
     """Notun, fresh code/link hole shob subscribed device-e notification pathay (background thread-e)."""
+    print("[TELEGRAM] notify_push called: push=%s tg=%s" % (push_ready(), telegram_ready()))
     if not (push_ready() or telegram_ready()):
         return
     code = item.get("code")
@@ -1503,6 +1504,7 @@ def notify_push(item):
     age = item.get("age_seconds", 10 ** 9)
     ttl = item.get("ttl_seconds") or OTP_TTL_SECONDS
     if age > PUSH_MAX_AGE or age >= ttl:
+        print("[TELEGRAM] skipped: code too old (age=%s s)" % age)
         return
     key = f"{item.get('email')}|{item.get('timestamp')}"
     now = time.time()
@@ -1511,6 +1513,7 @@ def notify_push(item):
             if now - t > 3600:
                 _notified.pop(k, None)
         if key in _notified:
+            print("[TELEGRAM] skipped: already notified")
             return
         _notified[key] = now
     if push_ready():
