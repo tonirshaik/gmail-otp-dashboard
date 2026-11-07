@@ -1167,7 +1167,41 @@ def _idle_cycle(lines, sock, tag, max_wait):
             new_mail = True
     return new_mail
 
+def watch_spam(acc, stop_event):
+    """spam_idle_v2: Spam folder-e IDLE (inbox-er moto), notun mail ashle sathe sathe scan + push."""
+    backoff = 5
+    n = 0
+    while not stop_event.is_set():
+        mail = None
+        try:
+            mail = _imap_login(acc)
+            if not _spam_folder(mail):
+                raise RuntimeError("cannot select spam")
+            sock = mail.sock
+            lines = _Lines(sock)
+            backoff = 5
+            print(f"[PUSH] watching spam of {acc['email']}")
+            while not stop_event.is_set():
+                n += 1
+                if _idle_cycle(lines, sock, ("S%d" % n).encode(), IDLE_MAX_WAIT) and not stop_event.is_set():
+                    time.sleep(1)
+                    publish_scan(acc)
+        except Exception as e:
+            if stop_event.is_set():
+                break
+            reason = _error_reason(e)
+            print(f"[PUSH-SPAM] {acc['email']}: {reason} ({type(e).__name__})")
+            backoff = 1800 if reason.startswith("Login failed") else min(backoff * 2, 300)
+        finally:
+            try:
+                if mail is not None:
+                    mail.shutdown()
+            except Exception:
+                pass
+        stop_event.wait(backoff)
+
 def watch_account(acc, stop_event, holder):
+    threading.Thread(target=watch_spam, args=(acc, stop_event), daemon=True).start()
     backoff = 5
     n = 0
     while not stop_event.is_set():
