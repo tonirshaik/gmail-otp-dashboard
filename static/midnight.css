@@ -1382,3 +1382,20 @@ body:has(#dashboardSection.hidden) {
 .grp-hint{font-size:12px;color:var(--text-muted);margin:0 0 12px}
 .grp-new{display:flex;gap:8px;margin:0 0 4px}
 .grp-new .tfa-input{flex:1;min-width:0;width:auto}
+
+/* svc-backup-codes */
+.svc-bk-row{margin-top:8px}
+.svc-bk{display:inline-flex;align-items:center;gap:6px;max-width:100%;padding:5px 12px;border:1px solid var(--m-line2);border-radius:999px;background:transparent;color:var(--text-secondary);font:600 11px 'Plus Jakarta Sans',sans-serif;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;-webkit-tap-highlight-color:transparent}
+.svc-bk:hover{border-color:var(--m-accent);color:var(--text-main)}
+.svc-bk.has{color:var(--m-accent);border-color:var(--m-accent)}
+.sbk-overlay{z-index:700}
+.sbk-box{max-height:88vh;overflow-y:auto}
+.sbk-sub{font-size:12px;color:var(--text-muted);margin:0 0 12px}
+.sbk-list{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 4px}
+.sbk-item{display:flex;align-items:center;gap:4px;min-width:0}
+.sbk-code{flex:1;min-width:0;padding:8px 10px;border:1px solid var(--m-line2);border-radius:9px;background:transparent;color:var(--text-main);font:600 13px var(--mono);text-align:left;cursor:pointer;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sbk-code:hover{border-color:var(--m-accent)}
+.sbk-item.used .sbk-code{color:var(--text-muted);text-decoration:line-through}
+.sbk-undo{flex:none;padding:6px 8px;border:0;border-radius:8px;background:var(--m-surface2);color:var(--text-main);font:600 11px 'Plus Jakarta Sans',sans-serif;cursor:pointer}
+.sbk-box .tfa-input{margin-bottom:8px}
+.sbk-ta{min-height:140px;resize:vertical;font-family:var(--mono)}
