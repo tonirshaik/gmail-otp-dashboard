@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.26.0 - 2026-11-07 (minor)
+- feat: gmail account groups (tag, filter)
+
 ## v1.25.3 - 2026-11-05 (patch)
 - fix: faster extension unlock and show loading state
 
