@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.29.1 - 2026-11-07 (patch)
+- perf: reuse Telegram connection and log send time
+
 ## v1.29.0 - 2026-11-07 (minor)
 - feat: Telegram bot notification for new codes
 
