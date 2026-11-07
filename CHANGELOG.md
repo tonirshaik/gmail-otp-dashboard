@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.37.0 - 2026-11-07 (minor)
+- feat: clear clipboard 30s after copying a code
+
 ## v1.36.0 - 2026-11-07 (minor)
 - feat: show Inbox / Spam label in Telegram code messages
 
