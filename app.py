@@ -1657,9 +1657,9 @@ def _tg_call(method, payload):
 def _tg_secret():
     return hashlib.sha256(("tg-hook|" + SECRET_KEY).encode("utf-8")).hexdigest()[:48]
 
-def _tg_reply(text):
+def _tg_reply(text, markup=None):
     try:
-        res = _tg_call("sendMessage", {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML",
+        res = _tg_call("sendMessage", {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML", **({"reply_markup": markup} if markup else {}),
                                        "disable_web_page_preview": True})
         mid = (res.get("result") or {}).get("message_id")
         fn = globals().get("_telegram_schedule_delete")
@@ -1683,8 +1683,21 @@ def _tg_handle_code(arg):
         elif len(accs) == 1:
             acc = accs[0]
         if acc is None:
-            lst = "\n".join(html_lib.escape(str(a.get("email", ""))) for a in accs[:30])
-            _tg_reply("Usage: /code email\n\n" + lst)
+            pool = part if (arg and part) else accs
+            rows, row = [], []
+            for a in pool[:60]:
+                em_ = str(a.get("email", ""))
+                label = em_[:-10] if em_.lower().endswith("@gmail.com") else em_
+                row.append({"text": label[:30], "callback_data": "c:" + em_[:62]})
+                if len(row) == 2:
+                    rows.append(row)
+                    row = []
+            if row:
+                rows.append(row)
+            if rows:
+                _tg_reply("কোন Gmail-এর কোড চান?", {"inline_keyboard": rows})
+            else:
+                _tg_reply("No Gmail added yet.")
             return
         out = []
         check_gmail(acc, out)
@@ -1716,6 +1729,15 @@ def _tg_handle_code(arg):
     except Exception as e:
         print("[TG-CMD] error: " + type(e).__name__)
 
+def _tg_handle_callback(cb_id, data):
+    try:
+        if cb_id:
+            _tg_call("answerCallbackQuery", {"callback_query_id": cb_id})
+    except Exception:
+        pass
+    if data.startswith("c:"):
+        _tg_handle_code(data[2:])
+
 @app.route('/api/telegram/webhook', methods=['POST'])
 def telegram_webhook():
     if not telegram_ready():
@@ -1724,6 +1746,12 @@ def telegram_webhook():
     if not hmac.compare_digest(given.encode("utf-8"), _tg_secret().encode("utf-8")):
         return jsonify({"error": "Unauthorized"}), 401
     upd = _json_body()
+    cb = upd.get("callback_query")
+    if isinstance(cb, dict):
+        cchat = (cb.get("message") or {}).get("chat") or {}
+        if str(cchat.get("id")) == TELEGRAM_CHAT_ID and _rate_ok("tg-cmd", 20, 60):
+            threading.Thread(target=_tg_handle_callback, args=(cb.get("id"), str(cb.get("data") or "")), daemon=True).start()
+        return jsonify({"ok": True})
     msg = upd.get("message") or {}
     chat = msg.get("chat") or {}
     if str(chat.get("id")) != TELEGRAM_CHAT_ID:
@@ -1742,7 +1770,7 @@ def _tg_register_webhook():
     def _run():
         try:
             res = _tg_call("setWebhook", {"url": ORIGIN.rstrip("/") + "/api/telegram/webhook",
-                                          "secret_token": _tg_secret(), "allowed_updates": ["message"]})
+                                          "secret_token": _tg_secret(), "allowed_updates": ["message", "callback_query"]})
             print("[TG-CMD] webhook set: %s" % res.get("ok"))
         except Exception as e:
             print("[TG-CMD] webhook failed: " + type(e).__name__)
