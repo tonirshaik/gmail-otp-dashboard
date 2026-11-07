@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.32.0 - 2026-11-07 (minor)
+- feat: Telegram alert on login, wrong password and lockout
+
 ## v1.31.0 - 2026-11-07 (minor)
 - feat: show Login button only when password is typed
 
