@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.36.0 - 2026-11-07 (minor)
+- feat: show Inbox / Spam label in Telegram code messages
+
 ## v1.35.0 - 2026-11-07 (minor)
 - feat: weekly encrypted auto backup sent to Telegram
 
