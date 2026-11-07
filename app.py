@@ -1030,6 +1030,40 @@ def _error_reason(e):
         return "Login failed - check App Password"
     return "Connection Error"
 
+_acct_alerted = {}
+ACCT_ALERT_EVERY = 6 * 3600      # একই Gmail-এর জন্য ৬ ঘণ্টায় ১ বারের বেশি জানাবে না
+
+def _account_problem_alert(email_addr, e):
+    """App Password কাজ না করলে Telegram-এ জানায় (পাসওয়ার্ড কখনো পাঠায় না)।"""
+    try:
+        if not _error_reason(e).startswith("Login failed"):
+            return
+        if not telegram_ready():
+            return
+        key = str(email_addr or "").lower()
+        now = time.time()
+        with _fail_lock:
+            if now - _acct_alerted.get(key, 0) < ACCT_ALERT_EVERY:
+                return
+            _acct_alerted[key] = now
+        when = datetime.now(ZoneInfo("Asia/Dhaka")).strftime("%d %b %Y, %I:%M %p")
+        text = "\u26a0 <b>Gmail App Password problem</b>\n%s\nLogin failed - check the App Password.\nTime: %s" % (
+            html_lib.escape(str(email_addr)), when)
+
+        def _send():
+            try:
+                import urllib.request
+                url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage"
+                body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML",
+                                   "disable_web_page_preview": True}).encode("utf-8")
+                req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+                urllib.request.urlopen(req, timeout=10).close()
+            except Exception as ex:
+                print("[ACCT-ALERT] failed: " + type(ex).__name__)
+        threading.Thread(target=_send, daemon=True).start()
+    except Exception as ex:
+        print("[ACCT-ALERT] error: " + type(ex).__name__)
+
 def check_gmail(account, mail_data):
     try:
         mail = _imap_login(account)
@@ -1082,6 +1116,7 @@ def check_gmail(account, mail_data):
             pass
     except Exception as e:
         print(f"Error reading {account['email']}: {e}")
+        _account_problem_alert(account['email'], e)
         mail_data.append({
             "email": account['email'],
             "sender": _error_reason(e),
@@ -1249,6 +1284,7 @@ def watch_account(acc, stop_event, holder):
                 break
             reason = _error_reason(e)
             print(f"[PUSH] {acc['email']}: {reason} ({type(e).__name__})")
+            _account_problem_alert(acc['email'], e)
             # Password vul hole 30 min pore abar; nahole dhire dhire barano
             backoff = 1800 if reason.startswith("Login failed") else min(backoff * 2, 300)
         finally:
