@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.34.0 - 2026-11-07 (minor)
+- feat: Telegram alert when a Gmail App Password stops working
+
 ## v1.33.0 - 2026-11-07 (minor)
 - feat: Telegram /code command to get latest code
 
