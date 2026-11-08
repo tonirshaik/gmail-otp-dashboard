@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.41.0 - 2026-11-08 (minor)
+- feat: telegram /2fa asks Gmail 2FA or Service 2FA first
+
 ## v1.40.0 - 2026-11-08 (minor)
 - feat: live countdown for telegram 2FA code
 
