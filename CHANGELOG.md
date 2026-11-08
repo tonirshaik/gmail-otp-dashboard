@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.43.1 - 2026-11-08 (patch)
+- fix: telegram code age shows hours/days for old codes
+
 ## v1.43.0 - 2026-11-08 (minor)
 - feat: faster extension autofill, avoid near-expiry 2FA codes
 
