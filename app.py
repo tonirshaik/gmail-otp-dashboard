@@ -1668,6 +1668,17 @@ def _tg_reply(text, markup=None):
     except Exception as e:
         print("[TG-CMD] reply failed: " + type(e).__name__)
 
+# tg_ago_v1: Telegram-e code koto age eshechhe -- notun hole sekend, purono hole minute/ghonta/din
+def _tg_ago(age):
+    age = max(0, int(age))
+    if age < 60:
+        return "%ds ago" % age
+    if age < 3600:
+        return "%dm %ds ago" % (age // 60, age % 60)
+    if age < 86400:
+        return "%dh %dm ago" % (age // 3600, (age % 3600) // 60)
+    return "%dd %dh ago" % (age // 86400, (age % 86400) // 3600)
+
 def _tg_handle_code(arg):
     try:
         accs = load_accounts()
@@ -1722,7 +1733,7 @@ def _tg_handle_code(arg):
             return
         age = int(it.get("age_seconds") or 0)
         ttl = int(it.get("ttl_seconds") or OTP_TTL_SECONDS)
-        ago = "%dm %ds ago" % (age // 60, age % 60)
+        ago = _tg_ago(age)
         note = " (expired)" if age >= ttl else ""
         tag = "\u26a0 Spam" if it.get("folder") == "SPAM" else "Inbox"
         _tg_reply("\U0001f510 <b>%s</b> \u00b7 %s\n<code>%s</code>\n%s\n%s%s" % (service, tag, html_lib.escape(str(code)), em, ago, note))
