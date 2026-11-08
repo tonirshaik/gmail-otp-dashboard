@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.40.0 - 2026-11-08 (minor)
+- feat: live countdown for telegram 2FA code
+
 ## v1.39.0 - 2026-11-08 (minor)
 - feat: telegram /2fa command for 2FA codes
 
