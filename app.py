@@ -1795,7 +1795,7 @@ def _tg_2fa_live(title, label, w, period):
     except Exception:
         pass
 
-def _tg_handle_2fa(arg):
+def _tg_handle_2fa(arg, group=None):
     try:
         if not (_svc_ready() or _totp_ready()):
             _tg_reply("2FA is not set up on the server.")
@@ -1804,6 +1804,19 @@ def _tg_handle_2fa(arg):
         items = _tg_2fa_items()
         if not items:
             _tg_reply("No 2FA added yet.")
+            return
+        # tg_2fa_menu_v1: /2fa -> age duto button (Gmail 2FA / Service 2FA), tarpor shudhu oi group-er list
+        if group == "gm":
+            items = [i for i in items if i["gm"]]
+        elif group == "sv":
+            items = [i for i in items if not i["gm"]]
+        if not items:
+            _tg_reply("No 2FA added in this group yet.")
+            return
+        if not arg and group is None and any(i["gm"] for i in items) and any(not i["gm"] for i in items):
+            _tg_reply("কোন ধরনের 2FA কোড চান?", {"inline_keyboard": [[
+                {"text": "\U0001f4e7 Gmail 2FA", "callback_data": "tm:gm"},
+                {"text": "\U0001f510 Service 2FA", "callback_data": "tm:sv"}]]})
             return
         pick, pool = None, items
         if arg:
@@ -1817,16 +1830,11 @@ def _tg_handle_2fa(arg):
         elif len(items) == 1:
             pick = items[0]
         if pick is None:
-            rows, row = [], []
+            rows = []
             for i in pool[:60]:
-                text = i["name"] + ((" \u00b7 " + i["label"]) if i["label"] else "")
-                row.append({"text": text[:30], "callback_data": ("t:" + i["id"])[:62]})
-                if len(row) == 2:
-                    rows.append(row)
-                    row = []
-            if row:
-                rows.append(row)
-            _tg_reply("কোন সার্ভিসের 2FA কোড চান?", {"inline_keyboard": rows})
+                text = i["label"] if i["gm"] else i["name"] + ((" \u00b7 " + i["label"]) if i["label"] else "")
+                rows.append([{"text": text[:40], "callback_data": ("t:" + i["id"])[:62]}])
+            _tg_reply("কোনটার 2FA কোড চান?", {"inline_keyboard": rows})
             return
         w = _tg_2fa_code(pick, time.time())
         if not w:
@@ -1848,6 +1856,8 @@ def _tg_handle_callback(cb_id, data):
         _tg_handle_code(data[2:])
     elif data.startswith("t:"):
         _tg_handle_2fa(data[2:])
+    elif data.startswith("tm:"):
+        _tg_handle_2fa("", data[3:])
 
 @app.route('/api/telegram/webhook', methods=['POST'])
 def telegram_webhook():
