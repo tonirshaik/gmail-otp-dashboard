@@ -1896,6 +1896,18 @@ def _tg_register_webhook():
             res = _tg_call("setWebhook", {"url": ORIGIN.rstrip("/") + "/api/telegram/webhook",
                                           "secret_token": _tg_secret(), "allowed_updates": ["message", "callback_query"]})
             print("[TG-CMD] webhook set: %s" % res.get("ok"))
+            # tg_menu_v1: Telegram-er nichher menu (☰) button-e command-er talika
+            try:
+                cid = int(TELEGRAM_CHAT_ID)
+                cmds = [
+                    {"command": "code", "description": "\U0001f4e7 Gmail-er OTP code"},
+                    {"command": "2fa", "description": "\U0001f510 2FA code (Gmail / Service)"},
+                ]
+                _tg_call("setMyCommands", {"commands": cmds, "scope": {"type": "chat", "chat_id": cid}})
+                _tg_call("setChatMenuButton", {"chat_id": cid, "menu_button": {"type": "commands"}})
+                print("[TG-CMD] menu set")
+            except Exception as e2:
+                print("[TG-CMD] menu failed: " + type(e2).__name__)
         except Exception as e:
             print("[TG-CMD] webhook failed: " + type(e).__name__)
     threading.Thread(target=_run, daemon=True).start()
