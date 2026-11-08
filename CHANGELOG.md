@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.38.1 - 2026-11-08 (patch)
+- fix: show OS and browser name in login alert for desktop
+
 ## v1.38.0 - 2026-11-07 (minor)
 - feat: Telegram /code shows tap buttons for each Gmail
 
