@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.43.0 - 2026-11-08 (minor)
+- feat: faster extension autofill, avoid near-expiry 2FA codes
+
 ## v1.42.0 - 2026-11-08 (minor)
 - feat: telegram command menu (code, 2fa)
 
