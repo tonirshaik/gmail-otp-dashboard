@@ -1729,6 +1729,76 @@ def _tg_handle_code(arg):
     except Exception as e:
         print("[TG-CMD] error: " + type(e).__name__)
 
+# tg_2fa_v1: Telegram-e "/2fa" likhle 2FA code pathay (2FA Services + Gmail 2FA). Code 2 minute pore muche jay.
+def _tg_2fa_items():
+    items = []
+    if _svc_ready():
+        docs = list(svc_collection.find({}, {"_id": 0}))
+        docs.sort(key=lambda d: (not d.get("pinned"), str(d.get("name", "")).lower()))
+        for d in docs:
+            items.append({"id": str(d.get("sid", "")), "name": str(d.get("name", "")),
+                          "label": str(d.get("label", "")), "doc": d, "gm": False})
+    if _totp_ready():
+        for d in totp_collection.find({}, {"_id": 0}):
+            em = str(d.get("email", "")).lower()
+            if em:
+                items.append({"id": "gm:" + em, "name": "Google", "label": em, "doc": d, "gm": True})
+    return items
+
+def _tg_2fa_code(it, now):
+    d = it["doc"]
+    if it["gm"]:
+        plain = json.loads(_totp_fernet.decrypt(d["secret_enc"].encode()).decode())
+        if plain.get("e") != it["label"]:
+            return None
+        return totp_window(plain["s"], d["digits"], d["period"], d["algo"], now)
+    p = _svc_public(d, now)
+    return p if p.get("code") else None
+
+def _tg_handle_2fa(arg):
+    try:
+        if not (_svc_ready() or _totp_ready()):
+            _tg_reply("2FA is not set up on the server.")
+            return
+        arg = str(arg or "").strip().lower()
+        items = _tg_2fa_items()
+        if not items:
+            _tg_reply("No 2FA added yet.")
+            return
+        pick, pool = None, items
+        if arg:
+            exact = [i for i in items if i["id"].lower() == arg]
+            part = [i for i in items if arg in i["name"].lower() or arg in i["label"].lower()]
+            hit = exact or part
+            if len(hit) == 1:
+                pick = hit[0]
+            elif hit:
+                pool = hit
+        elif len(items) == 1:
+            pick = items[0]
+        if pick is None:
+            rows, row = [], []
+            for i in pool[:60]:
+                text = i["name"] + ((" \u00b7 " + i["label"]) if i["label"] else "")
+                row.append({"text": text[:30], "callback_data": ("t:" + i["id"])[:62]})
+                if len(row) == 2:
+                    rows.append(row)
+                    row = []
+            if row:
+                rows.append(row)
+            _tg_reply("কোন সার্ভিসের 2FA কোড চান?", {"inline_keyboard": rows})
+            return
+        w = _tg_2fa_code(pick, time.time())
+        if not w:
+            _tg_reply("Could not read the saved 2FA key.")
+            return
+        title = html_lib.escape(pick["name"])
+        label = html_lib.escape(pick["label"])
+        _tg_reply("\U0001f511 <b>%s</b>%s\n<code>%s</code>\nExpires in %ds" % (
+            title, (" \u00b7 " + label) if label else "", html_lib.escape(str(w["code"])), int(w["remaining"])))
+    except Exception as e:
+        print("[TG-2FA] error: " + type(e).__name__)
+
 def _tg_handle_callback(cb_id, data):
     try:
         if cb_id:
@@ -1737,6 +1807,8 @@ def _tg_handle_callback(cb_id, data):
         pass
     if data.startswith("c:"):
         _tg_handle_code(data[2:])
+    elif data.startswith("t:"):
+        _tg_handle_2fa(data[2:])
 
 @app.route('/api/telegram/webhook', methods=['POST'])
 def telegram_webhook():
@@ -1759,9 +1831,12 @@ def telegram_webhook():
     if not _rate_ok("tg-cmd", 20, 60):
         return jsonify({"ok": True})
     text = str(msg.get("text") or "").strip()
-    m = re.match(r"^/(code|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
+    m = re.match(r"^/(code|2fa|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
     if m:
-        threading.Thread(target=_tg_handle_code, args=((m.group(2) or "") if m.group(1) == "code" else "",), daemon=True).start()
+        if m.group(1) == "2fa":
+            threading.Thread(target=_tg_handle_2fa, args=(m.group(2) or "",), daemon=True).start()
+        else:
+            threading.Thread(target=_tg_handle_code, args=((m.group(2) or "") if m.group(1) == "code" else "",), daemon=True).start()
     return jsonify({"ok": True})
 
 def _tg_register_webhook():
