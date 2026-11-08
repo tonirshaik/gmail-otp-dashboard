@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.42.0 - 2026-11-08 (minor)
+- feat: telegram command menu (code, 2fa)
+
 ## v1.41.0 - 2026-11-08 (minor)
 - feat: telegram /2fa asks Gmail 2FA or Service 2FA first
 
