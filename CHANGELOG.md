@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.39.0 - 2026-11-08 (minor)
+- feat: telegram /2fa command for 2FA codes
+
 ## v1.38.1 - 2026-11-08 (patch)
 - fix: show OS and browser name in login alert for desktop
 
