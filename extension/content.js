@@ -94,6 +94,7 @@
     if (busy || quit) return;
     var t = findTargets();
     if (!t) return;
+    if (!isEmpty(t)) return;   // ext_fill_v2: ঘরে আগেই কিছু লেখা থাকলে সার্ভারে জিজ্ঞেস করবে না
     busy = true;
     try {
       var r = await ask();
@@ -103,7 +104,10 @@
       var d = r.data || {};
       var code = "";
       if (d.email && !d.expired && d.email.confidence === "high") code = d.email.code;
-      else if (d.tfa && d.tfa.length === 1) code = d.tfa[0].code;
+      else if (d.tfa && d.tfa.length === 1) {
+        var x = d.tfa[0];   // ext_fill_v2: মেয়াদ ৩ সেকেন্ডের কম থাকলে পরের কোড বসাবে
+        code = (x.remaining_ms != null && x.remaining_ms < 3000 && x.next_code) ? x.next_code : x.code;
+      }
       if (code && CODE_OK.test(code) && fill(t, code, false)) stop(true);
     } finally {
       busy = false;
@@ -116,9 +120,9 @@
     tick();
     timer = setInterval(function () {
       tries++;
-      if (tries > 9) { stop(true); return; }
+      if (tries > 29) { stop(true); return; }
       tick();
-    }, 10000);
+    }, 4000);
   }
 
   chrome.runtime.onMessage.addListener(function (m, s, send) {
