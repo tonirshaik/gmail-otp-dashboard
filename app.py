@@ -2188,6 +2188,25 @@ def _device_for_alert():
         if browser:
             parts.append(browser)
         return " \u00b7 ".join(parts)
+    # desk_dev_v1: desktop-e model thake na -> OS + browser-er chhoto nam
+    if plat:
+        osn = plat
+        if plat == "Windows":
+            try:
+                osn = "Windows 11" if int(pver.split(".")[0]) >= 13 else "Windows 10"
+            except (ValueError, IndexError):
+                osn = "Windows 10/11"
+        elif pver:
+            osn = (plat + " " + pver).strip()
+    else:
+        osn = ""
+        for key, name in (("Windows NT", "Windows 10/11"), ("Android", "Android"), ("iPhone", "iPhone"),
+                          ("iPad", "iPad"), ("Mac OS X", "Mac"), ("CrOS", "ChromeOS"), ("Linux", "Linux")):
+            if key in ua:
+                osn = name
+                break
+    if osn:
+        return " \u00b7 ".join([osn, browser] if browser else [osn])
     return ua[:90] + " (model hidden)"
 
 def _login_alert(kind):
