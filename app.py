@@ -1755,6 +1755,46 @@ def _tg_2fa_code(it, now):
     p = _svc_public(d, now)
     return p if p.get("code") else None
 
+# tg_2fa_live_v1: Telegram-e 2FA code-er countdown live kome (message edit kore, ~3 sekend por por)
+def _tg_2fa_live(title, label, w, period):
+    code = html_lib.escape(str(w["code"]))
+    suffix = (" \u00b7 " + label) if label else ""
+    total = float(period or 30)
+    end = time.time() + float(w.get("remaining_ms") or (int(w["remaining"]) * 1000)) / 1000.0
+
+    def txt(left):
+        n = max(0, min(10, int(round(10.0 * left / total))))
+        bar = "\u25b0" * n + "\u25b1" * (10 - n)
+        return "\U0001f511 <b>%s</b>%s\n<code>%s</code>\n%s %ds" % (title, suffix, code, bar, max(0, int(math.ceil(left))))
+
+    res = _tg_call("sendMessage", {"chat_id": TELEGRAM_CHAT_ID, "text": txt(end - time.time()),
+                                   "parse_mode": "HTML", "disable_web_page_preview": True})
+    mid = (res.get("result") or {}).get("message_id")
+    if not mid:
+        return
+    _telegram_schedule_delete(mid)
+    errs = 0
+    while errs < 3:
+        left = end - time.time()
+        if left <= 0:
+            break
+        time.sleep(min(3.0, max(0.3, left)))
+        left = end - time.time()
+        if left <= 0:
+            break
+        try:
+            _tg_call("editMessageText", {"chat_id": TELEGRAM_CHAT_ID, "message_id": mid, "text": txt(left),
+                                         "parse_mode": "HTML", "disable_web_page_preview": True})
+            errs = 0
+        except Exception:
+            errs += 1
+    try:
+        _tg_call("editMessageText", {"chat_id": TELEGRAM_CHAT_ID, "message_id": mid,
+                                     "text": "\u231b <b>%s</b>%s\nExpired - send /2fa again" % (title, suffix),
+                                     "parse_mode": "HTML", "disable_web_page_preview": True})
+    except Exception:
+        pass
+
 def _tg_handle_2fa(arg):
     try:
         if not (_svc_ready() or _totp_ready()):
@@ -1794,8 +1834,7 @@ def _tg_handle_2fa(arg):
             return
         title = html_lib.escape(pick["name"])
         label = html_lib.escape(pick["label"])
-        _tg_reply("\U0001f511 <b>%s</b>%s\n<code>%s</code>\nExpires in %ds" % (
-            title, (" \u00b7 " + label) if label else "", html_lib.escape(str(w["code"])), int(w["remaining"])))
+        _tg_2fa_live(title, label, w, pick["doc"].get("period", 30))
     except Exception as e:
         print("[TG-2FA] error: " + type(e).__name__)
 
