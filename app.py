@@ -1767,7 +1767,7 @@ def _tg_2fa_code(it, now):
     return p if p.get("code") else None
 
 # tg_2fa_live_v1: Telegram-e 2FA code-er countdown live kome (message edit kore, ~3 sekend por por)
-def _tg_2fa_live(title, label, w, period):
+def _tg_2fa_live(title, label, w, period, sid=None):
     code = html_lib.escape(str(w["code"]))
     suffix = (" \u00b7 " + label) if label else ""
     total = float(period or 30)
@@ -1801,7 +1801,7 @@ def _tg_2fa_live(title, label, w, period):
             errs += 1
     try:
         _tg_call("editMessageText", {"chat_id": TELEGRAM_CHAT_ID, "message_id": mid,
-                                     "text": "\u231b <b>%s</b>%s\nExpired - send /2fa again" % (title, suffix),
+                                     "text": "\u231b <b>%s</b>%s\nExpired - tap below for a new code" % (title, suffix), **({"reply_markup": {"inline_keyboard": [[{"text": "\U0001f504 New code", "callback_data": ("t:" + str(sid))[:62]}]]}} if sid else {}),
                                      "parse_mode": "HTML", "disable_web_page_preview": True})
     except Exception:
         pass
@@ -1853,7 +1853,7 @@ def _tg_handle_2fa(arg, group=None):
             return
         title = html_lib.escape(pick["name"])
         label = html_lib.escape(pick["label"])
-        _tg_2fa_live(title, label, w, pick["doc"].get("period", 30))
+        _tg_2fa_live(title, label, w, pick["doc"].get("period", 30), pick["id"])
     except Exception as e:
         print("[TG-2FA] error: " + type(e).__name__)
 
