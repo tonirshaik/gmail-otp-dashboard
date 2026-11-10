@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.44.0 - 2026-11-10 (minor)
+- feat: telegram 2fa expired message gets New code button
+
 ## v1.43.1 - 2026-11-08 (patch)
 - fix: telegram code age shows hours/days for old codes
 
