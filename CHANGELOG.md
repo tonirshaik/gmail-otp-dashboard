@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.56.1 - 2026-11-11 (patch)
+- Add files via upload
+
 ## v1.56.0 - 2026-11-11 (minor)
 - feat: jungle photo login background with glass card
 
