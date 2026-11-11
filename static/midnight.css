@@ -1502,3 +1502,10 @@ body:has(#dashboardSection.hidden)::before{content:"";position:fixed;inset:0;z-i
 /* login-dots-only */
 html body:has(#dashboardSection.hidden){background:linear-gradient(180deg,#070b1f 0%,#0a1130 62%,#330d1d 100%) !important;background-attachment:scroll !important}
 body:has(#dashboardSection.hidden)::before{content:none !important;display:none !important;background:none !important}
+
+/* login-jungle */
+html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.45),rgba(3,8,20,.62)),url("/static/bg-jungle.webp") center/cover no-repeat !important;background-attachment:scroll !important}
+@media (max-width:767px){html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.4),rgba(3,8,20,.58)),url("/static/bg-jungle-m.webp") center/cover no-repeat !important;background-attachment:scroll !important}}
+.container:has(#dashboardSection.hidden)::before,.container:has(#dashboardSection.hidden)::after,#loginSection::before,#loginSection::after{content:none !important;display:none !important;background:none !important}
+.container:has(#dashboardSection.hidden){background:rgba(8,16,40,.5) !important;border:1px solid rgba(160,200,255,.28) !important;border-radius:24px !important;box-shadow:0 18px 50px rgba(0,0,0,.55) !important;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+#loginSection .btn-primary{box-shadow:0 8px 24px rgba(182,255,92,.28) !important}
