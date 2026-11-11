@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.47.3 - 2026-11-11 (patch)
+- fix: login swipe only to the right, longer drag needed
+
 ## v1.47.2 - 2026-11-11 (patch)
 - fix: login swipe needs a longer drag
 
