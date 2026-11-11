@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.57.1 - 2026-11-11 (patch)
+- fix: remove box line around login button
+
 ## v1.57.0 - 2026-11-11 (minor)
 - feat: new login background images (desktop + phone)
 
