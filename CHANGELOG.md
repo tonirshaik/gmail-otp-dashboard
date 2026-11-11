@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.55.2 - 2026-11-11 (patch)
+- Add files via upload
+
 ## v1.55.1 - 2026-11-11 (patch)
 - fix: login page keep only dotted circuit lines
 
