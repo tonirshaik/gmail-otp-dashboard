@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.47.0 - 2026-11-11 (minor)
+- feat: login swipe to reveal master password
+
 ## v1.46.0 - 2026-11-11 (minor)
 - feat: stronger phishing link warning with link check panel
 
