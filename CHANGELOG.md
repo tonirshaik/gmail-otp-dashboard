@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.56.2 - 2026-11-11 (patch)
+- Delete static/Bioluminescent Mushroom Forest at Night.png
+
 ## v1.56.1 - 2026-11-11 (patch)
 - Add files via upload
 
