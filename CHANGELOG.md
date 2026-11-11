@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.47.2 - 2026-11-11 (patch)
+- fix: login swipe needs a longer drag
+
 ## v1.47.1 - 2026-11-11 (patch)
 - fix: login swipe works with mouse drag, button slides
 
