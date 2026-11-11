@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.47.1 - 2026-11-11 (patch)
+- fix: login swipe works with mouse drag, button slides
+
 ## v1.47.0 - 2026-11-11 (minor)
 - feat: login swipe to reveal master password
 
