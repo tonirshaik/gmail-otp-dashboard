@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.53.2 - 2026-11-11 (patch)
+- style: login lines stop short of card with end dots
+
 ## v1.53.1 - 2026-11-11 (patch)
 - style: thinner, fewer login lines
 
