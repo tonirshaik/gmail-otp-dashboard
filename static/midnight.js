@@ -772,7 +772,7 @@
     });
     document.addEventListener('pointermove', function (e) {
         if (pid === null || e.pointerId !== pid) return;
-        dx = e.clientX - sx;
+        dx = Math.max(0, e.clientX - sx);
         var dy = e.clientY - sy;
         if (!drag) {
             if (Math.abs(dx) < 6) return;
@@ -791,7 +791,7 @@
         moved = true;
         setTimeout(function () { moved = false; }, 60);
         pk.classList.add('snap');
-        if (Math.abs(dx) >= Math.max(140, pk.offsetWidth * 0.45)) {
+        if (Math.abs(dx) >= Math.max(200, pk.offsetWidth * 0.6)) {
             pk.style.transform = 'translateX(' + (dx < 0 ? -1 : 1) * sec.offsetWidth + 'px)';
             pk.style.opacity = '0';
             setTimeout(showPw, 230);
