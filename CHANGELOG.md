@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.56.4 - 2026-11-11 (patch)
+- Delete static/bg-jungle-m.webp
+
 ## v1.56.3 - 2026-11-11 (patch)
 - Delete static/Bioluminescent Mushroom Forest Path.png
 
