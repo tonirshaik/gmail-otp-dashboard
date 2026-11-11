@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.52.0 - 2026-11-11 (minor)
+- feat: login page electric current on circuit lines
+
 ## v1.51.0 - 2026-11-11 (minor)
 - feat: login pins each get one bending line
 
