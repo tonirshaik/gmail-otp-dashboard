@@ -1513,3 +1513,6 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
 /* login-forest */
 html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.45),rgba(3,8,20,.62)),url("/static/bg-forest.webp") center/cover no-repeat !important;background-attachment:scroll !important}
 @media (max-width:767px){html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.4),rgba(3,8,20,.58)),url("/static/bg-forest-m.webp") center/cover no-repeat !important;background-attachment:scroll !important}}
+
+/* login-btn-clean */
+#loginSection #loginForm .btn-primary,#loginSection #loginForm #passkeyLoginBtn{box-shadow:none !important;outline:0 !important}
