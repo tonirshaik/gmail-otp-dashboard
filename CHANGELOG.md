@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.50.0 - 2026-11-11 (minor)
+- feat: login circuit background 160 thin lines
+
 ## v1.49.0 - 2026-11-11 (minor)
 - feat: login circuit background 14 -> 30 lines
 
