@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.45.0 - 2026-11-11 (minor)
+- feat: active devices list with sign out
+
 ## v1.44.0 - 2026-11-10 (minor)
 - feat: telegram 2fa expired message gets New code button
 
