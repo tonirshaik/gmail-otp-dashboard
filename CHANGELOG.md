@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.57.2 - 2026-11-11 (patch)
+- chore: remove dead login background CSS
+
 ## v1.57.1 - 2026-11-11 (patch)
 - fix: remove box line around login button
 
