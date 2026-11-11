@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.55.1 - 2026-11-11 (patch)
+- fix: login page keep only dotted circuit lines
+
 ## v1.55.0 - 2026-11-11 (minor)
 - feat: login circuit lines on left and right sides
 
