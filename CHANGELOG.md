@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.53.1 - 2026-11-11 (patch)
+- style: thinner, fewer login lines
+
 ## v1.53.0 - 2026-11-11 (minor)
 - feat: remove login pins, wandering electric lines
 
