@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.55.0 - 2026-11-11 (minor)
+- feat: login circuit lines on left and right sides
+
 ## v1.54.0 - 2026-11-11 (minor)
 - feat: login lines white comet pulses
 
