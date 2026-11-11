@@ -737,7 +737,8 @@
     }
 })();
 
-/* login-swipe */
+
+/* login-swipe v2 */
 (function () {
     var sec = document.getElementById('loginSection'),
         form = document.getElementById('loginForm'),
@@ -747,27 +748,63 @@
     if (!sec || !form || !pk || !pw) return;
     if (pk.classList.contains('hidden')) return;
     form.classList.add('swipe-login');
-    var sx = 0, sy = 0, active = false;
+    var sx = 0, sy = 0, dx = 0, pid = null, drag = false, moved = false;
+    function inPw() { return form.classList.contains('pw-mode'); }
+    function clearPk() { pk.style.transform = ''; pk.style.opacity = ''; }
     function showPw() {
-        if (form.classList.contains('pw-mode')) return;
         form.classList.add('pw-mode');
+        pk.classList.remove('snap');
+        clearPk();
         try { pw.focus(); } catch (e) {}
     }
     function reset() {
         form.classList.remove('pw-mode');
         form.classList.remove('has-pw');
+        pk.classList.remove('snap');
+        clearPk();
         pw.value = '';
     }
+    sec.addEventListener('dragstart', function (e) { e.preventDefault(); });
     sec.addEventListener('pointerdown', function (e) {
-        sx = e.clientX; sy = e.clientY; active = true;
+        if (inPw() || (e.pointerType === 'mouse' && e.button !== 0)) return;
+        pid = e.pointerId; sx = e.clientX; sy = e.clientY; dx = 0; drag = false;
+        pk.classList.remove('snap');
     });
-    sec.addEventListener('pointerup', function (e) {
-        if (!active) return;
-        active = false;
-        var dx = e.clientX - sx, dy = e.clientY - sy;
-        if (dx < -50 && Math.abs(dx) > Math.abs(dy) * 1.5) showPw();
+    document.addEventListener('pointermove', function (e) {
+        if (pid === null || e.pointerId !== pid) return;
+        dx = e.clientX - sx;
+        var dy = e.clientY - sy;
+        if (!drag) {
+            if (Math.abs(dx) < 6) return;
+            if (Math.abs(dx) < Math.abs(dy)) { pid = null; return; }
+            drag = true;
+            try { pk.setPointerCapture(pid); } catch (x) {}
+        }
+        pk.style.transform = 'translateX(' + dx + 'px)';
+        pk.style.opacity = String(Math.max(0.25, 1 - Math.abs(dx) / 260));
     });
-    sec.addEventListener('pointercancel', function () { active = false; });
+    function end(e) {
+        if (pid === null || e.pointerId !== pid) return;
+        pid = null;
+        if (!drag) return;
+        drag = false;
+        moved = true;
+        setTimeout(function () { moved = false; }, 60);
+        pk.classList.add('snap');
+        if (Math.abs(dx) >= 80) {
+            pk.style.transform = 'translateX(' + (dx < 0 ? -1 : 1) * sec.offsetWidth + 'px)';
+            pk.style.opacity = '0';
+            setTimeout(showPw, 230);
+        } else {
+            clearPk();
+            setTimeout(function () { pk.classList.remove('snap'); }, 250);
+        }
+    }
+    document.addEventListener('pointerup', end);
+    document.addEventListener('pointercancel', end);
+    sec.addEventListener('click', function (e) {
+        if (moved) { e.preventDefault(); e.stopPropagation(); }
+    }, true);
     if (dash) new MutationObserver(function () {
         if (dash.classList.contains('hidden')) reset();
     }).observe(dash, { attributes: true, attributeFilter: ['class'] });

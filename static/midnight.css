@@ -1434,8 +1434,13 @@ body:has(#dashboardSection.hidden) {
 .lk-ok{font-size:12px;color:var(--text-muted);margin:0 0 10px}
 .lk-box .mail-lb-row{margin-top:12px}
 
-/* login-swipe */
+
+/* login-swipe v2 */
 #loginSection { touch-action: pan-y; }
+#loginSection, #loginSection button { user-select: none; -webkit-user-select: none; }
+#loginSection input { user-select: text; -webkit-user-select: text; }
+#loginForm.swipe-login { overflow: hidden; }
 #loginForm.swipe-login:not(.pw-mode) .input-group { display: none !important; }
-#loginForm.swipe-login:not(.pw-mode) #passkeyLoginBtn { margin-top: 0 !important; }
+#loginForm.swipe-login:not(.pw-mode) #passkeyLoginBtn { margin-top: 0 !important; cursor: grab; will-change: transform; }
 #loginForm.swipe-login.pw-mode #passkeyLoginBtn { display: none !important; }
+#loginForm.swipe-login #passkeyLoginBtn.snap { transition: transform .22s ease, opacity .22s ease; }
