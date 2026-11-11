@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.49.0 - 2026-11-11 (minor)
+- feat: login circuit background 14 -> 30 lines
+
 ## v1.48.1 - 2026-11-11 (patch)
 - fix: merge login inner box into outer frame
 
