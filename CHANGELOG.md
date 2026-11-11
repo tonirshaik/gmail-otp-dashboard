@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.54.0 - 2026-11-11 (minor)
+- feat: login lines white comet pulses
+
 ## v1.53.2 - 2026-11-11 (patch)
 - style: login lines stop short of card with end dots
 
