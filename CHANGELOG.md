@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.46.0 - 2026-11-11 (minor)
+- feat: stronger phishing link warning with link check panel
+
 ## v1.45.0 - 2026-11-11 (minor)
 - feat: active devices list with sign out
 
