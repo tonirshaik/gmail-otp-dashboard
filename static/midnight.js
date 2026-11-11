@@ -419,3 +419,122 @@
         window.fallbackCopy = wf;
     }
 })();
+
+/* active-devices */
+(function () {
+    var $ = function (id) { return document.getElementById(id); };
+    var btn = $('devicesBtn'), box = $('devicesBox'), list = $('devicesList'),
+        msg = $('devicesMsg'), outBtn = $('devicesOutAll'), outLbl = $('devicesOutLbl'), count = $('devicesCount');
+    if (!btn || !box || !list || !outBtn || !outLbl) return;
+    var armTimer = null, outText = outLbl.textContent;
+
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text != null) e.textContent = text;
+        return e;
+    }
+    function say(text, bad) {
+        msg.textContent = text || '';
+        msg.style.display = text ? 'block' : 'none';
+        msg.style.color = bad ? 'var(--accent-red)' : 'var(--accent-green)';
+    }
+    function api(url, body) {
+        var opt = body === undefined ? { cache: 'no-store' }
+            : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) };
+        return fetch(url, opt).then(function (r) {
+            return r.json().catch(function () { return {}; }).then(function (j) { return { ok: r.ok, status: r.status, j: j }; });
+        });
+    }
+    function expired(x) {
+        if (x.status !== 401) return false;
+        if (typeof autoLock === 'function') autoLock((x.j && x.j.error) || 'Session expired. Please login again.');
+        return true;
+    }
+    function icon(d) {
+        return /windows|mac|linux|chrome ?os/i.test(d) && !/android/i.test(d) ? 'fa-desktop' : 'fa-mobile-screen';
+    }
+    function resetOut() {
+        clearTimeout(armTimer);
+        outBtn.dataset.arm = '';
+        outLbl.textContent = outText;
+    }
+    function render(items) {
+        list.textContent = '';
+        count.textContent = items.length + ' signed in';
+        outBtn.style.display = items.some(function (i) { return !i.current; }) ? '' : 'none';
+        items.forEach(function (it) {
+            var card = el('div', 'dev-card' + (it.current ? ' me' : ''));
+            var ic = el('div', 'dev-ic');
+            ic.appendChild(el('i', 'fa-solid ' + icon(it.device || '')));
+            var tx = el('div', 'dev-tx');
+            tx.appendChild(el('div', 'dev-name', it.device || 'Unknown device'));
+            var when = it.age_seconds < 90 ? 'Active now' : (typeof mailAgo === 'function' ? mailAgo(it.last) : '');
+            tx.appendChild(el('div', 'dev-sub', (it.ip || 'Unknown IP') + ' \u00b7 ' + when));
+            card.appendChild(ic);
+            card.appendChild(tx);
+            if (it.current) {
+                card.appendChild(el('span', 'dev-badge', 'This device'));
+            } else {
+                var b = el('button', 'dev-out', 'Sign out');
+                b.type = 'button';
+                b.dataset.id = it.id;
+                card.appendChild(b);
+            }
+            list.appendChild(card);
+        });
+    }
+    function load() {
+        say('');
+        resetOut();
+        list.textContent = '';
+        list.appendChild(el('div', 'dev-empty', 'Loading...'));
+        api('/api/sessions').then(function (x) {
+            if (expired(x)) return;
+            if (!x.ok) { list.textContent = ''; say((x.j && x.j.error) || 'Could not load devices', true); return; }
+            render(x.j.items || []);
+        }).catch(function () { list.textContent = ''; say('Server Error!', true); });
+    }
+
+    btn.addEventListener('click', function () {
+        var opening = box.classList.contains('hidden');
+        box.classList.toggle('hidden', !opening);
+        if (opening) load();
+    });
+    list.addEventListener('click', function (e) {
+        var b = e.target.closest('.dev-out');
+        if (!b) return;
+        b.disabled = true;
+        api('/api/sessions/revoke', { id: b.dataset.id }).then(function (x) {
+            if (expired(x)) return;
+            if (!x.ok) { b.disabled = false; say((x.j && x.j.error) || 'Could not sign out', true); return; }
+            if (typeof showToast === 'function') showToast('Device signed out');
+            load();
+        }).catch(function () { b.disabled = false; say('Server Error!', true); });
+    });
+    outBtn.addEventListener('click', function () {
+        if (outBtn.dataset.arm !== '1') {
+            outBtn.dataset.arm = '1';
+            outLbl.textContent = 'Tap again to confirm';
+            armTimer = setTimeout(resetOut, 4000);
+            return;
+        }
+        resetOut();
+        outBtn.disabled = true;
+        api('/api/sessions/revoke-others', {}).then(function (x) {
+            outBtn.disabled = false;
+            if (expired(x)) return;
+            if (!x.ok) { say((x.j && x.j.error) || 'Could not sign out', true); return; }
+            if (typeof showToast === 'function') showToast('Other devices signed out');
+            load();
+        }).catch(function () { outBtn.disabled = false; say('Server Error!', true); });
+    });
+    var sc = $('settingsContent');
+    if (sc) new MutationObserver(function () {
+        if (!sc.classList.contains('hidden')) return;
+        box.classList.add('hidden');
+        list.textContent = '';
+        say('');
+        resetOut();
+    }).observe(sc, { attributes: true, attributeFilter: ['class'] });
+})();

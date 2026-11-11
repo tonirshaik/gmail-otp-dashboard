@@ -133,6 +133,13 @@
                             <i class="fa-solid fa-box-archive"></i> Backup &amp; Import
                         </button>
                         <a class="btn btn-ghost" href="/api/ext/download" style="margin-top: 10px; text-decoration: none;"><i class="fa-solid fa-puzzle-piece"></i> Browser extension (download)</a>
+                        <button type="button" class="btn btn-ghost" id="devicesBtn" style="margin-top: 10px;"><i class="fa-solid fa-laptop-mobile"></i> Active devices</button>
+                        <div id="devicesBox" class="bk-sec hidden" style="margin-top: 10px;">
+                            <div class="dev-head"><div class="bk-title">Active devices</div><span id="devicesCount" class="dev-count"></span></div>
+                            <div id="devicesList" class="dev-list"></div>
+                            <button type="button" class="btn btn-danger" id="devicesOutAll" style="margin-top: 10px;"><i class="fa-solid fa-right-from-bracket"></i> <span id="devicesOutLbl">Sign out all other devices</span></button>
+                            <div id="devicesMsg" class="msg-status" role="status"></div>
+                        </div>
                         <button type="button" class="btn btn-ghost" id="smsSetupBtn" style="margin-top: 10px;"><i class="fa-solid fa-message"></i> SMS OTP setup</button>
                         <div id="smsSetup" class="bk-sec hidden" style="margin-top: 10px;">
                             <div class="bk-title">SMS OTP</div>

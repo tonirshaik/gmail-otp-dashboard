@@ -105,6 +105,7 @@ push_collection = None
 totp_collection = None
 svc_collection = None
 sms_collection = None
+sessions_collection = None
 
 if MONGO_URI:
     try:
@@ -118,6 +119,7 @@ if MONGO_URI:
         totp_collection = db['totp']           # Gmail-wise 2FA (Authenticator) secret -- ENCRYPTED
         svc_collection = db['totp_services']   # onno shob service-er (social media / website / app) 2FA secret -- ENCRYPTED
         sms_collection = db['sms_codes']
+        sessions_collection = db['login_sessions']
         print("MongoDB Connected Successfully!")
     except Exception as e:
         print(f"MongoDB Connection Error: {e}")
@@ -2189,6 +2191,12 @@ def _mark_active():
     global _last_user_activity
     now = time.time()
     session['last_active'] = now
+    if sessions_collection is not None and session.get('sid') and now - session.get('sid_ping', 0) > 20:
+        session['sid_ping'] = now
+        try:
+            sessions_collection.update_one({"_id": session['sid']}, {"$set": {"last": now}})
+        except Exception:
+            pass
     _last_user_activity = now
 
 @app.before_request
@@ -2198,6 +2206,18 @@ def enforce_idle_timeout():
         return None
     if not session.get('logged_in'):
         return None
+    if sessions_collection is not None:  # active_devices_v1 check
+        try:
+            sid = session.get('sid')
+            if sid is None:
+                _register_session()
+            elif sessions_collection.find_one({"_id": sid}, {"_id": 1}) is None:
+                session.clear()
+                if path in _IDLE_PUBLIC:
+                    return None
+                return jsonify({"error": "This device was signed out. Please login again.", "expired": True}), 401
+        except Exception as e:
+            print(f"[SESSIONS] check: {type(e).__name__}")
     last = session.get('last_active')
     if last is not None and time.time() - last > IDLE_TIMEOUT:
         session.clear()                           # login + settings unlock dutoi gelo
@@ -2282,6 +2302,106 @@ def static_cache_headers(resp):
 @app.route('/')
 def home():
     return render_template('index.html')
+
+# active_devices_v1: login device list (server-side session records)
+def _register_session():
+    if sessions_collection is None:
+        return
+    try:
+        now = time.time()
+        sid = session.get('sid')
+        if sid and sessions_collection.find_one({"_id": sid}, {"_id": 1}):
+            sessions_collection.update_one({"_id": sid}, {"$set": {"last": now}})
+            return
+        sid = secrets.token_hex(16)
+        sessions_collection.delete_many({"last": {"$lt": now - 86400}})
+        sessions_collection.insert_one({
+            "_id": sid,
+            "ip": _client_ip_for_alert()[:60],
+            "device": _device_for_alert()[:120],
+            "created": now,
+            "last": now,
+        })
+        session['sid'] = sid
+    except Exception as e:
+        print(f"[SESSIONS] register: {type(e).__name__}")
+
+def _sessions_guard():
+    if not session.get('logged_in'):
+        return jsonify({"error": "Unauthorized Access"}), 401
+    if not session.get('settings_unlocked'):
+        return jsonify({"error": "Settings locked. Unlock first."}), 403
+    if sessions_collection is None:
+        return jsonify({"error": "Database Not Connected!"}), 500
+    return None
+
+@app.route('/api/sessions')
+def sessions_list():
+    bad = _sessions_guard()
+    if bad is not None:
+        return bad
+    if not _rate_ok("sessions-list", 60, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    if not session.get('sid'):
+        _register_session()
+    now = time.time()
+    try:
+        sessions_collection.delete_many({"last": {"$lt": now - IDLE_TIMEOUT - 30}})
+        docs = list(sessions_collection.find({}).sort("last", -1).limit(50))
+    except Exception as e:
+        print(f"[SESSIONS] list: {type(e).__name__}")
+        return jsonify({"error": "Could not load devices"}), 500
+    me = session.get('sid')
+    items = [{
+        "id": d["_id"],
+        "ip": d.get("ip", ""),
+        "device": d.get("device", ""),
+        "created": d.get("created", 0),
+        "last": d.get("last", 0),
+        "age_seconds": max(0, int(now - d.get("last", now))),
+        "current": d["_id"] == me,
+    } for d in docs]
+    return _no_store(jsonify({"items": items}))
+
+@app.route('/api/sessions/revoke', methods=['POST'])
+def sessions_revoke():
+    bad = _sessions_guard()
+    if bad is not None:
+        return bad
+    if not _rate_ok("sessions-revoke", 30, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    sid = str(_json_body().get('id', '')).strip()
+    if not re.fullmatch(r"[0-9a-f]{32}", sid):
+        return jsonify({"error": "Bad request"}), 400
+    if sid == session.get('sid'):
+        return jsonify({"error": "Use Logout to sign out this device"}), 400
+    try:
+        r = sessions_collection.delete_one({"_id": sid})
+    except Exception as e:
+        print(f"[SESSIONS] revoke: {type(e).__name__}")
+        return jsonify({"error": "Could not sign out. Try again."}), 500
+    if r.deleted_count == 0:
+        return jsonify({"error": "Device not found"}), 404
+    return jsonify({"ok": True})
+
+@app.route('/api/sessions/revoke-others', methods=['POST'])
+def sessions_revoke_others():
+    bad = _sessions_guard()
+    if bad is not None:
+        return bad
+    if not _rate_ok("sessions-revoke-all", 10, 60):
+        return jsonify({"error": "Too many requests. Wait a moment."}), 429
+    if not session.get('sid'):
+        _register_session()
+    me = session.get('sid')
+    if not me:
+        return jsonify({"error": "Could not identify this device"}), 500
+    try:
+        r = sessions_collection.delete_many({"_id": {"$ne": me}})
+    except Exception as e:
+        print(f"[SESSIONS] revoke-others: {type(e).__name__}")
+        return jsonify({"error": "Could not sign out. Try again."}), 500
+    return jsonify({"ok": True, "count": r.deleted_count})
 
 @app.route('/api/ping', methods=['POST'])
 def ping():
@@ -2400,6 +2520,7 @@ def login():
         clear_fails(bucket)                           # shudhu nijer IP-r hishab muchhi, global hishab na
         session['logged_in'] = True
         _mark_active()
+        _register_session()  # active_devices_v1 login
         _login_alert("ok")
         return jsonify({"success": True})
     all_locked, _ = register_fail('login-all', LOGIN_GLOBAL_MAX)
@@ -2412,6 +2533,12 @@ def login():
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
+    sid_out = session.pop('sid', None)  # active_devices_v1 logout
+    if sid_out and sessions_collection is not None:
+        try:
+            sessions_collection.delete_one({"_id": sid_out})
+        except Exception:
+            pass
     session.pop('logged_in', None)
     session.pop('settings_unlocked', None)
     return jsonify({"success": True})
@@ -4365,6 +4492,7 @@ def passkey_auth_verify():
     )
     session['logged_in'] = True
     _mark_active()
+    _register_session()  # active_devices_v1 passkey
     if purpose == 'login':
         _login_alert("ok_pk")
     if purpose == 'settings':
