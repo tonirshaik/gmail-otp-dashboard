@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.57.0 - 2026-11-11 (minor)
+- feat: new login background images (desktop + phone)
+
 ## v1.56.5 - 2026-11-11 (patch)
 - Delete static/bg-jungle.webp
 
