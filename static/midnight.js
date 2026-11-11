@@ -538,3 +538,201 @@
         resetOut();
     }).observe(sc, { attributes: true, attributeFilter: ['class'] });
 })();
+
+/* phishing-link-check */
+(function () {
+    'use strict';
+    var SHORT = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly', 'cutt.ly', 'rebrand.ly',
+                 'shorturl.at', 'tiny.cc', 'rb.gy', 't.ly', 'lnkd.in', 's.id'];
+    var BAD_TLD = ['top', 'xyz', 'click', 'link', 'zip', 'mov', 'icu', 'tk', 'gq', 'cf', 'ml', 'ga', 'work', 'rest',
+                   'country', 'kim', 'loan', 'men', 'party', 'review', 'stream', 'download', 'win', 'bid', 'cyou',
+                   'cfd', 'sbs', 'monster', 'buzz'];
+
+    function el(tag, cls, text) {
+        var e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (text != null) e.textContent = text;
+        return e;
+    }
+
+    /* returns [[english, bangla], ...] -- empty list means no warning signs */
+    function linkRisks(href, senderDomain, authFail, authDetail) {
+        var out = [], u;
+        try { u = new URL(href); } catch (e) { return out; }
+        var host = u.hostname.toLowerCase().replace(/^www\./, '');
+        var reg = regDomain(host);
+        var sd = senderDomain ? regDomain(String(senderDomain)) : '';
+        if (u.username || u.password) {
+            out.push(['This link hides its real address with an @ sign.', 'লিংকে @ দিয়ে আসল ঠিকানা লুকানো আছে']);
+        }
+        if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.indexOf(':') > -1) {
+            out.push(['The link uses a number address instead of a website name.', 'লিংকে ওয়েবসাইটের নামের বদলে নম্বর ঠিকানা আছে']);
+        }
+        if (u.protocol !== 'https:') {
+            out.push(['This link is not secure (http).', 'লিংকটি নিরাপদ (https) নয়']);
+        }
+        if (/(^|\.)xn--/.test(host)) {
+            out.push(['The web address has unusual characters.', 'ঠিকানায় অস্বাভাবিক অক্ষর আছে']);
+        }
+        if (SHORT.indexOf(reg) > -1) {
+            out.push(['This is a shortened link (' + reg + '), so the real site is hidden.', 'ছোট করা লিংক (' + reg + '), আসল সাইট লুকানো']);
+        }
+        var tld = host.split('.').pop();
+        if (BAD_TLD.indexOf(tld) > -1 && (!sd || sd.split('.').pop() !== tld)) {
+            out.push(['Unusual web address ending (.' + tld + ').', 'ঠিকানার শেষ অংশ (.' + tld + ') সন্দেহজনক']);
+        }
+        if (sd && reg !== sd) {
+            out.push(['Goes to ' + host + ', but the email is from ' + sd + '.', 'লিংক যাচ্ছে ' + host + ' এ, কিন্তু ইমেইল ' + sd + ' এর']);
+            var label = sd.split('.')[0];
+            if (label.length >= 4 && host.indexOf(label) > -1) {
+                out.push(['The address contains "' + label + '" to look like the real site.', 'ঠিকানায় "' + label + '" নামটা বসিয়ে আসল সাইটের মতো দেখানো হয়েছে']);
+            }
+        }
+        if (authFail) {
+            var d = authDetail || 'SPF/DKIM';
+            out.push(['The email failed the sender check (' + d + ').', 'ইমেইলটি সেন্ডার চেকে ফেইল করেছে (' + d + ')']);
+        }
+        return out;
+    }
+
+    function closeLc() {
+        var m = document.getElementById('linkCheck');
+        if (m) m.remove();
+    }
+
+    function openLinkCheck(href, risks, onOpen) {
+        closeLc();
+        var ov = el('div', 'modal-overlay lk-overlay');
+        ov.id = 'linkCheck';
+        var box = el('div', 'modal-box lk-box');
+        var title = el('div', 'popup-title');
+        title.appendChild(el('i', 'fa-solid fa-link'));
+        title.appendChild(document.createTextNode(' Open this link?'));
+        box.appendChild(title);
+        box.appendChild(el('div', 'lk-url', href));
+        if (risks.length) {
+            risks.forEach(function (r) {
+                var d = el('div', 'lk-warn');
+                d.appendChild(el('i', 'fa-solid fa-triangle-exclamation'));
+                d.appendChild(el('span', null, r[0]));
+                box.appendChild(d);
+            });
+        } else {
+            box.appendChild(el('div', 'lk-ok', 'No warning signs found. Open it only if you just requested it.'));
+        }
+        var row = el('div', 'mail-lb-row');
+        var go = el('button', 'mail-btn ' + (risks.length ? 'danger' : 'primary'), risks.length ? 'Open anyway' : 'Open');
+        go.type = 'button';
+        go.addEventListener('click', function () {
+            closeLc();
+            window.open(href, '_blank', 'noopener,noreferrer');
+            if (onOpen) onOpen();
+        });
+        var cp = el('button', 'mail-btn', 'Copy link');
+        cp.type = 'button';
+        cp.addEventListener('click', function () {
+            copyQuiet(href).then(function (ok) { showToast(ok ? 'Link copied' : 'Could not copy'); });
+        });
+        var no = el('button', 'mail-btn', 'Cancel');
+        no.type = 'button';
+        no.addEventListener('click', closeLc);
+        row.appendChild(go);
+        row.appendChild(cp);
+        row.appendChild(no);
+        box.appendChild(row);
+        ov.appendChild(box);
+        ov.addEventListener('click', function (e) { if (e.target === ov) closeLc(); });
+        document.body.appendChild(ov);
+        no.focus();
+    }
+
+    document.addEventListener('keydown', function (ev) {
+        if (ev.key === 'Escape' && document.getElementById('linkCheck')) {
+            ev.stopImmediatePropagation();
+            closeLc();
+        }
+    }, true);
+    var dashEl = document.getElementById('dashboardSection');
+    if (dashEl) new MutationObserver(function () {
+        if (dashEl.classList.contains('hidden')) closeLc();
+    }).observe(dashEl, { attributes: true, attributeFilter: ['class'] });
+
+    /* Home card: link needing review -> red note + "Review link first" button */
+    if (typeof window.cardHTML === 'function' && !window.cardHTML.__phish) {
+        var prevCard = window.cardHTML;
+        var phishCard = function (item) {
+            var html = prevCard.apply(this, arguments);
+            try {
+                if (!item || item.kind !== 'link' || !item.url) return html;
+                if (html.indexOf('class="otp-code-box link-box"') < 0) return html;
+                var all = linkRisks(item.url, item.domain, item.auth_fail, item.auth_detail);
+                if (!all.length) return html;
+                html = html.replace('fa-arrow-up-right-from-square"></i> Open verify link', function () {
+                    return 'fa-shield-halved"></i> Review link first';
+                });
+                html = html.replace('class="otp-card ', function () { return 'class="otp-card is-suspicious '; });
+                if (!item.auth_fail) {
+                    var own = linkRisks(item.url, item.domain, false);
+                    if (own.length) {
+                        var note = '<div class="verify-note danger" role="alert"><i class="fa-solid fa-triangle-exclamation"></i><span>এই লিংকটি সন্দেহজনক<small>' +
+                            escAttr(own[0][1]) + '</small></span></div>';
+                        html = html.replace('<div class="otp-code-box link-box"', function (m) { return note + m; });
+                    }
+                }
+            } catch (e) {}
+            return html;
+        };
+        phishCard.__phish = true;
+        window.cardHTML = phishCard;
+    }
+
+    /* Tapping the link button: check first, open directly only when clean */
+    if (typeof window.onCodeTap === 'function' && !window.onCodeTap.__phish) {
+        var prevTap = window.onCodeTap;
+        var phishTap = function (box) {
+            try {
+                if (box && box.classList && box.classList.contains('link-box')) {
+                    var url = box.dataset.url || '';
+                    if (/^https:\/\//i.test(url)) {
+                        var key = box.dataset.key || '';
+                        var item = allItems.filter(function (x) { return codeKey(x) === key; })[0];
+                        var risks = item ? linkRisks(url, item.domain, item.auth_fail, item.auth_detail) : [];
+                        if (risks.length) {
+                            var email = key.split('|')[0], uk = box.dataset.usedKey;
+                            openLinkCheck(url, risks, function () {
+                                markAccountUsed(email);
+                                if (uk && !usedMap[uk]) setUsed(uk, true);
+                            });
+                            return;
+                        }
+                    }
+                }
+            } catch (e) {}
+            return prevTap.apply(this, arguments);
+        };
+        phishTap.__phish = true;
+        window.onCodeTap = phishTap;
+    }
+
+    /* Mail viewer: stronger checks on link chips + same check panel */
+    if (typeof window.parseMailLink === 'function' && !window.parseMailLink.__phish) {
+        var prevParse = window.parseMailLink;
+        var phishParse = function (href, md) {
+            var r = prevParse.apply(this, arguments);
+            try {
+                if (r && linkRisks(r.href, md && md.sender_domain, false).length) r.mismatch = true;
+            } catch (e) {}
+            return r;
+        };
+        phishParse.__phish = true;
+        window.parseMailLink = phishParse;
+    }
+    if (typeof window.showLinkBar === 'function' && !window.showLinkBar.__phish) {
+        var phishBar = function (info) {
+            var md = (typeof mailData !== 'undefined' && mailData) || {};
+            openLinkCheck(info.href, linkRisks(info.href, md.sender_domain, md.auth_fail, md.auth_detail), null);
+        };
+        phishBar.__phish = true;
+        window.showLinkBar = phishBar;
+    }
+})();
