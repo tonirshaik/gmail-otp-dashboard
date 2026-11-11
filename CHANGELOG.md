@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.48.1 - 2026-11-11 (patch)
+- fix: merge login inner box into outer frame
+
 ## v1.48.0 - 2026-11-11 (minor)
 - feat: circuit-chip style login page
 
