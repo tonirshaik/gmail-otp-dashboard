@@ -1433,3 +1433,9 @@ body:has(#dashboardSection.hidden) {
 .lk-warn i{margin-top:2px;flex:none}
 .lk-ok{font-size:12px;color:var(--text-muted);margin:0 0 10px}
 .lk-box .mail-lb-row{margin-top:12px}
+
+/* login-swipe */
+#loginSection { touch-action: pan-y; }
+#loginForm.swipe-login:not(.pw-mode) .input-group { display: none !important; }
+#loginForm.swipe-login:not(.pw-mode) #passkeyLoginBtn { margin-top: 0 !important; }
+#loginForm.swipe-login.pw-mode #passkeyLoginBtn { display: none !important; }

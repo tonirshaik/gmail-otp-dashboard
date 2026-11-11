@@ -736,3 +736,39 @@
         window.showLinkBar = phishBar;
     }
 })();
+
+/* login-swipe */
+(function () {
+    var sec = document.getElementById('loginSection'),
+        form = document.getElementById('loginForm'),
+        pk = document.getElementById('passkeyLoginBtn'),
+        pw = document.getElementById('masterPasswordInput'),
+        dash = document.getElementById('dashboardSection');
+    if (!sec || !form || !pk || !pw) return;
+    if (pk.classList.contains('hidden')) return;
+    form.classList.add('swipe-login');
+    var sx = 0, sy = 0, active = false;
+    function showPw() {
+        if (form.classList.contains('pw-mode')) return;
+        form.classList.add('pw-mode');
+        try { pw.focus(); } catch (e) {}
+    }
+    function reset() {
+        form.classList.remove('pw-mode');
+        form.classList.remove('has-pw');
+        pw.value = '';
+    }
+    sec.addEventListener('pointerdown', function (e) {
+        sx = e.clientX; sy = e.clientY; active = true;
+    });
+    sec.addEventListener('pointerup', function (e) {
+        if (!active) return;
+        active = false;
+        var dx = e.clientX - sx, dy = e.clientY - sy;
+        if (dx < -50 && Math.abs(dx) > Math.abs(dy) * 1.5) showPw();
+    });
+    sec.addEventListener('pointercancel', function () { active = false; });
+    if (dash) new MutationObserver(function () {
+        if (dash.classList.contains('hidden')) reset();
+    }).observe(dash, { attributes: true, attributeFilter: ['class'] });
+})();
