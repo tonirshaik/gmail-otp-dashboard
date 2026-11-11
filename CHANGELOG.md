@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.51.0 - 2026-11-11 (minor)
+- feat: login pins each get one bending line
+
 ## v1.50.0 - 2026-11-11 (minor)
 - feat: login circuit background 160 thin lines
 
