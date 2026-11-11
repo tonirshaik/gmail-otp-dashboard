@@ -791,7 +791,7 @@
         moved = true;
         setTimeout(function () { moved = false; }, 60);
         pk.classList.add('snap');
-        if (Math.abs(dx) >= 80) {
+        if (Math.abs(dx) >= Math.max(140, pk.offsetWidth * 0.45)) {
             pk.style.transform = 'translateX(' + (dx < 0 ? -1 : 1) * sec.offsetWidth + 'px)';
             pk.style.opacity = '0';
             setTimeout(showPw, 230);
