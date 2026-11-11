@@ -1463,3 +1463,6 @@ html body:has(#dashboardSection.hidden){background:url("data:image/svg+xml,%3Csv
   #loginSection{padding:34px 28px 28px}
   #loginSection .header-title{font-size:28px !important}
 }
+
+/* login-merge-box */
+#loginSection{border:0 !important;border-radius:0 !important;padding:0 !important;background:transparent !important}
