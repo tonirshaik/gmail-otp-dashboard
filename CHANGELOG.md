@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.48.0 - 2026-11-11 (minor)
+- feat: circuit-chip style login page
+
 ## v1.47.4 - 2026-11-11 (patch)
 - fix: login swipe only to the left
 
