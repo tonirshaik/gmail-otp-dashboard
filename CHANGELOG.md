@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.56.3 - 2026-11-11 (patch)
+- Delete static/Bioluminescent Mushroom Forest Path.png
+
 ## v1.56.2 - 2026-11-11 (patch)
 - Delete static/Bioluminescent Mushroom Forest at Night.png
 
