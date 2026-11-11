@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.56.5 - 2026-11-11 (patch)
+- Delete static/bg-jungle.webp
+
 ## v1.56.4 - 2026-11-11 (patch)
 - Delete static/bg-jungle-m.webp
 
