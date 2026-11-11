@@ -772,7 +772,7 @@
     });
     document.addEventListener('pointermove', function (e) {
         if (pid === null || e.pointerId !== pid) return;
-        dx = Math.max(0, e.clientX - sx);
+        dx = Math.min(0, e.clientX - sx);
         var dy = e.clientY - sy;
         if (!drag) {
             if (Math.abs(dx) < 6) return;
