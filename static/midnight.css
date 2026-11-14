@@ -366,6 +366,14 @@ body:has(#dashboardSection.hidden) {
     color: var(--text-main);
     font-size: 19px; font-weight: 700; letter-spacing: -.3px;
   }
+  .app-nav .nav-brand .brand-tag {
+    align-self: center;
+    padding: 3px 9px;
+    border-radius: 999px;
+    border: 1px solid var(--m-accent);
+    color: var(--m-accent);
+    font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase;
+  }
   .app-nav .nav-brand .logo {
     width: 40px; height: 40px; border-radius: 14px;
     background: var(--m-accent); color: var(--m-ink);
