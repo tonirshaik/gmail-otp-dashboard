@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.60.1 - 2026-11-18 (patch)
+- fix: signed-out device gets expired event on live stream within ~5s
+
 ## v1.60.0 - 2026-11-18 (minor)
 - feat: telegram /lock command to sign out all devices
 
