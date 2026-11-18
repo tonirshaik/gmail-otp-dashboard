@@ -144,7 +144,7 @@
   }
 
   chrome.runtime.onMessage.addListener(function (m, s, send) {
-    if (m && m.type === "email") { send({ email: pageEmail(), kind: pageKind() }); return; }
+    if (m && m.type === "email") { send({ email: pageEmail(), kind: pageKind(), box: Boolean(findTargets()) }); return; }
     if (m && m.type === "fill" && typeof m.code === "string" && CODE_OK.test(m.code)) {
       var t = findTargets();
       send({ ok: !!(t && fill(t, m.code, true)) });

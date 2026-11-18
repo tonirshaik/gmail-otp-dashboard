@@ -1,9 +1,10 @@
 const DASH = "@@ORIGIN@@";
 const box = document.getElementById("box");
 const hostEl = document.getElementById("host");
-let tab = null, host = "", pageHint = "", pageKind = "full", foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
+let tab = null, host = "", pageHint = "", pageKind = "full", noBox = false, foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
 const NOPAGE = "এই পাতায় কাজ করে না। কোনো https সাইটে খুলুন।";
 
+const NOBOX = "এই পাতায় কোড বসানোর ঘর নেই, তাই কোনো Gmail খোঁজা হয়নি। কোডের ঘর আছে এমন পাতায় এক্সটেনশন চাপুন।";
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
@@ -116,7 +117,7 @@ function setFoot(on) {
   if (foot) return;
   foot = el("div", "foot");
   const row = el("div", "frow");
-  if (host) {
+  if (host && !noBox) {
     const rf = el("button", "btn ref", "↻ রিফ্রেশ");
     rf.addEventListener("click", () => load(pageKind === "email" ? "refresh_email" : pageKind === "tfa" ? "tfa" : "refresh", rf));
     row.appendChild(rf);
@@ -135,7 +136,7 @@ function setFoot(on) {
   document.body.appendChild(foot);
 }
 function afterUnlock() {
-  if (!host) { note(NOPAGE); setFoot(true); } else load(pageKind);
+  if (!host) { note(NOPAGE); setFoot(true); } else if (noBox) { note(NOBOX); setFoot(true); } else load(pageKind);
 }
 function showLogin(msg) {
   tfaItems = [];
@@ -240,6 +241,14 @@ setInterval(() => {
   }
   host = u.hostname;
   hostEl.textContent = host;
-  try { const er = await chrome.tabs.sendMessage(tab.id, { type: "email" }); pageHint = (er && er.email) || ""; pageKind = (er && er.kind) || "full"; } catch (e) {}
+  let hasBox = false;
+  try { const er = await chrome.tabs.sendMessage(tab.id, { type: "email" }); pageHint = (er && er.email) || ""; pageKind = (er && er.kind) || "full"; hasBox = Boolean(er && er.box); } catch (e) {}
+  if (!hasBox) {
+    noBox = true;
+    note(NOBOX);
+    const st2 = await chrome.runtime.sendMessage({ type: "status" });
+    setFoot(Boolean(st2 && st2.unlocked));
+    return;
+  }
   load(pageKind);
 })();
