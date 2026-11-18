@@ -3753,6 +3753,10 @@ def ext_download():
             with open(p, 'r', encoding='utf-8') as f:
                 txt = f.read().replace('@@ORIGIN@@', origin)
             z.writestr('otp-extension/' + name, txt)
+        for icon in ('icon-192.png', 'icon-512.png'):
+            ip = os.path.join(app.root_path, 'static', 'icons', icon)
+            if os.path.isfile(ip):
+                z.write(ip, 'otp-extension/icons/' + icon)
     resp = Response(buf.getvalue(), mimetype='application/zip')
     resp.headers['Content-Disposition'] = 'attachment; filename="otp-extension.zip"'
     return _no_store(resp)
