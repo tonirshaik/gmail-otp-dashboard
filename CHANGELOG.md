@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.63.1 - 2026-11-18 (patch)
+- Update app.py
+
 ## v1.63.0 - 2026-11-18 (minor)
 - feat: extension popup does nothing on pages without a code box
 
