@@ -121,7 +121,7 @@
       if (!r.ok) return;
       var d = r.data || {};
       var code = "";
-      if (d.email && !d.expired && d.email.confidence === "high") code = d.email.code;
+      if (d.email && !d.email.expired && d.email.confidence === "high") code = d.email.code;
       else if (d.tfa && d.tfa.length === 1) {
         var x = d.tfa[0];   // ext_fill_v2: মেয়াদ ৩ সেকেন্ডের কম থাকলে পরের কোড বসাবে
         code = (x.remaining_ms != null && x.remaining_ms < 3000 && x.next_code) ? x.next_code : x.code;
