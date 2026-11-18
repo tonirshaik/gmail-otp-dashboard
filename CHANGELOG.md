@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.62.0 - 2026-11-18 (minor)
+- feat: bind extension token to device key
+
 ## v1.61.2 - 2026-11-18 (patch)
 - fix: include icons in extension zip download
 
