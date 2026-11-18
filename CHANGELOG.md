@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.60.0 - 2026-11-18 (minor)
+- feat: telegram /lock command to sign out all devices
+
 ## v1.59.0 - 2026-11-18 (minor)
 - feat: telegram /devices command with sign-out buttons
 
