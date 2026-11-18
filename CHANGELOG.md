@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.59.0 - 2026-11-18 (minor)
+- feat: telegram /devices command with sign-out buttons
+
 ## v1.58.1 - 2026-11-18 (patch)
 - chore: remove unused code (dead palette, unused constants, old ring css)
 
