@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.58.1 - 2026-11-18 (patch)
+- chore: remove unused code (dead palette, unused constants, old ring css)
+
 ## v1.58.0 - 2026-11-14 (minor)
 - feat(ui): add Tonir tag next to OTP Inbox brand
 
