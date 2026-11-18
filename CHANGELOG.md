@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.63.0 - 2026-11-18 (minor)
+- feat: extension popup does nothing on pages without a code box
+
 ## v1.62.0 - 2026-11-18 (minor)
 - feat: bind extension token to device key
 
