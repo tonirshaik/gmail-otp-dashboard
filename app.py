@@ -3189,7 +3189,7 @@ def totp_delete():
         return jsonify({"error": "Settings locked. Unlock first."}), 403
     if totp_collection is None:
         return jsonify({"error": "Database Not Connected!"}), 500
-    bad = bad = _settings_pw_check(_json_body())   # session unlock thakleo password lagbe
+    bad = _settings_pw_check(_json_body())   # session unlock thakleo password lagbe
     if bad is not None:
         return bad
     email_in = str(_json_body().get('email', '')).strip().lower()

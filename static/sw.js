@@ -156,7 +156,6 @@ self.addEventListener('notificationclick', (event) => {
         for (const c of list) {
             if ('focus' in c) {
                 await c.focus();
-                c.postMessage({ type: 'otp-click' });
                 return;
             }
         }
