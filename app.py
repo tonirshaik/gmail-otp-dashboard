@@ -3625,13 +3625,35 @@ def _ext_sign(payload):
     key = hashlib.sha256(b"ext-token|" + SECRET_KEY.encode("utf-8")).digest()
     return hmac.new(key, payload.encode("utf-8"), hashlib.sha256).hexdigest()
 
+_ext_nonces = {}
+_ext_nonce_lock = threading.Lock()
+
+def _b64u_dec(v):
+    v = str(v or "")
+    return base64.urlsafe_b64decode(v + "=" * (-len(v) % 4))
+
+def _b64u_enc(b):
+    return base64.urlsafe_b64encode(b).decode().rstrip("=")
+
+def _ext_pub_ok(pub_b64):
+    """P-256 public key (65 byte) thik ache kina."""
+    try:
+        from cryptography.hazmat.primitives.asymmetric import ec
+        raw = _b64u_dec(pub_b64)
+        if len(raw) != 65 or raw[0] != 4:
+            return False
+        ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), raw)
+        return True
+    except Exception:
+        return False
+
 def _ext_token_ok():
-    """Authorization: Bearer ... thik o meyad-er moddhe ache kina. Ei chabi shudhu /api/ext/code-e kaj kore."""
+    """Token + ei laptop-er chabir soi (device binding). Dutoi thik hole True."""
     h = request.headers.get("Authorization", "")
     if not h.startswith("Bearer "):
         return False
     parts = h[7:].strip().split(".")
-    if len(parts) != 3 or parts[0] != "ext":
+    if len(parts) != 4 or parts[0] != "ext":
         return False
     try:
         exp = int(parts[1])
@@ -3639,7 +3661,31 @@ def _ext_token_ok():
         return False
     if exp < time.time():
         return False
-    return hmac.compare_digest(_ext_sign("ext.%d" % exp), parts[2])
+    if not hmac.compare_digest(_ext_sign("ext.%d.%s" % (exp, parts[2])), parts[3]):
+        return False
+    try:
+        from cryptography.hazmat.primitives.asymmetric import ec
+        from cryptography.hazmat.primitives.asymmetric.utils import encode_dss_signature
+        from cryptography.hazmat.primitives import hashes
+        ts = int(request.headers.get("X-Ext-Ts", ""))
+        nonce = request.headers.get("X-Ext-Nonce", "")
+        sig = _b64u_dec(request.headers.get("X-Ext-Sig", ""))
+        if abs(time.time() - ts) > 60 or not re.fullmatch(r"[0-9a-f]{16,64}", nonce) or len(sig) != 64:
+            return False
+        key = ec.EllipticCurvePublicKey.from_encoded_point(ec.SECP256R1(), _b64u_dec(parts[2]))
+        data = ("%d.%s." % (ts, nonce)).encode("utf-8") + request.get_data()
+        key.verify(encode_dss_signature(int.from_bytes(sig[:32], "big"), int.from_bytes(sig[32:], "big")),
+                   data, ec.ECDSA(hashes.SHA256()))
+    except Exception:
+        return False
+    now = time.time()
+    with _ext_nonce_lock:
+        for k in [k for k, t in _ext_nonces.items() if now - t > 180]:
+            _ext_nonces.pop(k, None)
+        if nonce in _ext_nonces:
+            return False
+        _ext_nonces[nonce] = now
+    return True
 
 @app.route('/api/ext/login', methods=['POST'])
 def ext_login():
@@ -3653,8 +3699,12 @@ def ext_login():
     password = _json_body().get('password')
     if password and pw_equal(password, MASTER_PASSWORD):
         clear_fails(bucket)
+        pub = str(_json_body().get('pub') or '')
+        if not _ext_pub_ok(pub):
+            return jsonify({"error": "Device key missing. Reinstall the latest extension."}), 400
+        pub = _b64u_enc(_b64u_dec(pub))
         exp = int(time.time()) + EXT_TOKEN_TTL
-        token = "ext.%d.%s" % (exp, _ext_sign("ext.%d" % exp))
+        token = "ext.%d.%s.%s" % (exp, pub, _ext_sign("ext.%d.%s" % (exp, pub)))
         return _no_store(jsonify({"token": token, "expires_at": exp}))
     all_locked, _ = register_fail('login-all', LOGIN_GLOBAL_MAX)
     locked, left = register_fail(bucket)

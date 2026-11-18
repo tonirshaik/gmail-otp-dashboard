@@ -1,5 +1,55 @@
 const DASH = "@@ORIGIN@@";
 const KEY = "otpTok";
+const enc = new TextEncoder();
+
+function b64u(buf) {
+  let s = "";
+  new Uint8Array(buf).forEach((b) => { s += String.fromCharCode(b); });
+  return btoa(s).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open("otpdev", 1);
+    r.onupgradeneeded = () => { r.result.createObjectStore("k"); };
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+
+let keyP = null;
+function devKey() {
+  if (!keyP) {
+    keyP = (async () => {
+      const db = await idb();
+      const got = await new Promise((res, rej) => {
+        const q = db.transaction("k").objectStore("k").get("main");
+        q.onsuccess = () => res(q.result);
+        q.onerror = () => rej(q.error);
+      });
+      if (got && got.privateKey && got.publicKey) return got;
+      const kp = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
+      await new Promise((res, rej) => {
+        const tx = db.transaction("k", "readwrite");
+        tx.objectStore("k").put(kp, "main");
+        tx.oncomplete = () => res();
+        tx.onerror = () => rej(tx.error);
+      });
+      return kp;
+    })().catch((e) => { keyP = null; throw e; });
+  }
+  return keyP;
+}
+
+async function signHeaders(body) {
+  const kp = await devKey();
+  const ts = String(Math.floor(Date.now() / 1000));
+  const nb = new Uint8Array(12);
+  crypto.getRandomValues(nb);
+  const nonce = Array.from(nb).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const sig = await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, kp.privateKey, enc.encode(ts + "." + nonce + "." + body));
+  return { "X-Ext-Ts": ts, "X-Ext-Nonce": nonce, "X-Ext-Sig": b64u(sig) };
+}
 
 async function getTok() {
   try {
@@ -15,11 +65,13 @@ async function api(host, mode, hint) {
   const t = await getTok();
   if (!t) return { ok: false, status: 401, data: { error: "locked" } };
   try {
+    const body = JSON.stringify({ host: host, mode: mode || "full", hint: hint || "" });
+    const sh = await signHeaders(body);
     const r = await fetch(DASH + "/api/ext/code", {
       method: "POST",
       credentials: "omit",
-      headers: { "Content-Type": "application/json", "Authorization": "Bearer " + t.token },
-      body: JSON.stringify({ host: host, mode: mode || "full", hint: hint || "" })
+      headers: Object.assign({ "Content-Type": "application/json", "Authorization": "Bearer " + t.token }, sh),
+      body: body
     });
     let data = {};
     try { data = await r.json(); } catch (e) {}
@@ -32,11 +84,13 @@ async function api(host, mode, hint) {
 
 async function login(password) {
   try {
+    const kp = await devKey();
+    const pub = b64u(await crypto.subtle.exportKey("raw", kp.publicKey));
     const r = await fetch(DASH + "/api/ext/login", {
       method: "POST",
       credentials: "omit",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password: password })
+      body: JSON.stringify({ password: password, pub: pub })
     });
     let data = {};
     try { data = await r.json(); } catch (e) {}
