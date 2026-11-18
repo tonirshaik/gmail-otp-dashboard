@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.61.1 - 2026-11-18 (patch)
+- fix: extension skips expired email code on autofill
+
 ## v1.61.0 - 2026-11-18 (minor)
 - feat: extension icon from app icon
 
