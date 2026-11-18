@@ -59,7 +59,7 @@
   }
 
   function pageEmail() {
-    if (!/(^|\.)google\.com$/.test(location.hostname)) return "";
+    if (!/(^|\.)google\.com$/.test(location.hostname)) return sentEmail();
     var found = {}, i;
     var els = document.querySelectorAll("[data-email],[data-identifier]");
     for (i = 0; i < els.length; i++) {
@@ -73,7 +73,14 @@
     var k = Object.keys(found);
     return k.length === 1 ? k[0] : "";
   }
+  function sentEmail() {
+    var t = "";
+    try { t = (document.body.innerText || "").slice(0, 8000); } catch (e) {}
+    var m = t.match(/(?:sent|emailed|send)[^\n]{0,100}?\b(?:to|at)\s+([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,})/i);
+    return m ? m[1].toLowerCase() : "";
+  }
   function pageKind() {
+    if (sentEmail()) return "email";
     var t = "";
     try { t = (document.body.innerText || "").slice(0, 6000).toLowerCase(); } catch (e) {}
     var tfa = /authenticator|authentication app|two[- ]?factor|\b2fa\b|totp|অথেনটিকেটর|অথেন্টিকেটর/.test(t);
