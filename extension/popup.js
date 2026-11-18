@@ -1,7 +1,7 @@
 const DASH = "@@ORIGIN@@";
 const box = document.getElementById("box");
 const hostEl = document.getElementById("host");
-let tab = null, host = "", pageHint = "", foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
+let tab = null, host = "", pageHint = "", pageKind = "full", foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
 const NOPAGE = "এই পাতায় কাজ করে না। কোনো https সাইটে খুলুন।";
 
 function el(tag, cls, text) {
@@ -118,7 +118,7 @@ function setFoot(on) {
   const row = el("div", "frow");
   if (host) {
     const rf = el("button", "btn ref", "↻ রিফ্রেশ");
-    rf.addEventListener("click", () => load("refresh", rf));
+    rf.addEventListener("click", () => load(pageKind === "email" ? "refresh_email" : pageKind === "tfa" ? "tfa" : "refresh", rf));
     row.appendChild(rf);
   }
   const lk = el("button", "btn", "লক করুন");
@@ -135,7 +135,7 @@ function setFoot(on) {
   document.body.appendChild(foot);
 }
 function afterUnlock() {
-  if (!host) { note(NOPAGE); setFoot(true); } else load("full");
+  if (!host) { note(NOPAGE); setFoot(true); } else load(pageKind);
 }
 function showLogin(msg) {
   tfaItems = [];
@@ -178,6 +178,7 @@ function showLogin(msg) {
 async function load(mode, btn) {
   if (busy) return;
   busy = true;
+  const quiet = mode === "refresh" || mode === "refresh_email" || (mode === "tfa" && tfaItems.length > 0);
   let msg = "";
   if (btn) {
     btn.dataset.t = btn.dataset.t || btn.textContent;
@@ -187,12 +188,12 @@ async function load(mode, btn) {
   try {
     const r = await chrome.runtime.sendMessage({ type: "get", host: host, mode: mode, hint: pageHint });
     const t1 = Date.now();
-    if (!r || r.status === 0) { if (mode === "full") note("ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।"); else msg = "সার্ভার পাইনি"; return; }
+    if (!r || r.status === 0) { if (!quiet) note("ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।"); else msg = "সার্ভার পাইনি"; return; }
     if (r.status === 401) { setFoot(false); showLogin(""); return; }
-    if (r.status === 429) { if (mode === "full") note("একটু পরে আবার চেষ্টা করুন।"); else msg = "একটু পরে চাপুন"; return; }
-    if (!r.ok) { if (mode === "full") note((r.data && r.data.error) || "কোড আনা যায়নি।"); else msg = "হয়নি"; return; }
+    if (r.status === 429) { if (!quiet) note("একটু পরে আবার চেষ্টা করুন।"); else msg = "একটু পরে চাপুন"; return; }
+    if (!r.ok) { if (!quiet) note((r.data && r.data.error) || "কোড আনা যায়নি।"); else msg = "হয়নি"; return; }
     setFoot(true);
-    if (mode === "tfa") patchTfa(r.data.tfa, t1);
+    if (mode === "tfa" && tfaItems.length) patchTfa(r.data.tfa, t1);
     else if (sig(r.data) === curSig) patch(r.data, t1);
     else render(r.data, t1);
     if (btn) msg = "হয়েছে";
@@ -239,6 +240,6 @@ setInterval(() => {
   }
   host = u.hostname;
   hostEl.textContent = host;
-  try { const er = await chrome.tabs.sendMessage(tab.id, { type: "email" }); pageHint = (er && er.email) || ""; } catch (e) {}
-  load("full");
+  try { const er = await chrome.tabs.sendMessage(tab.id, { type: "email" }); pageHint = (er && er.email) || ""; pageKind = (er && er.kind) || "full"; } catch (e) {}
+  load(pageKind);
 })();

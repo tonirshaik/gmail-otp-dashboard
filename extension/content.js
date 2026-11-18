@@ -73,6 +73,15 @@
     var k = Object.keys(found);
     return k.length === 1 ? k[0] : "";
   }
+  function pageKind() {
+    var t = "";
+    try { t = (document.body.innerText || "").slice(0, 6000).toLowerCase(); } catch (e) {}
+    var tfa = /authenticator|authentication app|two[- ]?factor|\b2fa\b|totp|অথেনটিকেটর|অথেন্টিকেটর/.test(t);
+    var mail = /check your (e-?mail|inbox)|(sent|emailed)[^.\n]{0,60}(e-?mail|inbox)|(e-?mail|inbox)[^.\n]{0,40}(code|otp)|ইমেইল|ইমেল/.test(t);
+    if (tfa && !mail) return "tfa";
+    if (mail && !tfa) return "email";
+    return "full";
+  }
   function stop(finish) {
     if (timer) { clearInterval(timer); timer = null; }
     if (finish) {
@@ -83,7 +92,7 @@
   function ask() {
     return new Promise(function (res) {
       try {
-        chrome.runtime.sendMessage({ type: "get", hint: pageEmail() }, function (r) {
+        chrome.runtime.sendMessage({ type: "get", mode: pageKind(), hint: pageEmail() }, function (r) {
           void chrome.runtime.lastError;
           res(r);
         });
@@ -126,7 +135,7 @@
   }
 
   chrome.runtime.onMessage.addListener(function (m, s, send) {
-    if (m && m.type === "email") { send({ email: pageEmail() }); return; }
+    if (m && m.type === "email") { send({ email: pageEmail(), kind: pageKind() }); return; }
     if (m && m.type === "fill" && typeof m.code === "string" && CODE_OK.test(m.code)) {
       var t = findTargets();
       send({ ok: !!(t && fill(t, m.code, true)) });

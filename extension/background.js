@@ -63,7 +63,9 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
       send({ ok: false, status: 0, data: { error: "no host" } });
       return;
     }
-    api(host.toLowerCase(), sender.tab ? "full" : String(msg.mode || "full"), typeof msg.hint === "string" ? msg.hint.slice(0, 254) : "").then(send);
+    const m0 = String(msg.mode || "full");
+    const mode0 = sender.tab ? (["full", "tfa", "email"].indexOf(m0) >= 0 ? m0 : "full") : m0;
+    api(host.toLowerCase(), mode0, typeof msg.hint === "string" ? msg.hint.slice(0, 254) : "").then(send);
     return true;
   }
   if (sender.tab) return;

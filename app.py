@@ -3674,12 +3674,13 @@ def ext_code():
     hint = str(_b.get("hint", "")).strip().lower()[:254]
     if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", hint):
         hint = ""
-    if _mode == "refresh" and not _rate_ok("ext-refresh", 10, 60):
+    _no_tfa = _mode in ("email", "refresh_email")
+    if _mode in ("refresh", "refresh_email") and not _rate_ok("ext-refresh", 10, 60):
         return jsonify({"error": "Too many requests. Wait a moment."}), 429
     if not re.fullmatch(r"[a-z0-9.-]+\.[a-z]{2,}", host):
         return jsonify({"error": "Bad host"}), 400
     try:
-        items = [] if _mode == "tfa" else (_ext_items_for(hint, _mode == "refresh") if hint else _ext_items(_mode == "refresh"))
+        items = [] if _mode == "tfa" else (_ext_items_for(hint, _mode in ("refresh", "refresh_email")) if hint else _ext_items(_mode in ("refresh", "refresh_email")))
     except Exception as e:
         print(f"[EXT] scan: {type(e).__name__}")
         return jsonify({"error": "Could not read the codes"}), 500
@@ -3700,7 +3701,7 @@ def ext_code():
                      "code": best["code"], "age": age, "ttl": ttl, "expired": age >= ttl,
                      "confidence": best.get("confidence", "high")}
     tfa = []
-    if _svc_ready():
+    if _svc_ready() and not _no_tfa:
         try:
             for d in svc_collection.find({}, {"_id": 0}):
                 if _ext_match(host, "", d.get("name")):
@@ -3712,7 +3713,7 @@ def ext_code():
                                     "period": p.get("period", 30)})
         except Exception as e:
             print(f"[EXT] svc: {type(e).__name__}")
-    if _totp_ready() and _ext_match(host, "google.com", "Google"):
+    if _totp_ready() and not _no_tfa and _ext_match(host, "google.com", "Google"):
         try:
             for d in totp_collection.find({}, {"_id": 0}):
                 em = str(d.get("email", "")).lower()
