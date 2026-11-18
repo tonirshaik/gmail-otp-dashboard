@@ -1890,6 +1890,17 @@ def _tg_handle_device_out(sid):
     except Exception as e:
         print("[TG-DEVICES] signout error: " + type(e).__name__)
 
+# tg_lock_v1: Telegram-e "/lock" -- joruri obosthay shob device ekbare sign-out
+def _tg_handle_lock():
+    try:
+        if sessions_collection is None:
+            _tg_reply("Database not connected.")
+            return
+        r = sessions_collection.delete_many({})
+        _tg_reply("\U0001f512 <b>Locked.</b> %d device(s) signed out.\nLogin again with your password." % r.deleted_count)
+    except Exception as e:
+        print("[TG-LOCK] error: " + type(e).__name__)
+
 def _tg_handle_callback(cb_id, data):
     try:
         if cb_id:
@@ -1926,12 +1937,14 @@ def telegram_webhook():
     if not _rate_ok("tg-cmd", 20, 60):
         return jsonify({"ok": True})
     text = str(msg.get("text") or "").strip()
-    m = re.match(r"^/(code|2fa|devices|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
+    m = re.match(r"^/(code|2fa|devices|lock|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
     if m:
         if m.group(1) == "2fa":
             threading.Thread(target=_tg_handle_2fa, args=(m.group(2) or "",), daemon=True).start()
         elif m.group(1) == "devices":
             threading.Thread(target=_tg_handle_devices, daemon=True).start()
+        elif m.group(1) == "lock":
+            threading.Thread(target=_tg_handle_lock, daemon=True).start()
         else:
             threading.Thread(target=_tg_handle_code, args=((m.group(2) or "") if m.group(1) == "code" else "",), daemon=True).start()
     return jsonify({"ok": True})
@@ -1951,6 +1964,7 @@ def _tg_register_webhook():
                     {"command": "code", "description": "\U0001f4e7 Gmail-er OTP code"},
                     {"command": "2fa", "description": "\U0001f510 2FA code (Gmail / Service)"},
                     {"command": "devices", "description": "\U0001f5a5 Logged-in devices / sign out"},
+                    {"command": "lock", "description": "\U0001f512 Sign out all devices now"},
                 ]
                 _tg_call("setMyCommands", {"commands": cmds, "scope": {"type": "chat", "chat_id": cid}})
                 _tg_call("setChatMenuButton", {"chat_id": cid, "menu_button": {"type": "commands"}})
