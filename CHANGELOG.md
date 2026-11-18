@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.60.2 - 2026-11-18 (patch)
+- fix: extension page-wise code type (2FA only / Gmail only)
+
 ## v1.60.1 - 2026-11-18 (patch)
 - fix: signed-out device gets expired event on live stream within ~5s
 
