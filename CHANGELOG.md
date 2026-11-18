@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.61.0 - 2026-11-18 (minor)
+- feat: extension icon from app icon
+
 ## v1.60.4 - 2026-11-18 (patch)
 - fix: extension auto-fill never scans all Gmail when email unknown
 
