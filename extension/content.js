@@ -99,7 +99,9 @@
   function ask() {
     return new Promise(function (res) {
       try {
-        chrome.runtime.sendMessage({ type: "get", mode: pageKind(), hint: pageEmail() }, function (r) {
+        var h = pageEmail(), k = pageKind();
+        if (!h) { if (k === "email") { res(null); return; } k = "tfa"; }
+        chrome.runtime.sendMessage({ type: "get", mode: k, hint: h }, function (r) {
           void chrome.runtime.lastError;
           res(r);
         });
