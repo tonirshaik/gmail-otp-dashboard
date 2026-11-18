@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.61.2 - 2026-11-18 (patch)
+- fix: include icons in extension zip download
+
 ## v1.61.1 - 2026-11-18 (patch)
 - fix: extension skips expired email code on autofill
 
