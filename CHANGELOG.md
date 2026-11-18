@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.60.3 - 2026-11-18 (patch)
+- fix: extension detects 'sent to email' on page, scans only that Gmail
+
 ## v1.60.2 - 2026-11-18 (patch)
 - fix: extension page-wise code type (2FA only / Gmail only)
 
