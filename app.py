@@ -3768,6 +3768,7 @@ def stream():
     if not ENABLE_PUSH and not _waiters:             # ENABLE_PUSH=0 hole shudhu ⏳ watch cholar somoy
         return jsonify({"error": "Push disabled"}), 503
     q = queue.Queue(maxsize=100)
+    my_sid = session.get('sid')   # tg_lock_live_v1
     with _subs_lock:
         if len(_subs) >= MAX_SUBSCRIBERS:
             return jsonify({"error": "Too many live connections"}), 503
@@ -3779,13 +3780,20 @@ def stream():
             yield "retry: 3000\n\n"
             yield "event: hello\ndata: {}\n\n"
             while time.time() - started < STREAM_MAX_SECONDS:
+                if my_sid and sessions_collection is not None:   # tg_lock_live_v1: /lock বা sign-out হলে সঙ্গে সঙ্গে জানাবে
+                    try:
+                        if sessions_collection.find_one({"_id": my_sid}, {"_id": 1}) is None:
+                            yield "event: expired\ndata: {}\n\n"
+                            break
+                    except Exception:
+                        pass
                 if time.time() - _last_user_activity > IDLE_TIMEOUT:
                     yield "event: expired\ndata: {}\n\n"      # kew kaj kortese na -> stream bondho
                     break
                 if not ENABLE_PUSH and not _waiters:         # ⏳ watch shesh -> stream-o bondho
                     break
                 try:
-                    msg = q.get(timeout=15)
+                    msg = q.get(timeout=5)
                     yield f"event: otp\ndata: {msg}\n\n"
                 except queue.Empty:
                     yield ": ping\n\n"             # connection jiye rakhe
