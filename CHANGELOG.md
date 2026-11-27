@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.71.1 - 2026-11-27 (patch)
+- perf: make HUD card decorations static
+
 ## v1.71.0 - 2026-11-27 (minor)
 - feat: shield pulse + signal bars on account cards (replaces radar)
 
