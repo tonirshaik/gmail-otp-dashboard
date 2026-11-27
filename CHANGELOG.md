@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.70.0 - 2026-11-27 (minor)
+- feat: HUD-style animated account cards (dark theme)
+
 ## v1.69.0 - 2026-11-27 (minor)
 - feat: HUD style sidebar (numbers, node line, status box)
 
