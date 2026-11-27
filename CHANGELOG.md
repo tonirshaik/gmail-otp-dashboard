@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.68.0 - 2026-11-27 (minor)
+- feat: animated security tech dashboard background
+
 ## v1.67.2 - 2026-11-27 (patch)
 - fix: new shield and fingerprint animated background
 
