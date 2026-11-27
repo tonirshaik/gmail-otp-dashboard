@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.72.0 - 2026-11-27 (minor)
+- feat: animate HUD decorations only on pinned account cards
+
 ## v1.71.1 - 2026-11-27 (patch)
 - perf: make HUD card decorations static
 
