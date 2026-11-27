@@ -1484,3 +1484,43 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
 
 /* login-btn-clean */
 #loginSection #loginForm .btn-primary,#loginSection #loginForm #passkeyLoginBtn{box-shadow:none !important;outline:0 !important}
+/* bg-rainbow-core */
+:root[data-theme=dark] body:has(#dashboardSection:not(.hidden)) {
+  background-color: #08090D !important;
+}
+:root[data-theme=dark] body:has(#dashboardSection:not(.hidden))::before {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  left: 58%;
+  top: 50%;
+  width: min(80vw, 620px);
+  height: min(80vw, 620px);
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #B6FF5C, #22D3EE, #7C5CFF, #FF4FA3, #B6FF5C);
+  filter: blur(90px);
+  opacity: .30;
+  pointer-events: none;
+}
+:root[data-theme=dark] body:has(#dashboardSection:not(.hidden))::after {
+  content: "";
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background-image: radial-gradient(rgba(255,255,255,.07) 1px, transparent 1px);
+  background-size: 20px 20px;
+  pointer-events: none;
+}
+:root[data-theme=dark] .otp-card,
+:root[data-theme=dark] .otp-card.is-expired,
+:root[data-theme=dark] .otp-card.is-used {
+  background: rgba(14, 16, 23, .82) !important;
+}
+@media (min-width: 1024px) {
+  :root[data-theme=dark] .app-nav {
+    background: rgba(10, 12, 17, .72) !important;
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+  }
+}
