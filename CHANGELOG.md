@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.73.0 - 2026-11-27 (minor)
+- feat: animate HUD decorations on home page cards
+
 ## v1.72.0 - 2026-11-27 (minor)
 - feat: animate HUD decorations only on pinned account cards
 
