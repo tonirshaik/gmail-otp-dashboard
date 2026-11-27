@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.66.0 - 2026-11-27 (minor)
+- feat: HUD dashboard background
+
 ## v1.65.0 - 2026-11-27 (minor)
 - feat: neon snowflake dashboard background
 
