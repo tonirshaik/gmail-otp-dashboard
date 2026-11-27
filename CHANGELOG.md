@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.69.0 - 2026-11-27 (minor)
+- feat: HUD style sidebar (numbers, node line, status box)
+
 ## v1.68.0 - 2026-11-27 (minor)
 - feat: animated security tech dashboard background
 
