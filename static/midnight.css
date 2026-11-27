@@ -1485,16 +1485,21 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
 /* login-btn-clean */
 #loginSection #loginForm .btn-primary,#loginSection #loginForm #passkeyLoginBtn{box-shadow:none !important;outline:0 !important}
 
-/* bg-snow-neon */
+/* bg-hud */
 :root[data-theme=dark] body:has(#dashboardSection:not(.hidden)) {
-  background-color: #080C10 !important;
+  --m-accent: #22D3EE;
+  --accent-cyan: #22D3EE;
+  --accent-blue: #22D3EE;
+  --gradient-primary: #22D3EE;
+  --gradient-btn: #22D3EE;
+  background-color: #06131B !important;
 }
 :root[data-theme=dark] body:has(#dashboardSection:not(.hidden))::before {
   content: "";
   position: fixed;
   z-index: -1;
   inset: 0;
-  background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20800%20800%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cdefs%3E%3Cg%20id%3D%22arm%22%20fill%3D%22none%22%20stroke-linecap%3D%22round%22%3E%3Cline%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%22-62%22%2F%3E%3Ccircle%20cx%3D%220%22%20cy%3D%22-67%22%20r%3D%225%22%2F%3E%3Cpolyline%20points%3D%220%2C-20%20-13%2C-33%22%2F%3E%3Cpolyline%20points%3D%220%2C-20%2013%2C-33%22%2F%3E%3Cpolyline%20points%3D%220%2C-38%20-11%2C-50%22%2F%3E%3Cpolyline%20points%3D%220%2C-38%2011%2C-50%22%2F%3E%3Ccircle%20cx%3D%22-13%22%20cy%3D%22-33%22%20r%3D%222.2%22%2F%3E%3Ccircle%20cx%3D%2213%22%20cy%3D%22-33%22%20r%3D%222.2%22%2F%3E%3C%2Fg%3E%3Cg%20id%3D%22flake%22%3E%3Cuse%20href%3D%22%23arm%22%2F%3E%3Cuse%20href%3D%22%23arm%22%20transform%3D%22rotate%2860%29%22%2F%3E%3Cuse%20href%3D%22%23arm%22%20transform%3D%22rotate%28120%29%22%2F%3E%3Cuse%20href%3D%22%23arm%22%20transform%3D%22rotate%28180%29%22%2F%3E%3Cuse%20href%3D%22%23arm%22%20transform%3D%22rotate%28240%29%22%2F%3E%3Cuse%20href%3D%22%23arm%22%20transform%3D%22rotate%28300%29%22%2F%3E%3Ccircle%20r%3D%226%22%20fill%3D%22none%22%2F%3E%3C%2Fg%3E%3C%2Fdefs%3E%3Cg%20stroke%3D%22%2319E3D3%22%20stroke-width%3D%221.6%22%3E%3Cuse%20href%3D%22%23flake%22%20transform%3D%22translate%28600%20160%29%20scale%281.6%29%20rotate%280%29%22%20opacity%3D%220.95%22%2F%3E%3Cuse%20href%3D%22%23flake%22%20transform%3D%22translate%28330%20520%29%20scale%281.3%29%20rotate%2815%29%22%20opacity%3D%220.45%22%2F%3E%3Cuse%20href%3D%22%23flake%22%20transform%3D%22translate%28220%20140%29%20scale%281.0%29%20rotate%2830%29%22%20opacity%3D%220.28%22%2F%3E%3Cuse%20href%3D%22%23flake%22%20transform%3D%22translate%28700%20640%29%20scale%281.2%29%20rotate%288%29%22%20opacity%3D%220.3%22%2F%3E%3Cuse%20href%3D%22%23flake%22%20transform%3D%22translate%28110%20680%29%20scale%281.1%29%20rotate%2840%29%22%20opacity%3D%220.18%22%2F%3E%3Cuse%20href%3D%22%23flake%22%20transform%3D%22translate%28120%20380%29%20scale%281.0%29%20rotate%2820%29%22%20opacity%3D%220.35%22%2F%3E%3Cuse%20href%3D%22%23flake%22%20transform%3D%22translate%28470%20330%29%20scale%280.9%29%20rotate%2850%29%22%20opacity%3D%220.22%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") center / cover no-repeat;
+  background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20700%20420%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cg%20stroke%3D%22%235FD6E8%22%20fill%3D%22none%22%20stroke-width%3D%221%22%3E%3Cpath%20opacity%3D%22.10%22%20d%3D%22M0%2070H700M0%20140H700M0%20210H700M0%20280H700M0%20350H700M70%200V420M140%200V420M210%200V420M280%200V420M350%200V420M420%200V420M490%200V420M560%200V420M630%200V420%22%2F%3E%3Cg%20opacity%3D%22.55%22%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%22150%22%20stroke-dasharray%3D%222%206%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%22112%22%20opacity%3D%22.7%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%2270%22%20opacity%3D%22.9%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%2222%22%20opacity%3D%22.9%22%2F%3E%3Cpath%20opacity%3D%22.35%22%20d%3D%22M350%2040V380M180%20210H520%22%2F%3E%3C%2Fg%3E%3Cg%20opacity%3D%22.6%22%3E%3CanimateTransform%20attributeName%3D%22transform%22%20type%3D%22rotate%22%20from%3D%220%20350%20210%22%20to%3D%22360%20350%20210%22%20dur%3D%2240s%22%20repeatCount%3D%22indefinite%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%22135%22%20stroke-dasharray%3D%2214%2010%203%2010%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%2290%22%20stroke-dasharray%3D%2240%2014%22%2F%3E%3C%2Fg%3E%3Cg%20opacity%3D%22.6%22%3E%3CanimateTransform%20attributeName%3D%22transform%22%20type%3D%22rotate%22%20from%3D%22360%20350%20210%22%20to%3D%220%20350%20210%22%20dur%3D%2228s%22%20repeatCount%3D%22indefinite%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%22165%22%20stroke-dasharray%3D%221%205%22%2F%3E%3Cpath%20fill%3D%22%235FD6E8%22%20d%3D%22M350%2060l8%2014h-16zM350%20360l8-14h-16zM200%20210l14%208v-16zM500%20210l-14%208v-16z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20fill%3D%22%235FD6E8%22%20opacity%3D%22.35%22%3E%3Crect%20x%3D%2230%22%20y%3D%2240%22%20width%3D%2290%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2252%22%20width%3D%2260%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2264%22%20width%3D%2275%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2276%22%20width%3D%2250%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22580%22%20y%3D%2260%22%20width%3D%2290%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22580%22%20y%3D%2272%22%20width%3D%2270%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22580%22%20y%3D%2284%22%20width%3D%2280%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22580%22%20y%3D%2296%22%20width%3D%2255%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22590%22%20y%3D%22300%22%20width%3D%2280%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22590%22%20y%3D%22312%22%20width%3D%2264%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22590%22%20y%3D%22324%22%20width%3D%2272%22%20height%3D%222%22%2F%3E%3C%2Fg%3E%3Cg%20fill%3D%22%2322D3EE%22%20opacity%3D%22.85%22%3E%3Crect%20x%3D%22470%22%20y%3D%22110%22%20width%3D%22110%22%20height%3D%229%22%2F%3E%3Crect%20x%3D%22470%22%20y%3D%22126%22%20width%3D%22110%22%20height%3D%229%22%2F%3E%3Crect%20x%3D%22130%22%20y%3D%22290%22%20width%3D%2290%22%20height%3D%229%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E") center / cover no-repeat;
   pointer-events: none;
 }
 :root[data-theme=dark] body:has(#dashboardSection:not(.hidden))::after {
@@ -1502,19 +1507,30 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
   position: fixed;
   z-index: -1;
   inset: 0;
-  background: radial-gradient(ellipse 80% 80% at 60% 40%, transparent 30%, rgba(8,12,16,.75) 100%);
+  background: radial-gradient(ellipse 85% 85% at 55% 45%, rgba(6,19,27,.15) 0%, rgba(6,19,27,.8) 100%);
   pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme=dark] body:has(#dashboardSection:not(.hidden))::before {
+    background-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%20700%20420%22%20preserveAspectRatio%3D%22xMidYMid%20slice%22%3E%3Cg%20stroke%3D%22%235FD6E8%22%20fill%3D%22none%22%20stroke-width%3D%221%22%3E%3Cpath%20opacity%3D%22.10%22%20d%3D%22M0%2070H700M0%20140H700M0%20210H700M0%20280H700M0%20350H700M70%200V420M140%200V420M210%200V420M280%200V420M350%200V420M420%200V420M490%200V420M560%200V420M630%200V420%22%2F%3E%3Cg%20opacity%3D%22.55%22%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%22150%22%20stroke-dasharray%3D%222%206%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%22112%22%20opacity%3D%22.7%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%2270%22%20opacity%3D%22.9%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%2222%22%20opacity%3D%22.9%22%2F%3E%3Cpath%20opacity%3D%22.35%22%20d%3D%22M350%2040V380M180%20210H520%22%2F%3E%3C%2Fg%3E%3Cg%20opacity%3D%22.6%22%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%22135%22%20stroke-dasharray%3D%2214%2010%203%2010%22%2F%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%2290%22%20stroke-dasharray%3D%2240%2014%22%2F%3E%3C%2Fg%3E%3Cg%20opacity%3D%22.6%22%3E%3Ccircle%20cx%3D%22350%22%20cy%3D%22210%22%20r%3D%22165%22%20stroke-dasharray%3D%221%205%22%2F%3E%3Cpath%20fill%3D%22%235FD6E8%22%20d%3D%22M350%2060l8%2014h-16zM350%20360l8-14h-16zM200%20210l14%208v-16zM500%20210l-14%208v-16z%22%2F%3E%3C%2Fg%3E%3C%2Fg%3E%3Cg%20fill%3D%22%235FD6E8%22%20opacity%3D%22.35%22%3E%3Crect%20x%3D%2230%22%20y%3D%2240%22%20width%3D%2290%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2252%22%20width%3D%2260%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2264%22%20width%3D%2275%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%2230%22%20y%3D%2276%22%20width%3D%2250%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22580%22%20y%3D%2260%22%20width%3D%2290%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22580%22%20y%3D%2272%22%20width%3D%2270%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22580%22%20y%3D%2284%22%20width%3D%2280%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22580%22%20y%3D%2296%22%20width%3D%2255%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22590%22%20y%3D%22300%22%20width%3D%2280%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22590%22%20y%3D%22312%22%20width%3D%2264%22%20height%3D%222%22%2F%3E%3Crect%20x%3D%22590%22%20y%3D%22324%22%20width%3D%2272%22%20height%3D%222%22%2F%3E%3C%2Fg%3E%3Cg%20fill%3D%22%2322D3EE%22%20opacity%3D%22.85%22%3E%3Crect%20x%3D%22470%22%20y%3D%22110%22%20width%3D%22110%22%20height%3D%229%22%2F%3E%3Crect%20x%3D%22470%22%20y%3D%22126%22%20width%3D%22110%22%20height%3D%229%22%2F%3E%3Crect%20x%3D%22130%22%20y%3D%22290%22%20width%3D%2290%22%20height%3D%229%22%2F%3E%3C%2Fg%3E%3C%2Fsvg%3E");
+  }
 }
 :root[data-theme=dark] .otp-card,
 :root[data-theme=dark] .otp-card.is-expired,
 :root[data-theme=dark] .otp-card.is-used {
-  background: rgba(10, 14, 19, .86) !important;
-  border-color: rgba(25, 227, 211, .18) !important;
+  --otp-card-accent: #22D3EE;
+  background: rgba(7, 18, 26, .88) !important;
+  border-color: rgba(95, 214, 232, .3) !important;
+}
+:root[data-theme=dark] .otp-card .ch,
+:root[data-theme=dark] .otp-card .otp-code-box.has-cells:hover .ch {
+  background: rgba(34, 211, 238, .06) !important;
+  border-color: rgba(95, 214, 232, .3) !important;
 }
 @media (min-width: 1024px) {
   :root[data-theme=dark] .app-nav {
-    background: rgba(8, 11, 15, .78) !important;
-    border-right-color: rgba(25, 227, 211, .15) !important;
+    background: rgba(6, 16, 23, .8) !important;
+    border-right-color: rgba(95, 214, 232, .2) !important;
     -webkit-backdrop-filter: blur(12px);
     backdrop-filter: blur(12px);
   }
