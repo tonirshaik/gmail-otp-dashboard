@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.73.1 - 2026-11-27 (patch)
+- fix: phone-size HUD background (shield no longer cut off)
+
 ## v1.73.0 - 2026-11-27 (minor)
 - feat: animate HUD decorations on home page cards
 
