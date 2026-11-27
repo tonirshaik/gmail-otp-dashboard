@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.67.0 - 2026-11-27 (minor)
+- feat: snowflake card background
+
 ## v1.66.0 - 2026-11-27 (minor)
 - feat: HUD dashboard background
 
