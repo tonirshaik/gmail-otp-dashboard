@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.70.1 - 2026-11-27 (patch)
+- fix: HUD card background layer size
+
 ## v1.70.0 - 2026-11-27 (minor)
 - feat: HUD-style animated account cards (dark theme)
 
