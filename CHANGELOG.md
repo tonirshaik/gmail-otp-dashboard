@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.65.0 - 2026-11-27 (minor)
+- feat: neon snowflake dashboard background
+
 ## v1.64.0 - 2026-11-27 (minor)
 - feat: rainbow core dashboard background
 
