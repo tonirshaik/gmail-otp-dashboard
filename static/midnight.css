@@ -1698,3 +1698,21 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
   background-size: 12px 2px, 2px 12px, 12px 2px, 2px 12px, 12px 2px, 2px 12px, 12px 2px, 2px 12px, auto 100%, 16px 16px !important;
   background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat !important;
 }
+
+/* hud-card-lite */
+:root[data-theme=dark] .otp-card::before {
+  background-image: linear-gradient(#22d3ee,#22d3ee),
+    linear-gradient(#22d3ee,#22d3ee),
+    linear-gradient(#22d3ee,#22d3ee),
+    linear-gradient(#22d3ee,#22d3ee),
+    linear-gradient(#22d3ee,#22d3ee),
+    linear-gradient(#22d3ee,#22d3ee),
+    linear-gradient(#22d3ee,#22d3ee),
+    linear-gradient(#22d3ee,#22d3ee),
+    radial-gradient(rgba(47,140,255,.16) 1px, transparent 1.5px) !important;
+  background-position: left 6px top 6px, left 6px top 6px, right 6px top 6px, right 6px top 6px, left 6px bottom 6px, left 6px bottom 6px, right 6px bottom 6px, right 6px bottom 6px, 0 0 !important;
+  background-size: 12px 2px, 2px 12px, 12px 2px, 2px 12px, 12px 2px, 2px 12px, 12px 2px, 2px 12px, 16px 16px !important;
+  background-repeat: no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, no-repeat, repeat !important;
+}
+:root[data-theme=dark] .otp-card .svc-avatar::after { animation: none !important; }
+:root[data-theme=dark] .otp-card .otp-time { background-image: none !important; }
