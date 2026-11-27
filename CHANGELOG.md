@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.67.2 - 2026-11-27 (patch)
+- fix: new shield and fingerprint animated background
+
 ## v1.67.1 - 2026-11-27 (patch)
 - fix: make snowflake pattern smaller and add more of them
 
