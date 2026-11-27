@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.64.0 - 2026-11-27 (minor)
+- feat: rainbow core dashboard background
+
 ## v1.63.1 - 2026-11-18 (patch)
 - Update app.py
 
