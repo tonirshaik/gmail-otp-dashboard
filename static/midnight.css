@@ -1605,3 +1605,46 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
   .app-nav .nav-item.on::after{animation:none;opacity:0}
   .nav-status .ns-led,.nav-status .ns-bars i{animation:none}
 }
+
+/* hud-card */
+:root[data-theme=dark] .otp-card { isolation: isolate; }
+:root[data-theme=dark] .otp-card::before {
+  content: "" !important;
+  display: block !important;
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(#22d3ee,#22d3ee) left 6px top 6px / 12px 2px no-repeat,
+    linear-gradient(#22d3ee,#22d3ee) left 6px top 6px / 2px 12px no-repeat,
+    linear-gradient(#22d3ee,#22d3ee) right 6px top 6px / 12px 2px no-repeat,
+    linear-gradient(#22d3ee,#22d3ee) right 6px top 6px / 2px 12px no-repeat,
+    linear-gradient(#22d3ee,#22d3ee) left 6px bottom 6px / 12px 2px no-repeat,
+    linear-gradient(#22d3ee,#22d3ee) left 6px bottom 6px / 2px 12px no-repeat,
+    linear-gradient(#22d3ee,#22d3ee) right 6px bottom 6px / 12px 2px no-repeat,
+    linear-gradient(#22d3ee,#22d3ee) right 6px bottom 6px / 2px 12px no-repeat,
+    url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%20300%20120%27%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%232f8cff%27%20stroke-width%3D%271%27%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2760%27%20r%3D%2746%27%20stroke-dasharray%3D%272%206%27%20opacity%3D%27.55%27%3E%3CanimateTransform%20attributeName%3D%27transform%27%20type%3D%27rotate%27%20from%3D%270%2050%2060%27%20to%3D%27360%2050%2060%27%20dur%3D%2730s%27%20repeatCount%3D%27indefinite%27%2F%3E%3C%2Fcircle%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2760%27%20r%3D%2732%27%20opacity%3D%27.35%27%2F%3E%3Ccircle%20cx%3D%2750%27%20cy%3D%2760%27%20r%3D%2716%27%20opacity%3D%27.35%27%2F%3E%3Cpath%20d%3D%27M2%2060H98M50%2012V108%27%20opacity%3D%27.25%27%2F%3E%3C%2Fg%3E%3Cpath%20d%3D%27M50%2060L50%2020A40%2040%200%200%201%2085%2040Z%27%20fill%3D%27%234aa8ff%27%20opacity%3D%27.25%27%3E%3CanimateTransform%20attributeName%3D%27transform%27%20type%3D%27rotate%27%20from%3D%270%2050%2060%27%20to%3D%27360%2050%2060%27%20dur%3D%274s%27%20repeatCount%3D%27indefinite%27%2F%3E%3C%2Fpath%3E%3Cg%20fill%3D%27none%27%20stroke%3D%27%232f8cff%27%20stroke-width%3D%271%27%20stroke-dasharray%3D%273%209%27%20opacity%3D%27.5%27%3E%3Cpath%20d%3D%27M150%20100H210L225%2085H290%27%3E%3Canimate%20attributeName%3D%27stroke-dashoffset%27%20from%3D%270%27%20to%3D%27-48%27%20dur%3D%273s%27%20repeatCount%3D%27indefinite%27%2F%3E%3C%2Fpath%3E%3Cpath%20d%3D%27M170%20112H230L245%20100H292%27%3E%3Canimate%20attributeName%3D%27stroke-dashoffset%27%20from%3D%270%27%20to%3D%2748%27%20dur%3D%274s%27%20repeatCount%3D%27indefinite%27%2F%3E%3C%2Fpath%3E%3C%2Fg%3E%3Cg%20fill%3D%27%23040d22%27%20stroke%3D%27%234aa8ff%27%20stroke-width%3D%271%27%20opacity%3D%27.8%27%3E%3Ccircle%20cx%3D%27290%27%20cy%3D%2785%27%20r%3D%272.5%27%2F%3E%3Ccircle%20cx%3D%27292%27%20cy%3D%27100%27%20r%3D%272.5%27%2F%3E%3C%2Fg%3E%3Cg%20fill%3D%27%23c8e8ff%27%3E%3Ccircle%20r%3D%272.5%27%3E%3CanimateMotion%20dur%3D%273s%27%20repeatCount%3D%27indefinite%27%20path%3D%27M150%20100H210L225%2085H290%27%2F%3E%3C%2Fcircle%3E%3Ccircle%20r%3D%272.5%27%3E%3CanimateMotion%20dur%3D%274s%27%20repeatCount%3D%27indefinite%27%20path%3D%27M170%20112H230L245%20100H292%27%2F%3E%3C%2Fcircle%3E%3C%2Fg%3E%3C%2Fsvg%3E") right center / auto 100% no-repeat,
+    radial-gradient(rgba(47,140,255,.16) 1px, transparent 1.5px) 0 0 / 16px 16px;
+}
+:root[data-theme=dark] .otp-card .svc-avatar { position: relative; overflow: visible; }
+:root[data-theme=dark] .otp-card .svc-avatar::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 1.5px dashed #22d3ee;
+  border-radius: 50%;
+  opacity: .85;
+  pointer-events: none;
+  animation: hudRing 8s linear infinite;
+}
+@keyframes hudRing { to { transform: rotate(360deg); } }
+:root[data-theme=dark] .otp-card .otp-time {
+  background: url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2090%2014%27%3E%3Cpath%20d%3D%27M0%207H20L24%201L29%2013L33%207H50L54%204L58%207H90%27%20fill%3D%27none%27%20stroke%3D%27%2322d3ee%27%20stroke-width%3D%271.2%27%20stroke-dasharray%3D%27140%27%20opacity%3D%27.8%27%3E%3Canimate%20attributeName%3D%27stroke-dashoffset%27%20from%3D%27140%27%20to%3D%27-140%27%20dur%3D%272.4s%27%20repeatCount%3D%27indefinite%27%2F%3E%3C%2Fpath%3E%3C%2Fsvg%3E") right 4px center / 84px 14px no-repeat;
+}
+:root[data-theme=dark] .otp-card.is-new .otp-time { background-position: right 28px center; }
+@media (prefers-reduced-motion: reduce) {
+  :root[data-theme=dark] .otp-card::before { display: none !important; }
+  :root[data-theme=dark] .otp-card .svc-avatar::after { animation: none; }
+  :root[data-theme=dark] .otp-card .otp-time { background-image: none; }
+}
