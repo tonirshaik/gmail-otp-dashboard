@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.67.1 - 2026-11-27 (patch)
+- fix: make snowflake pattern smaller and add more of them
+
 ## v1.67.0 - 2026-11-27 (minor)
 - feat: snowflake card background
 
