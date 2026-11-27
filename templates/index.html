@@ -179,22 +179,26 @@
             <!-- App navigation: floating bottom bar on phones, sidebar on desktop -->
             <nav id="appNav" class="app-nav" aria-label="Main navigation">
                 <div class="nav-brand"><span class="logo"><i class="fa-solid fa-envelope-open-text"></i></span> OTP Inbox <span class="brand-tag">Tonir</span></div>
-                <button type="button" class="nav-item on" data-nav="home" aria-label="Home" aria-current="page">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span class="nav-lbl">Home</span>
+                <div class="nav-label" aria-hidden="true">// NAVIGATION</div>
+                <div class="nav-list"><span class="nav-pulse" aria-hidden="true"></span>
+                <button type="button" class="nav-item on" data-nav="home" aria-label="Home" aria-current="page"><span class="nav-dot" aria-hidden="true"></span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span class="nav-lbl">Home</span><span class="nav-num" aria-hidden="true">01</span>
                 </button>
-                <button type="button" class="nav-item" data-nav="accounts" aria-label="Accounts">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span class="nav-lbl">Accounts</span>
+                <button type="button" class="nav-item" data-nav="accounts" aria-label="Accounts"><span class="nav-dot" aria-hidden="true"></span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg><span class="nav-lbl">Accounts</span><span class="nav-num" aria-hidden="true">02</span>
                 </button>
-                <button type="button" class="nav-item" data-nav="tfa" aria-label="2FA services">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span class="nav-lbl">2FA Services</span>
+                <button type="button" class="nav-item" data-nav="tfa" aria-label="2FA services"><span class="nav-dot" aria-hidden="true"></span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg><span class="nav-lbl">2FA Services</span><span class="nav-num" aria-hidden="true">03</span>
                 </button>
-                <button type="button" class="nav-item" data-nav="sms" aria-label="SMS codes">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span class="nav-lbl">SMS</span>
+                <button type="button" class="nav-item" data-nav="sms" aria-label="SMS codes"><span class="nav-dot" aria-hidden="true"></span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg><span class="nav-lbl">SMS</span><span class="nav-num" aria-hidden="true">04</span>
                 </button>
-                <button type="button" class="nav-item" data-nav="settings" aria-label="Settings">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.3 3h-4l-.3 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.3 2.7h4l.3-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg><span class="nav-lbl">Settings</span>
+                <button type="button" class="nav-item" data-nav="settings" aria-label="Settings"><span class="nav-dot" aria-hidden="true"></span>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.3 3h-4l-.3 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.3 2.7h4l.3-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg><span class="nav-lbl">Settings</span><span class="nav-num" aria-hidden="true">05</span>
                 </button>
+                </div>
                 <div class="nav-foot">
+                    <div class="nav-status" aria-hidden="true"><div class="ns-top"><i class="ns-led"></i>SECURE &middot; 2FA ACTIVE</div><div class="ns-row"><svg class="ns-ecg" viewBox="0 0 86 22"><path d="M0 12H18L22 3L28 20L33 12H50L54 7L58 12H86"/></svg><span class="ns-bars"><i></i><i></i><i></i><i></i></span></div></div>
                     <span>C copy &middot; / search</span>
                 </div>
             </nav>
