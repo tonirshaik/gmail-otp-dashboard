@@ -24,6 +24,9 @@ function fmt(c) {
   return /^\d{6}$/.test(c) ? c.slice(0, 3) + " " + c.slice(3) : c;
 }
 function setCode(node, code) {
+  node.classList.remove("chg");
+  void node.offsetWidth;
+  node.classList.add("chg");
   node.textContent = "";
   const s = String(code || "");
   const split = /^\d{6}$/.test(s) ? 3 : 0;
@@ -56,6 +59,41 @@ function icon(kind) {
   });
   w.appendChild(sv);
   return w;
+}
+function skel() {
+  box.textContent = "";
+  curSig = "";
+  const c = el("div", "card");
+  const hd = el("div", "hd");
+  hd.appendChild(el("div", "sk sk-ic"));
+  const tx = el("div", "htx");
+  tx.appendChild(el("div", "sk sk-l1"));
+  tx.appendChild(el("div", "sk sk-l2"));
+  hd.appendChild(tx);
+  c.appendChild(hd);
+  c.appendChild(el("div", "sk sk-code"));
+  c.appendChild(el("div", "sk sk-btn"));
+  box.appendChild(c);
+}
+function eyeSvg(off) {
+  const NS = "http://www.w3.org/2000/svg";
+  const sv = document.createElementNS(NS, "svg");
+  sv.setAttribute("viewBox", "0 0 24 24");
+  sv.setAttribute("width", "18");
+  sv.setAttribute("height", "18");
+  sv.setAttribute("fill", "none");
+  sv.setAttribute("stroke", "currentColor");
+  sv.setAttribute("stroke-width", "2");
+  sv.setAttribute("stroke-linecap", "round");
+  sv.setAttribute("stroke-linejoin", "round");
+  const D = ["M10 12a2 2 0 1 0 4 0a2 2 0 0 0-4 0", "M21 12c-2.4 4-5.4 6-9 6c-3.6 0-6.6-2-9-6c2.4-4 5.4-6 9-6c3.6 0 6.6 2 9 6"];
+  if (off) D.push("M3 3l18 18");
+  D.forEach(function (d) {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", d);
+    sv.appendChild(p);
+  });
+  return sv;
 }
 function ago(s) {
   if (s < 45) return "এইমাত্র";
@@ -156,6 +194,14 @@ function patch(d, t1) {
 function setStatus(on) {
   hostEl.textContent = "";
   hostEl.appendChild(el("span", "dot " + (on ? "on" : "off")));
+  if (tab && tab.favIconUrl && /^(https?|data):/.test(tab.favIconUrl)) {
+    const fi = document.createElement("img");
+    fi.className = "fav";
+    fi.alt = "";
+    fi.src = tab.favIconUrl;
+    fi.addEventListener("error", () => fi.remove());
+    hostEl.appendChild(fi);
+  }
   hostEl.appendChild(document.createTextNode((on ? "আনলক" : "লক") + (host ? " · " + host : "")));
 }
 function setFoot(on) {
@@ -216,10 +262,28 @@ function showLogin(msg) {
     if (r && r.error) err.textContent = r.error;
     else if (r && r.status === 0) err.textContent = "ড্যাশবোর্ড সার্ভারে পৌঁছানো যায়নি।";
     else err.textContent = "পাসওয়ার্ড ভুল।";
+    pwrap.classList.remove("shake");
+    void pwrap.offsetWidth;
+    pwrap.classList.add("shake");
   };
   b.addEventListener("click", go);
   inp.addEventListener("keydown", (e) => { if (e.key === "Enter") go(); });
-  c.appendChild(inp);
+  const pwrap = el("div", "pwrap");
+  pwrap.appendChild(inp);
+  const eye = el("button", "eye");
+  eye.type = "button";
+  eye.setAttribute("aria-label", "পাসওয়ার্ড দেখুন বা লুকান");
+  eye.appendChild(eyeSvg(false));
+  eye.addEventListener("click", () => {
+    const show = inp.type === "password";
+    inp.type = show ? "text" : "password";
+    eye.textContent = "";
+    eye.appendChild(eyeSvg(show));
+    inp.focus();
+  });
+  pwrap.appendChild(eye);
+  inp.addEventListener("input", () => pwrap.classList.remove("shake"));
+  c.appendChild(pwrap);
   c.appendChild(err);
   c.appendChild(b);
   box.appendChild(c);
@@ -231,6 +295,7 @@ async function load(mode, btn) {
   busy = true;
   const quiet = mode === "refresh" || mode === "refresh_email" || (mode === "tfa" && tfaItems.length > 0);
   let msg = "";
+  if (!quiet && !tfaItems.length && !emailCard) skel();
   if (btn) {
     btn.dataset.t = btn.dataset.t || btn.textContent;
     btn.disabled = true;
