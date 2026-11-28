@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.79.1 - 2026-11-28 (patch)
+- fix: flush logs and log watched account count
+
 ## v1.79.0 - 2026-11-28 (minor)
 - feat: watch all Gmail accounts live, not only pinned
 
