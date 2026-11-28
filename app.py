@@ -2547,6 +2547,35 @@ def _is_new_device(dev):
         print("[NEWDEV] error: " + type(e).__name__)
         return False
 
+_geo_cache = {}
+
+def _geo_country(ip):
+    """geoip_v1: IP-r desh (2 okkhor). Cloudflare header age; na thakle ipwho.is. Na pele "" (vul alarm dei na)."""
+    import ipaddress
+    try:
+        h = (request.headers.get("CF-IPCountry") or "").strip().upper()
+        if re.fullmatch(r"[A-Z]{2}", h) and h not in ("XX", "T1"):
+            return h
+        a = ipaddress.ip_address(ip)
+        if a.is_private or a.is_loopback or a.is_link_local:
+            return ""
+        hit = _geo_cache.get(ip)
+        if hit and time.time() - hit[0] < 86400:
+            return hit[1]
+        import urllib.request
+        with urllib.request.urlopen("https://ipwho.is/" + ip + "?fields=success,country_code", timeout=2) as r:
+            d = json.loads(r.read().decode("utf-8"))
+        cc = str(d.get("country_code") or "").upper() if d.get("success") else ""
+        if not re.fullmatch(r"[A-Z]{2}", cc):
+            return ""
+        if len(_geo_cache) > 500:
+            _geo_cache.clear()
+        _geo_cache[ip] = (time.time(), cc)
+        return cc
+    except Exception as e:
+        print("[GEO] lookup failed: " + type(e).__name__)
+        return ""
+
 def _login_alert(kind):
     """login_alert_v1: login / vul password / lock hole Telegram-e sathe sathe jani dey."""
     if not telegram_ready():
@@ -2569,6 +2598,10 @@ def _login_alert(kind):
         "lock": "\U0001f6a8 <b>Login locked (too many wrong attempts)</b>",
     }
     text = "%s\nTime: %s\nIP: %s\nDevice: %s" % (heads.get(kind, "Login"), when, ip, ua)
+    home_cc = os.environ.get("HOME_COUNTRY", "BD").strip().upper() or "BD"
+    cc = _geo_country(ip)
+    if cc and cc != home_cc:
+        text = "\U0001f30d <b>OUTSIDE %s - login from country: %s</b>\n" % (html_lib.escape(home_cc), html_lib.escape(cc)) + text
 
     def _send():
         try:
