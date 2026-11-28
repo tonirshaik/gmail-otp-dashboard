@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.95.0 - 2026-11-28 (minor)
+- feat: extension toolbar icon with lock/unlock overlay
+
 ## v1.94.0 - 2026-11-28 (minor)
 - feat: telegram /extension command sends extension zip
 
