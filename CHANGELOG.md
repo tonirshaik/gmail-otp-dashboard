@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.85.0 - 2026-11-28 (minor)
+- feat: free keyword-based Telegram code request (no API)
+
 ## v1.84.0 - 2026-11-28 (minor)
 - feat: Telegram natural-language code request (Claude)
 
