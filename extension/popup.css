@@ -35,3 +35,15 @@ body { width: 320px; background: #0B0D12; color: #F2F4F8; padding: 14px; }
 .code .gap { width: 8px; }
 .code.em .dg { color: #B6FF5C; }
 .code.dim .dg, .code.em.dim .dg { color: #6b7380; }
+
+/* status-icons */
+.hd { display: flex; align-items: center; gap: 10px; }
+.htx { min-width: 0; flex: 1; }
+.ic { width: 32px; height: 32px; flex: none; border-radius: 10px; background: #1F2633; display: flex; align-items: center; justify-content: center; }
+.ic.mail { color: #B6FF5C; }
+.ic.shield { color: #7FB5FF; }
+.ic.lock { color: #ff7b7b; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+.dot.on { background: #B6FF5C; }
+.dot.off { background: #ff7b7b; }
+.host { max-width: 200px; }

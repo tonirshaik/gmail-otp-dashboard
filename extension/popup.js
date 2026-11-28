@@ -32,6 +32,31 @@ function setCode(node, code) {
     node.appendChild(el("span", "dg", s.charAt(i)));
   }
 }
+function icon(kind) {
+  const NS = "http://www.w3.org/2000/svg";
+  const P = {
+    mail: ["M3 7a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-14a2 2 0 0 1-2-2z", "M3 7l9 6l9-6"],
+    shield: ["M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1-8.5 15a12 12 0 0 1-8.5-15a12 12 0 0 0 8.5-3", "M11 11a1 1 0 1 0 2 0a1 1 0 0 0-2 0", "M12 12l0 2.5"],
+    lock: ["M5 13a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v6a2 2 0 0 1-2 2h-10a2 2 0 0 1-2-2z", "M11 16a1 1 0 1 0 2 0a1 1 0 0 0-2 0", "M8 11v-4a4 4 0 1 1 8 0v4"]
+  };
+  const w = el("div", "ic " + (P[kind] ? kind : "mail"));
+  const sv = document.createElementNS(NS, "svg");
+  sv.setAttribute("viewBox", "0 0 24 24");
+  sv.setAttribute("width", "18");
+  sv.setAttribute("height", "18");
+  sv.setAttribute("fill", "none");
+  sv.setAttribute("stroke", "currentColor");
+  sv.setAttribute("stroke-width", "2");
+  sv.setAttribute("stroke-linecap", "round");
+  sv.setAttribute("stroke-linejoin", "round");
+  (P[kind] || P.mail).forEach(function (d) {
+    const p = document.createElementNS(NS, "path");
+    p.setAttribute("d", d);
+    sv.appendChild(p);
+  });
+  w.appendChild(sv);
+  return w;
+}
 function ago(s) {
   if (s < 45) return "এইমাত্র";
   if (s < 3600) return Math.max(1, Math.floor(s / 60)) + " মিনিট আগে";
@@ -50,11 +75,16 @@ function fillIt(code, btn) {
     flash(btn, r && r.ok ? "ভরা হয়েছে" : "ঘর পাইনি");
   });
 }
-function card(title, sub, code, expired) {
+function card(title, sub, code, expired, kind) {
   const c = el("div", "card");
-  c.appendChild(el("div", "ctitle", title));
+  const hd = el("div", "hd");
+  hd.appendChild(icon(kind));
+  const tx = el("div", "htx");
+  tx.appendChild(el("div", "ctitle", title));
   const s = el("div", "csub", sub);
-  c.appendChild(s);
+  tx.appendChild(s);
+  hd.appendChild(tx);
+  c.appendChild(hd);
   const codeEl = el("div", "code" + (expired ? " dim" : ""));
   setCode(codeEl, code);
   c.appendChild(codeEl);
@@ -88,14 +118,14 @@ function render(d, t1) {
   let n = 0;
   if (d.email) {
     const e = d.email;
-    const c = card(e.service || "Email code", emailSub(e), e.code, e.expired);
+    const c = card(e.service || "Email code", emailSub(e), e.code, e.expired, "mail");
     emailCard = c;
     c.codeEl.classList.add("em");
     box.appendChild(c.node);
     n++;
   }
   (d.tfa || []).forEach((t) => {
-    const c = card(t.name + " 2FA", "", t.code, false);
+    const c = card(t.name + " 2FA", "", t.code, false, "shield");
     c.sub.textContent = (t.label ? t.label + " · " : "");
     const left = el("span", "", "");
     c.sub.appendChild(left);
@@ -123,7 +153,13 @@ function patch(d, t1) {
   patchTfa(d.tfa, t1);
 }
 
+function setStatus(on) {
+  hostEl.textContent = "";
+  hostEl.appendChild(el("span", "dot " + (on ? "on" : "off")));
+  hostEl.appendChild(document.createTextNode((on ? "আনলক" : "লক") + (host ? " · " + host : "")));
+}
 function setFoot(on) {
+  setStatus(on);
   if (!on) { if (foot) { foot.remove(); foot = null; } return; }
   if (foot) return;
   foot = el("div", "foot");
@@ -154,7 +190,10 @@ function showLogin(msg) {
   emailCard = null;
   box.textContent = "";
   const c = el("div", "card");
-  c.appendChild(el("div", "ctitle", "লগইন করুন"));
+  const lh = el("div", "hd");
+  lh.appendChild(icon("lock"));
+  lh.appendChild(el("div", "ctitle", "লগইন করুন"));
+  c.appendChild(lh);
   c.appendChild(el("div", "csub wrap", "মাস্টার পাসওয়ার্ড একবার দিন। ২৪ ঘণ্টা আর চাইবে না। পাসওয়ার্ড সেভ হয় না।"));
   const inp = document.createElement("input");
   inp.type = "password";
