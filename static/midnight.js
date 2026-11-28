@@ -794,3 +794,25 @@
         if (dash.classList.contains('hidden')) reset();
     }).observe(dash, { attributes: true, attributeFilter: ['class'] });
 })();
+
+/* lock-ring */
+(function () {
+    var TOTAL = 300000, C = 251.3;
+    if (document.getElementById('lockRing')) return;
+    var el = document.createElement('div');
+    el.id = 'lockRing';
+    el.setAttribute('aria-hidden', 'true');
+    el.innerHTML = '<svg viewBox="0 0 96 96" width="96" height="96"><circle class="lr-bg" cx="48" cy="48" r="40"/><circle class="lr-fill" cx="48" cy="48" r="40" transform="rotate(-90 48 48)"/></svg><span class="lr-t">5:00</span><span class="lr-l">Auto-lock</span>';
+    document.body.appendChild(el);
+    var fill = el.querySelector('.lr-fill'), t = el.querySelector('.lr-t');
+    function tick() {
+        if (typeof lockLastActive === 'undefined') return;
+        var left = Math.max(0, Math.min(TOTAL, TOTAL - (Date.now() - lockLastActive)));
+        var s = Math.ceil(left / 1000);
+        t.textContent = Math.floor(s / 60) + ':' + (s % 60 < 10 ? '0' : '') + (s % 60);
+        fill.style.strokeDashoffset = (C * (1 - left / TOTAL)).toFixed(1);
+        el.classList.toggle('warn', left <= 30000);
+    }
+    tick();
+    setInterval(tick, 250);
+})();
