@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.91.0 - 2026-11-28 (minor)
+- feat: extension icons and lock status dot
+
 ## v1.90.0 - 2026-11-28 (minor)
 - feat: extension code shown in digital digit boxes
 
