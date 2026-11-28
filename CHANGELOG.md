@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.96.0 - 2026-11-28 (minor)
+- feat: extension shows update banner when new build is available
+
 ## v1.95.0 - 2026-11-28 (minor)
 - feat: extension toolbar icon with lock/unlock overlay
 
