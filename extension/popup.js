@@ -1,6 +1,9 @@
 const DASH = "@@ORIGIN@@";
+const BUILD = "@@BUILD@@";
 const box = document.getElementById("box");
 const hostEl = document.getElementById("host");
+const upd = document.createElement("div");
+box.parentNode.insertBefore(upd, box);
 let tab = null, host = "", pageHint = "", pageKind = "full", noBox = false, foot = null, tfaItems = [], emailCard = null, curSig = "", busy = false, lastSync = 0;
 const NOPAGE = "এই পাতায় কাজ করে না। কোনো https সাইটে খুলুন।";
 
@@ -94,6 +97,19 @@ function eyeSvg(off) {
     sv.appendChild(p);
   });
   return sv;
+}
+function showUpd(build) {
+  if (!build || BUILD.indexOf("@@") === 0 || build === BUILD || upd.firstChild) return;
+  const b = el("div", "upd");
+  b.appendChild(el("div", "upd-ic", "↓"));
+  const tx = el("div", "htx");
+  tx.appendChild(el("div", "ctitle", "নতুন এক্সটেনশন আছে"));
+  tx.appendChild(el("div", "csub wrap", "টেলিগ্রাম বটে /extension লিখে নতুন ZIP নিন।"));
+  b.appendChild(tx);
+  const bt = el("button", "btn primary", "ড্যাশবোর্ড");
+  bt.addEventListener("click", () => chrome.tabs.create({ url: DASH }));
+  b.appendChild(bt);
+  upd.appendChild(b);
 }
 function ago(s) {
   if (s < 45) return "এইমাত্র";
@@ -309,6 +325,7 @@ async function load(mode, btn) {
     if (r.status === 429) { if (!quiet) note("একটু পরে আবার চেষ্টা করুন।"); else msg = "একটু পরে চাপুন"; return; }
     if (!r.ok) { if (!quiet) note((r.data && r.data.error) || "কোড আনা যায়নি।"); else msg = "হয়নি"; return; }
     setFoot(true);
+    showUpd(r.data && r.data.ext_build);
     if (mode === "tfa" && tfaItems.length) patchTfa(r.data.tfa, t1);
     else if (sig(r.data) === curSig) patch(r.data, t1);
     else render(r.data, t1);

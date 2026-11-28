@@ -93,3 +93,13 @@ body { width: 320px; background: #0B0D12; color: #F2F4F8; padding: 14px; }
   .eye:hover { color: #14181F; }
   .pwrap.shake .pw { border-color: #C03030; }
 }
+
+/* upd-banner */
+.upd { display: flex; align-items: center; gap: 10px; background: #151922; border: 1px solid #B6FF5C; border-radius: 14px; padding: 10px 12px; margin-bottom: 10px; animation: cin .25s ease-out; }
+.upd-ic { width: 28px; height: 28px; flex: none; border-radius: 9px; background: #1F2633; color: #B6FF5C; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+.upd .csub { margin: 2px 0 0; }
+.upd .btn { flex: none; padding: 7px 10px; font-size: 12px; }
+@media (prefers-color-scheme: light) {
+  .upd { background: #FFFFFF; border-color: #4E9A00; }
+  .upd-ic { background: #E6EAF2; color: #2F7A00; }
+}

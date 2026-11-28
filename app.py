@@ -4058,7 +4058,22 @@ def ext_code():
                             "next_code": w["next_code"], "period": d["period"]})
         except Exception as e:
             print(f"[EXT] gmail-2fa: {type(e).__name__}")
-    return _no_store(jsonify({"email": email_out, "tfa": tfa}))
+    return _no_store(jsonify({"email": email_out, "tfa": tfa, "ext_build": _ext_build_id()}))
+
+def _ext_build_id():
+    """upd_v1: extension file-er hash (10 char). File bodlale bodlay."""
+    root = os.path.join(app.root_path, 'extension')
+    h = hashlib.sha1()
+    try:
+        for name in sorted(os.listdir(root)):
+            p = os.path.join(root, name)
+            if os.path.isfile(p):
+                h.update(name.encode("utf-8"))
+                with open(p, "rb") as f:
+                    h.update(f.read().replace(b"\r\n", b"\n"))
+    except OSError:
+        return ""
+    return h.hexdigest()[:10]
 
 def _build_ext_zip():
     """tg_ext_v1: extension-er ZIP (bytes). Folder na thakle None."""
@@ -4074,7 +4089,7 @@ def _build_ext_zip():
             if not os.path.isfile(p):
                 continue
             with open(p, 'r', encoding='utf-8') as f:
-                txt = f.read().replace('@@ORIGIN@@', origin)
+                txt = f.read().replace('@@ORIGIN@@', origin).replace('@@BUILD@@', _ext_build_id())
             z.writestr('otp-extension/' + name, txt)
         for icon in ('icon-192.png', 'icon-512.png'):
             ip = os.path.join(app.root_path, 'static', 'icons', icon)
@@ -4114,7 +4129,7 @@ def ext_download():
             if not os.path.isfile(p):
                 continue
             with open(p, 'r', encoding='utf-8') as f:
-                txt = f.read().replace('@@ORIGIN@@', origin)
+                txt = f.read().replace('@@ORIGIN@@', origin).replace('@@BUILD@@', _ext_build_id())
             z.writestr('otp-extension/' + name, txt)
         for icon in ('icon-192.png', 'icon-512.png'):
             ip = os.path.join(app.root_path, 'static', 'icons', icon)
