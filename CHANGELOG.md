@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.76.0 - 2026-11-28 (minor)
+- feat: replace decorative SEC chip with live 2FA key count
+
 ## v1.75.0 - 2026-11-28 (minor)
 - feat: replace decorative rack with live status panel
 
