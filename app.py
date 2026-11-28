@@ -39,7 +39,9 @@ from webauthn.helpers.structs import (
     AuthenticatorAttachment, ResidentKeyRequirement, UserVerificationRequirement,
 )
 
-app = Flask(__name__)  # gitbash-test
+app = Flask(__name__)
+import functools as _ft  # _print_flush_v1
+print = _ft.partial(print, flush=True)  # gitbash-test
 
 # ---------- App version (home page-er title-er pashe + "New version available" banner-e dekhay) ----------
 # Niyom (MAJOR.MINOR.PATCH) -- auto: main-e merge holei GitHub Action VERSION file bere dey, hate bodlano lage na.
@@ -1315,6 +1317,8 @@ def _push_supervisor():
             # shudhu pin kora account gulo watch hobe -- shob Gmail-e ekshathe connection khola hobe na
             # shob Gmail-e nojor rakha hobe (shudhu pin kora na)
             accs = {x["email"]: x for x in load_accounts()}
+            if not _watchers:
+                print("[PUSH] accounts found: %d" % len(accs))
             for email, w in list(_watchers.items()):
                 if email not in accs or accs[email]["password"] != w["password"] or not w["thread"].is_alive():
                     _stop_watcher(w)
