@@ -21,7 +21,7 @@ const tfaActive=new Map,tfaSet=new Set;let tfaEnabled=!1,tfaStatusLoaded=!1;cons
                     ${A?"":w}
                     ${A?"":b}
                     ${A?"":E}
-                    ${t.pinnable?grpRowHTML(e.email):""}<div class="otp-time">${f}${!e.placeholder&&checkedAt.has(String(e.email).toLowerCase())?` <span class="checked-ago-sep">&middot;</span> <span class="checked-ago" data-email="${escAttr(String(e.email).toLowerCase())}">${checkedAgoText(e.email)}</span>`:""}</div>
+                    ${t.pinnable?grpRowHTML(e.email)+healthRowHTML(e,c):""}<div class="otp-time">${f}${!e.placeholder&&checkedAt.has(String(e.email).toLowerCase())?` <span class="checked-ago-sep">&middot;</span> <span class="checked-ago" data-email="${escAttr(String(e.email).toLowerCase())}">${checkedAgoText(e.email)}</span>`:""}</div>
                 </div>`,S=A?`<div class="swipe-tfa">
                         <button type="button" class="swipe-tfa-edit" data-email="${escAttr(e.email)}" title="Set a new 2FA key" aria-label="Set a new 2FA key for ${escAttr(e.email)}"><i class="fa-solid fa-pencil"></i></button>
                         <button type="button" class="swipe-tfa-del" data-email="${escAttr(e.email)}" title="Remove the 2FA key" aria-label="Remove the 2FA key of ${escAttr(e.email)}"><i class="fa-regular fa-trash-can"></i></button>
@@ -106,3 +106,18 @@ document.addEventListener("keydown",function(ev){if(ev.key==="Escape"&&document.
 new MutationObserver(function(){if(dashboardSection.classList.contains("hidden"))closeSbk()}).observe(dashboardSection,{attributes:true,attributeFilter:["class"]});
 var gmBk={};
 function gmBkBtn(email){var k=String(email||"").toLowerCase(),b=gmBk[k]||[0,0],n=b[0]|0,l=b[1]|0;return `<button type="button" class="svc-bk gm-bk${n?" has":""}" data-id="gm:${escAttr(k)}" title="Backup codes" aria-label="Backup codes of ${escAttr(email)}"><i class="fa-solid fa-life-ring"></i> ${n?"Backup codes \u00b7 "+l+" left":"Add backup codes"}</button>`}
+
+/* healthrow_v1 */
+function healthRowHTML(e,c){
+var k=String(e.email||"").toLowerCase(),b=gmBk[k]||[0,0],n=b[0]|0,l=b[1]|0,lvl="ok",lab="Healthy",tags=[];
+function bump(){if(lvl==="ok"){lvl="warn";lab="Check"}}
+if(e.placeholder){lvl="none";lab="Not checked";tags.push(["","Login ?"])}
+else if(c==="bad"){lvl="bad";lab="Problem";tags.push(["bad","Login failed"])}
+else if(c==="warn"){lvl="warn";lab="Check";tags.push(["warn","Connection problem"])}
+else tags.push(["","Login OK"]);
+if(tfaStatusLoaded){
+if(tfaSet.has(k)){tags.push(["","2FA on"]);if(n>0){var low=l<=1;tags.push([low?"warn":"",l+" backup left"]);if(low)bump()}else tags.push(["","No backup"])}
+else{tags.push([lvl==="none"?"":"warn","No 2FA"]);bump()}
+}
+return '<div class="hl-row"><span class="hl-badge '+lvl+'"><i class="hl-dot"></i>'+lab+'</span>'+tags.map(function(t){return '<span class="hl-tag '+t[0]+'">'+escAttr(t[1])+'</span>'}).join("")+'</div>'
+}

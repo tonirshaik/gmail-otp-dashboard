@@ -1795,3 +1795,18 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
 :root[data-theme=dark] .otp-card .otp-code-box.masked .cells .ch {
   color: #9fd8e4 !important;
 }
+
+/* health-score */
+.otp-card .hl-row{order:2;display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0 0 8px}
+.hl-badge{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;font:600 11px 'Plus Jakarta Sans',sans-serif;white-space:nowrap}
+.hl-dot{width:7px;height:7px;border-radius:50%;background:currentColor;display:inline-block}
+.hl-badge.ok{color:#7cf0a0;background:rgba(124,240,160,.14)}
+.hl-badge.warn{color:#fcd34d;background:rgba(252,211,77,.14)}
+.hl-badge.bad{color:#ff9fb0;background:rgba(255,107,129,.16)}
+.hl-badge.none{color:var(--text-muted);background:var(--m-surface2)}
+.hl-tag{padding:2px 8px;border-radius:6px;font:600 10.5px 'Plus Jakarta Sans',sans-serif;color:var(--text-muted);background:var(--m-surface2);white-space:nowrap}
+.hl-tag.warn{color:#fcd34d;background:rgba(252,211,77,.14)}
+.hl-tag.bad{color:#ff9fb0;background:rgba(255,107,129,.16)}
+:root[data-theme=light] .hl-badge.ok{color:#166534;background:rgba(22,101,52,.12)}
+:root[data-theme=light] .hl-badge.warn,:root[data-theme=light] .hl-tag.warn{color:#92400e;background:rgba(146,64,14,.12)}
+:root[data-theme=light] .hl-badge.bad,:root[data-theme=light] .hl-tag.bad{color:#b91c1c;background:rgba(185,28,28,.12)}
