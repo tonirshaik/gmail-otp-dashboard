@@ -1802,3 +1802,14 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
 #secChip{display:none;position:fixed;left:92%;top:79%;width:84px;height:84px;margin:-42px 0 0 -42px;z-index:-1;pointer-events:none}
 #secChip svg{width:84px;height:84px;display:block}
 @media (min-width:1024px){:root[data-theme=dark] body:has(#dashboardSection:not(.hidden)) #secChip{display:block !important}}
+
+/* hud-small */
+#statusRack{width:104px !important;gap:4px !important;padding:6px !important;border:1px solid #2f5f8f !important;border-radius:8px !important;background:rgba(7,19,31,.55) !important}
+#statusRack .sr-row{gap:5px !important;padding:3px 6px !important;border-radius:3px !important;font-size:10px !important;background:#0e2858 !important}
+#statusRack .sr-dot{width:5px !important;height:5px !important}
+#lockRing{width:64px !important;height:64px !important;margin:-32px 0 0 -32px !important}
+#lockRing svg{width:64px !important;height:64px !important}
+#lockRing .lr-t{font-size:14px !important}
+#lockRing .lr-l{font-size:9px !important}
+#secChip{width:52px !important;height:52px !important;margin:-26px 0 0 -26px !important}
+#secChip svg{width:52px !important;height:52px !important}
