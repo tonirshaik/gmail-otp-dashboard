@@ -915,3 +915,25 @@
     tick();
     setInterval(tick, 1000);
 })();
+
+/* csp-inline-fix: inline onclick/onload/onerror-er bodole safe listener */
+(function () {
+    document.addEventListener('click', function (e) {
+        var b = e.target.closest && e.target.closest('[data-tap]');
+        if (b && typeof window.onCodeTap === 'function') window.onCodeTap(b);
+    });
+    document.addEventListener('load', function (e) {
+        var i = e.target;
+        if (i && i.tagName === 'IMG' && i.parentNode && i.parentNode.classList &&
+            (i.parentNode.classList.contains('svc-avatar') || i.parentNode.classList.contains('svc-av'))) {
+            i.parentNode.classList.add('img-ok');
+        }
+    }, true);
+    document.addEventListener('error', function (e) {
+        var i = e.target;
+        if (i && i.tagName === 'IMG' && i.parentNode && i.parentNode.classList &&
+            (i.parentNode.classList.contains('svc-avatar') || i.parentNode.classList.contains('svc-av'))) {
+            i.remove();
+        }
+    }, true);
+})();
