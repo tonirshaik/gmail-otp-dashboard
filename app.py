@@ -1623,6 +1623,46 @@ def _telegram_worker(item):
     except Exception as e:
         print("[TELEGRAM] send failed: " + type(e).__name__)
 
+# flood_v1: ekoi Gmail-e 5 minute-e 3 tar beshi notun code ashle Telegram-e sotorkota
+FLOOD_WINDOW = 300
+FLOOD_MAX = 3
+FLOOD_COOLDOWN = 1800
+_flood_hits = {}
+_flood_alerted = {}
+
+def _flood_check(item):
+    if not telegram_ready():
+        return
+    em = str(item.get("email", "")).lower()
+    if not em:
+        return
+    now = time.time()
+    with _notified_lock:
+        hits = [t for t in _flood_hits.get(em, []) if now - t < FLOOD_WINDOW]
+        hits.append(now)
+        _flood_hits[em] = hits
+        if len(_flood_hits) > 500:
+            for k in [k for k, v in _flood_hits.items() if not v or now - v[-1] > FLOOD_WINDOW]:
+                _flood_hits.pop(k, None)
+        n = len(hits)
+        if n <= FLOOD_MAX or now - _flood_alerted.get(em, 0) < FLOOD_COOLDOWN:
+            return
+        _flood_alerted[em] = now
+    text = "\U0001f6a8 <b>Too many codes</b>\n%s got %d codes in 5 minutes.\nSomeone may be trying to sign in to this account. If it is not you, check the account now." % (
+        html_lib.escape(em), n)
+
+    def _send():
+        try:
+            import urllib.request
+            url = "https://api.telegram.org/bot" + TELEGRAM_BOT_TOKEN + "/sendMessage"
+            body = json.dumps({"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML",
+                               "disable_web_page_preview": True}).encode("utf-8")
+            req = urllib.request.Request(url, data=body, headers={"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=10).close()
+        except Exception as ex:
+            print("[FLOOD] alert failed: " + type(ex).__name__)
+    threading.Thread(target=_send, daemon=True).start()
+
 def notify_push(item):
     """Notun, fresh code/link hole shob subscribed device-e notification pathay (background thread-e)."""
     print("[TELEGRAM] notify_push called: push=%s tg=%s" % (push_ready(), telegram_ready()))
@@ -1646,6 +1686,10 @@ def notify_push(item):
             print("[TELEGRAM] skipped: already notified")
             return
         _notified[key] = now
+    try:
+        _flood_check(item)   # flood_v1
+    except Exception as e:
+        print("[FLOOD] error: " + type(e).__name__)
     if push_ready():
         threading.Thread(target=_push_worker, args=(dict(item),), daemon=True).start()
     if telegram_ready():
