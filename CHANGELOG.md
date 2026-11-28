@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.84.0 - 2026-11-28 (minor)
+- feat: Telegram natural-language code request (Claude)
+
 ## v1.83.0 - 2026-11-28 (minor)
 - feat: OTP flood alert
 
