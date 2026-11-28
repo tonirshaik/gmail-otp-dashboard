@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.74.0 - 2026-11-28 (minor)
+- feat: replace 87% ring with live auto-lock countdown
+
 ## v1.73.1 - 2026-11-27 (patch)
 - fix: phone-size HUD background (shield no longer cut off)
 
