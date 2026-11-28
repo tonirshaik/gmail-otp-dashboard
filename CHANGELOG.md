@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.94.0 - 2026-11-28 (minor)
+- feat: telegram /extension command sends extension zip
+
 ## v1.93.0 - 2026-11-28 (minor)
 - feat: extension toolbar badge dot for lock status
 
