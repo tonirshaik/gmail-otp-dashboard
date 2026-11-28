@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.92.0 - 2026-11-28 (minor)
+- feat: extension animations, login eye, favicon, light theme
+
 ## v1.91.0 - 2026-11-28 (minor)
 - feat: extension icons and lock status dot
 
