@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.79.3 - 2026-11-28 (patch)
+- chore: remove unused CSS (old HUD backgrounds, palette)
+
 ## v1.79.2 - 2026-11-28 (patch)
 - fix: make OTP code boxes stand out with brighter teal background
 
