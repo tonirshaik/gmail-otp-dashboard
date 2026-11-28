@@ -13,7 +13,7 @@
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="OTP">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <script>
+    <script nonce="{{ csp_nonce }}">
     /* Theme: Auto / Light / Dark -- paint-er age boshe jate flash na hoy */
     (function () {
         var KEY = 'otpDash.theme';
@@ -393,7 +393,7 @@
         <i class="fa-solid fa-circle-check"></i> <span id="toastMsg">Copied!</span>
     </div>
 
-    <script>window.ASSET_V = { brands: "{{ asset_v('brands.js') }}", jsqr: "{{ asset_v('jsQR.min.js') }}" };</script>
+    <script nonce="{{ csp_nonce }}">window.ASSET_V = { brands: "{{ asset_v('brands.js') }}", jsqr: "{{ asset_v('jsQR.min.js') }}" };</script>
     <script src="/static/app.js?v={{ asset_v('app.js') }}" defer></script>
     <script src="/static/midnight.js?v={{ asset_v('midnight.js') }}" defer></script>
 

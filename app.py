@@ -24,6 +24,7 @@ import html as html_lib
 from urllib.parse import urlparse, parse_qs, unquote
 from zoneinfo import ZoneInfo
 from flask import Flask, render_template, jsonify, request, session, Response, send_from_directory
+from flask import g as _g
 from pymongo import MongoClient
 from pymongo.errors import DuplicateKeyError
 from flask_cors import CORS
@@ -2517,6 +2518,34 @@ def static_cache_headers(resp):
         resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
+# csp_v1: CSP (ekhon shudhu Report-Only -- kichu bhangbe na). Nonce per request, report Render log-e [CSP] hishebe jabe.
+_CSP_ONLOAD = "'sha256-" + base64.b64encode(hashlib.sha256(b"this.media='all'").digest()).decode() + "'"
+
+@app.before_request
+def csp_make_nonce():
+    _g.csp_nonce = secrets.token_urlsafe(16)
+
+@app.context_processor
+def csp_inject_nonce():
+    return {"csp_nonce": getattr(_g, "csp_nonce", "")}
+
+@app.route('/api/csp-report', methods=['POST'])
+def csp_report():
+    if not _rate_ok("csp-report", 60, 60):
+        return ("", 204)
+    try:
+        d = json.loads((request.get_data(cache=False)[:4000] or b"{}").decode("utf-8", "ignore"))
+        r = d.get("csp-report", d) if isinstance(d, dict) else {}
+        blocked = str(r.get("blocked-uri") or r.get("blockedURL") or "")
+        if "://" in blocked:
+            u = urlparse(blocked)
+            blocked = u.scheme + "://" + (u.hostname or "")
+        directive = str(r.get("violated-directive") or r.get("effectiveDirective") or "")
+        print("[CSP] %s blocked=%s" % (directive[:60], blocked[:80]))
+    except Exception:
+        pass
+    return ("", 204)
+
 # sec_headers_v1: security header -- HSTS, nosniff, referrer, frame-ancestors (nijer site + Telegram)
 FRAME_ALLOWED = "'self' https://tonirshaik.github.io https://web.telegram.org https://*.telegram.org"
 
@@ -2526,6 +2555,16 @@ def security_headers(resp):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     resp.headers.setdefault("Content-Security-Policy", "frame-ancestors " + FRAME_ALLOWED)
+    if (resp.headers.get("Content-Type") or "").startswith("text/html"):
+        nonce = getattr(_g, "csp_nonce", "")
+        resp.headers.setdefault("Content-Security-Policy-Report-Only",
+            "default-src 'self'; "
+            "script-src 'self' 'nonce-" + nonce + "' 'unsafe-hashes' " + _CSP_ONLOAD + "; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
+            "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
+            "img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self'; "
+            "worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; "
+            "report-uri /api/csp-report")
     return resp
 
 @app.route('/')
