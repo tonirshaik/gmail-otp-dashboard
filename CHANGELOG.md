@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.78.0 - 2026-11-28 (minor)
+- feat: home shows only accounts with a live code (2 min)
+
 ## v1.77.0 - 2026-11-28 (minor)
 - feat: replace fake HUD text with live status lines
 
