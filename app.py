@@ -1996,7 +1996,7 @@ def telegram_webhook():
     if not _rate_ok("tg-cmd", 20, 60):
         return jsonify({"ok": True})
     text = str(msg.get("text") or "").strip()
-    m = re.match(r"^/(code|2fa|devices|lock|app|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
+    m = re.match(r"^/(code|2fa|devices|lock|app|extension|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
     if m:
         if m.group(1) == "2fa":
             threading.Thread(target=_tg_handle_2fa, args=(m.group(2) or "",), daemon=True).start()
@@ -2006,6 +2006,9 @@ def telegram_webhook():
             threading.Thread(target=_tg_handle_lock, daemon=True).start()
         elif m.group(1) == "app":
             threading.Thread(target=_tg_handle_app, daemon=True).start()
+        elif m.group(1) == "extension":
+            if _rate_ok("tg-ext", 3, 600):
+                threading.Thread(target=_tg_handle_ext, daemon=True).start()
         else:
             threading.Thread(target=_tg_handle_code, args=((m.group(2) or "") if m.group(1) == "code" else "",), daemon=True).start()
     elif text and not text.startswith("/") and _ai_ready() and _rate_ok("tg-ai", 10, 60):   # ai_tg_v1
@@ -2134,6 +2137,7 @@ def _tg_register_webhook():
                     {"command": "devices", "description": "\U0001f5a5 Logged-in devices / sign out"},
                     {"command": "lock", "description": "\U0001f512 Sign out all devices now"},
                     {"command": "app", "description": "\U0001f4f1 Open dashboard in Telegram"},
+                    {"command": "extension", "description": "\U0001f9e9 Extension ZIP file"},
                 ]
                 _tg_call("setMyCommands", {"commands": cmds, "scope": {"type": "chat", "chat_id": cid}})
                 _tg_call("setChatMenuButton", {"chat_id": cid, "menu_button": {"type": "web_app", "text": "Dashboard", "web_app": {"url": ORIGIN.rstrip("/") + "/"}}})
@@ -4055,6 +4059,42 @@ def ext_code():
         except Exception as e:
             print(f"[EXT] gmail-2fa: {type(e).__name__}")
     return _no_store(jsonify({"email": email_out, "tfa": tfa}))
+
+def _build_ext_zip():
+    """tg_ext_v1: extension-er ZIP (bytes). Folder na thakle None."""
+    import io, zipfile
+    root = os.path.join(app.root_path, 'extension')
+    if not os.path.isdir(root):
+        return None
+    origin = ORIGIN.rstrip('/')
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'w', zipfile.ZIP_DEFLATED) as z:
+        for name in sorted(os.listdir(root)):
+            p = os.path.join(root, name)
+            if not os.path.isfile(p):
+                continue
+            with open(p, 'r', encoding='utf-8') as f:
+                txt = f.read().replace('@@ORIGIN@@', origin)
+            z.writestr('otp-extension/' + name, txt)
+        for icon in ('icon-192.png', 'icon-512.png'):
+            ip = os.path.join(app.root_path, 'static', 'icons', icon)
+            if os.path.isfile(ip):
+                z.write(ip, 'otp-extension/icons/' + icon)
+    return buf.getvalue()
+
+def _tg_handle_ext():
+    try:
+        data = _build_ext_zip()
+        if not data:
+            _tg_reply("Extension files not found on the server.")
+            return
+        ok = _tg_send_file("otp-extension.zip", data,
+                           "Extension v%s - unzip it, then Chrome > Extensions > Load unpacked" % APP_VERSION)
+        if not ok:
+            _tg_reply("Could not send the file. Try again.")
+    except Exception as e:
+        print("[TG-EXT] error: " + type(e).__name__)
+        _tg_reply("Could not send the file. Try again.")
 
 @app.route('/api/ext/download')
 def ext_download():
