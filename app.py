@@ -1313,8 +1313,8 @@ def _push_supervisor():
     while True:
         try:
             # shudhu pin kora account gulo watch hobe -- shob Gmail-e ekshathe connection khola hobe na
-            pinned = {_norm_email(e) for e in _read_pins()} if prefs_collection is not None else set()
-            accs = {x["email"]: x for x in load_accounts() if _norm_email(x["email"]) in pinned}
+            # shob Gmail-e nojor rakha hobe (shudhu pin kora na)
+            accs = {x["email"]: x for x in load_accounts()}
             for email, w in list(_watchers.items()):
                 if email not in accs or accs[email]["password"] != w["password"] or not w["thread"].is_alive():
                     _stop_watcher(w)
