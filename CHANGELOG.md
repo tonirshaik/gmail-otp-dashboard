@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.93.0 - 2026-11-28 (minor)
+- feat: extension toolbar badge dot for lock status
+
 ## v1.92.0 - 2026-11-28 (minor)
 - feat: extension animations, login eye, favicon, light theme
 
