@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.82.0 - 2026-11-28 (minor)
+- feat: account health score on cards
+
 ## v1.81.0 - 2026-11-28 (minor)
 - feat: foreign country login alert
 
