@@ -2005,7 +2005,7 @@ AI_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
 AI_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-5-5").strip() or "claude-haiku-5-5"
 
 def _ai_ready():
-    return bool(AI_KEY and telegram_ready())
+    return telegram_ready()   # kw_tg_v1: key lage na
 
 def _ai_parse(text):
     import urllib.request
@@ -2031,6 +2031,33 @@ def _ai_parse(text):
     def clean(v):
         return re.sub(r"[^\w@.+\- ]", "", str(v or ""), flags=re.U).strip()[:60]
     return action, clean(d.get("service")), clean(d.get("email"))
+
+# kw_tg_v1: free version -- Claude/API chhara, shudhu shobder khuje bujhe
+_KW_STOP = set("""code codes otp pin dao den dau de dibe diba chai chay lagbe lage send give me my the a an of for
+er ar ke ta ti theke ekta amar amake kono please plz pls 2fa authenticator gmail mail email latest new last""".split())
+_KW_BN = {"ফেসবুক": "facebook", "গুগল": "google", "গিটহাব": "github", "টেলিগ্রাম": "telegram",
+          "ইনস্টাগ্রাম": "instagram", "হোয়াটসঅ্যাপ": "whatsapp", "মাইক্রোসফট": "microsoft",
+          "অ্যামাজন": "amazon", "টিকটক": "tiktok", "ইউটিউব": "youtube", "পেপাল": "paypal"}
+
+def _kw_parse(text):
+    t = str(text or "").lower()
+    m = re.search(r"[\w.+-]+@[\w.-]+", t)
+    em = m.group(0) if m else ""
+    if em:
+        t = t.replace(em, " ")
+    for bn, en in _KW_BN.items():
+        t = t.replace(bn, " " + en + " ")
+    is_2fa = bool(re.search(r"2fa|authenticator|টুএফএ", t))
+    is_code = is_2fa or bool(re.search(r"code|otp|\bkod\b|কোড|ওটিপি", t))
+    if not is_code:
+        return "none", "", em
+    service = ""
+    for w in re.findall(r"[a-z0-9]+", t):
+        if w in _KW_STOP or len(w) < 3:
+            continue
+        service = w
+        break
+    return ("2fa" if is_2fa else "code"), service, em
 
 def _tg_handle_service_code(service):
     try:
@@ -2060,7 +2087,7 @@ def _tg_handle_service_code(service):
 
 def _tg_handle_ai(text):
     try:
-        action, service, em = _ai_parse(text)
+        action, service, em = _kw_parse(text)
     except Exception as e:
         print("[TG-AI] failed: " + type(e).__name__)
         _tg_reply("এখন বুঝতে পারছি না। /code বা /2fa ব্যবহার করুন।")
