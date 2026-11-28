@@ -2530,17 +2530,39 @@ def _device_for_alert():
         return " \u00b7 ".join([osn, browser] if browser else [osn])
     return ua[:90] + " (model hidden)"
 
+def _is_new_device(dev):
+    """newdev_v1: ei device age kokhono login kore nai kina. Prothom-ber (list khali) hole chupchap mone rakhe, alarm dey na."""
+    if prefs_collection is None:
+        return False
+    try:
+        key = hashlib.sha1(str(dev).strip().lower().encode("utf-8")).hexdigest()[:16]
+        doc = prefs_collection.find_one({"_id": "known_devices"}) or {}
+        keys = [k for k in doc.get("keys", []) if isinstance(k, str)]
+        if key in keys:
+            return False
+        prefs_collection.update_one({"_id": "known_devices"},
+                                    {"$push": {"keys": {"$each": [key], "$slice": -50}}}, upsert=True)
+        return bool(keys)
+    except Exception as e:
+        print("[NEWDEV] error: " + type(e).__name__)
+        return False
+
 def _login_alert(kind):
     """login_alert_v1: login / vul password / lock hole Telegram-e sathe sathe jani dey."""
     if not telegram_ready():
         return
     try:
         ip = html_lib.escape(_client_ip_for_alert()[:60])
-        ua = html_lib.escape(_device_for_alert()[:120])
+        dev_raw = _device_for_alert()[:120]
+        ua = html_lib.escape(dev_raw)
         when = datetime.now(ZoneInfo("Asia/Dhaka")).strftime("%d %b %Y, %I:%M %p")
     except Exception:
         return
+    if kind in ("ok", "ok_pk") and _is_new_device(dev_raw):   # newdev_v1
+        kind = kind + "_new"
     heads = {
+        "ok_new": "\U0001f6a8 <b>NEW DEVICE login - not you? Send /lock</b>",
+        "ok_pk_new": "\U0001f6a8 <b>NEW DEVICE login (Fingerprint / Face) - not you? Send /lock</b>",
         "ok": "\u2705 <b>Login successful</b>",
         "ok_pk": "\u2705 <b>Login successful (Fingerprint / Face)</b>",
         "fail": "\u26a0 <b>Wrong password</b>",
