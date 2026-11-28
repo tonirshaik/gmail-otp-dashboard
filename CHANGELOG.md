@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.79.0 - 2026-11-28 (minor)
+- feat: watch all Gmail accounts live, not only pinned
+
 ## v1.78.0 - 2026-11-28 (minor)
 - feat: home shows only accounts with a live code (2 min)
 
