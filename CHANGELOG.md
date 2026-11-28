@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.89.1 - 2026-11-28 (patch)
+- fix: remove inline handlers for CSP
+
 ## v1.89.0 - 2026-11-28 (minor)
 - feat: enforce CSP (nonce), remove inline onload
 
