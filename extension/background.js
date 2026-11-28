@@ -136,3 +136,33 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
     return true;
   }
 });
+
+const ALARM = "otpExpire";
+function setBadge(on) {
+  try {
+    const col = on ? "#639922" : "#E24B4A";
+    chrome.action.setBadgeText({ text: "●" });
+    chrome.action.setBadgeBackgroundColor({ color: col });
+    if (chrome.action.setBadgeTextColor) chrome.action.setBadgeTextColor({ color: col });
+    chrome.action.setTitle({ title: on ? "OTP Dashboard · আনলক" : "OTP Dashboard · লক" });
+  } catch (e) {}
+}
+async function refreshBadge() {
+  const t = await getTok();
+  setBadge(!!t);
+  try {
+    if (chrome.alarms) {
+      if (t) chrome.alarms.create(ALARM, { when: t.exp * 1000 + 500 });
+      else chrome.alarms.clear(ALARM);
+    }
+  } catch (e) {}
+}
+chrome.runtime.onInstalled.addListener(() => { refreshBadge(); });
+chrome.runtime.onStartup.addListener(() => { refreshBadge(); });
+if (chrome.alarms) {
+  chrome.alarms.onAlarm.addListener((a) => { if (a.name === ALARM) refreshBadge(); });
+}
+chrome.storage.onChanged.addListener((ch, area) => {
+  if (area === "session" && ch[KEY]) refreshBadge();
+});
+refreshBadge();
