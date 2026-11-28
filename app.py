@@ -2557,14 +2557,14 @@ def security_headers(resp):
     resp.headers.setdefault("Content-Security-Policy", "frame-ancestors " + FRAME_ALLOWED)
     if (resp.headers.get("Content-Type") or "").startswith("text/html"):
         nonce = getattr(_g, "csp_nonce", "")
-        resp.headers.setdefault("Content-Security-Policy-Report-Only",
+        resp.headers.__setitem__("Content-Security-Policy",
             "default-src 'self'; "
-            "script-src 'self' 'nonce-" + nonce + "' 'unsafe-hashes' " + _CSP_ONLOAD + "; "
+            "script-src 'self' 'nonce-" + nonce + "'; "
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; "
             "font-src 'self' data: https://fonts.gstatic.com https://cdnjs.cloudflare.com; "
             "img-src 'self' data: blob: https:; media-src 'self' blob:; connect-src 'self'; "
             "worker-src 'self'; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; "
-            "report-uri /api/csp-report")
+            "frame-ancestors " + FRAME_ALLOWED + "; report-uri /api/csp-report")
     return resp
 
 @app.route('/')
