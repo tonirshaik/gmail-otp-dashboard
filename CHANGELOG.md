@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.79.2 - 2026-11-28 (patch)
+- fix: make OTP code boxes stand out with brighter teal background
+
 ## v1.79.1 - 2026-11-28 (patch)
 - fix: flush logs and log watched account count
 
