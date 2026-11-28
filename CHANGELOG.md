@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.87.0 - 2026-11-28 (minor)
+- feat: security headers (HSTS, nosniff, referrer, frame-ancestors)
+
 ## v1.86.0 - 2026-11-28 (minor)
 - feat: Telegram Mini App (menu button + /app)
 
