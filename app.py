@@ -1949,6 +1949,16 @@ def _tg_handle_lock():
     except Exception as e:
         print("[TG-LOCK] error: " + type(e).__name__)
 
+# tg_miniapp_v1: Telegram Mini App -- Telegram-er bhitorei dashboard khole
+def _tg_handle_app():
+    try:
+        _tg_call("sendMessage", {"chat_id": TELEGRAM_CHAT_ID,
+                                 "text": "\U0001f4f1 Open the dashboard inside Telegram",
+                                 "reply_markup": {"inline_keyboard": [[{"text": "Open Dashboard",
+                                                                        "web_app": {"url": ORIGIN.rstrip("/") + "/"}}]]}})
+    except Exception as e:
+        print("[TG-APP] failed: " + type(e).__name__)
+
 def _tg_handle_callback(cb_id, data):
     try:
         if cb_id:
@@ -1985,7 +1995,7 @@ def telegram_webhook():
     if not _rate_ok("tg-cmd", 20, 60):
         return jsonify({"ok": True})
     text = str(msg.get("text") or "").strip()
-    m = re.match(r"^/(code|2fa|devices|lock|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
+    m = re.match(r"^/(code|2fa|devices|lock|app|start|help)(?:@\w+)?(?:\s+(.*))?$", text, re.S)
     if m:
         if m.group(1) == "2fa":
             threading.Thread(target=_tg_handle_2fa, args=(m.group(2) or "",), daemon=True).start()
@@ -1993,6 +2003,8 @@ def telegram_webhook():
             threading.Thread(target=_tg_handle_devices, daemon=True).start()
         elif m.group(1) == "lock":
             threading.Thread(target=_tg_handle_lock, daemon=True).start()
+        elif m.group(1) == "app":
+            threading.Thread(target=_tg_handle_app, daemon=True).start()
         else:
             threading.Thread(target=_tg_handle_code, args=((m.group(2) or "") if m.group(1) == "code" else "",), daemon=True).start()
     elif text and not text.startswith("/") and _ai_ready() and _rate_ok("tg-ai", 10, 60):   # ai_tg_v1
@@ -2120,9 +2132,10 @@ def _tg_register_webhook():
                     {"command": "2fa", "description": "\U0001f510 2FA code (Gmail / Service)"},
                     {"command": "devices", "description": "\U0001f5a5 Logged-in devices / sign out"},
                     {"command": "lock", "description": "\U0001f512 Sign out all devices now"},
+                    {"command": "app", "description": "\U0001f4f1 Open dashboard in Telegram"},
                 ]
                 _tg_call("setMyCommands", {"commands": cmds, "scope": {"type": "chat", "chat_id": cid}})
-                _tg_call("setChatMenuButton", {"chat_id": cid, "menu_button": {"type": "commands"}})
+                _tg_call("setChatMenuButton", {"chat_id": cid, "menu_button": {"type": "web_app", "text": "Dashboard", "web_app": {"url": ORIGIN.rstrip("/") + "/"}}})
                 print("[TG-CMD] menu set")
             except Exception as e2:
                 print("[TG-CMD] menu failed: " + type(e2).__name__)
