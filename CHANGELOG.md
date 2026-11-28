@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.83.0 - 2026-11-28 (minor)
+- feat: OTP flood alert
+
 ## v1.82.0 - 2026-11-28 (minor)
 - feat: account health score on cards
 
