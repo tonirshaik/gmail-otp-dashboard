@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.86.0 - 2026-11-28 (minor)
+- feat: Telegram Mini App (menu button + /app)
+
 ## v1.85.0 - 2026-11-28 (minor)
 - feat: free keyword-based Telegram code request (no API)
 
