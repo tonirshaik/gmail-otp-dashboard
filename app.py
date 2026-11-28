@@ -2517,6 +2517,17 @@ def static_cache_headers(resp):
         resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
+# sec_headers_v1: security header -- HSTS, nosniff, referrer, frame-ancestors (nijer site + Telegram)
+FRAME_ALLOWED = "'self' https://tonirshaik.github.io https://web.telegram.org https://*.telegram.org"
+
+@app.after_request
+def security_headers(resp):
+    resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    resp.headers.setdefault("Content-Security-Policy", "frame-ancestors " + FRAME_ALLOWED)
+    return resp
+
 @app.route('/')
 def home():
     return render_template('index.html')
