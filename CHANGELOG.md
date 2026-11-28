@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.81.0 - 2026-11-28 (minor)
+- feat: foreign country login alert
+
 ## v1.80.0 - 2026-11-28 (minor)
 - feat: new device login alert
 
