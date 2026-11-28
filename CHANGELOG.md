@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.88.0 - 2026-11-28 (minor)
+- feat: CSP report-only with nonce
+
 ## v1.87.0 - 2026-11-28 (minor)
 - feat: security headers (HSTS, nosniff, referrer, frame-ancestors)
 
