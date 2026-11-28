@@ -138,13 +138,58 @@ chrome.runtime.onMessage.addListener((msg, sender, send) => {
 });
 
 const ALARM = "otpExpire";
-function setBadge(on) {
+let baseP = null;
+function baseImg() {
+  if (!baseP) {
+    baseP = fetch(chrome.runtime.getURL("icons/icon-192.png"))
+      .then((r) => r.blob())
+      .then((b) => createImageBitmap(b))
+      .catch((e) => { baseP = null; throw e; });
+  }
+  return baseP;
+}
+function drawIcon(base, size, on) {
+  const cv = new OffscreenCanvas(size, size);
+  const g = cv.getContext("2d");
+  g.drawImage(base, 0, 0, size, size);
+  const r = size * 0.32, cx = size - r, cy = size - r;
+  g.beginPath();
+  g.arc(cx, cy, r, 0, Math.PI * 2);
+  g.fillStyle = on ? "#639922" : "#E24B4A";
+  g.fill();
+  g.lineWidth = Math.max(1, size * 0.07);
+  g.strokeStyle = "#ffffff";
+  g.stroke();
+  const w = r * 1.0, h = r * 0.75;
+  const by = cy - h / 2 + r * 0.2;
+  g.fillStyle = "#ffffff";
+  g.fillRect(cx - w / 2, by, w, h);
+  const sr = w * 0.3;
+  g.lineWidth = Math.max(1, size * 0.06);
+  g.beginPath();
+  g.moveTo(cx - sr, by);
+  if (on) {
+    g.lineTo(cx - sr, by - sr);
+    g.arc(cx, by - sr, sr, Math.PI, 0);
+    g.lineTo(cx + sr, by - sr * 0.5);
+  } else {
+    g.lineTo(cx - sr, by - sr * 0.4);
+    g.arc(cx, by - sr * 0.4, sr, Math.PI, 0);
+    g.lineTo(cx + sr, by);
+  }
+  g.stroke();
+  return g.getImageData(0, 0, size, size);
+}
+async function setBadge(on) {
   try {
-    const col = on ? "#639922" : "#E24B4A";
-    chrome.action.setBadgeText({ text: "●" });
-    chrome.action.setBadgeBackgroundColor({ color: col });
-    if (chrome.action.setBadgeTextColor) chrome.action.setBadgeTextColor({ color: col });
+    chrome.action.setBadgeText({ text: "" });
     chrome.action.setTitle({ title: on ? "OTP Dashboard · আনলক" : "OTP Dashboard · লক" });
+  } catch (e) {}
+  try {
+    const base = await baseImg();
+    const imgs = {};
+    [16, 32, 48, 128].forEach((n) => { imgs[n] = drawIcon(base, n, on); });
+    await chrome.action.setIcon({ imageData: imgs });
   } catch (e) {}
 }
 async function refreshBadge() {
