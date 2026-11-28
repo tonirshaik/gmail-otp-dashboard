@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.77.0 - 2026-11-28 (minor)
+- feat: replace fake HUD text with live status lines
+
 ## v1.76.1 - 2026-11-28 (patch)
 - style: shrink status rack, lock ring and 2FA chip
 
