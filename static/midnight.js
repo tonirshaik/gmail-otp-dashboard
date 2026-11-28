@@ -816,3 +816,40 @@
     tick();
     setInterval(tick, 250);
 })();
+
+/* status-rack */
+(function () {
+    if (document.getElementById('statusRack')) return;
+    var el = document.createElement('div');
+    el.id = 'statusRack';
+    el.setAttribute('aria-hidden', 'true');
+    var rows = [], vals = [];
+    ['Live', 'Gmail', 'Codes', 'Issues'].forEach(function (n) {
+        var r = document.createElement('div'); r.className = 'sr-row';
+        var d = document.createElement('span'); d.className = 'sr-dot';
+        var k = document.createElement('span'); k.className = 'sr-k'; k.textContent = n;
+        var v = document.createElement('span'); v.className = 'sr-v';
+        r.appendChild(d); r.appendChild(k); r.appendChild(v);
+        el.appendChild(r); rows.push(r); vals.push(v);
+    });
+    document.body.appendChild(el);
+    function set(i, text, cls) {
+        if (vals[i].textContent !== text) vals[i].textContent = text;
+        if (rows[i].className !== 'sr-row ' + cls) rows[i].className = 'sr-row ' + cls;
+    }
+    function tick() {
+        try {
+            var live = typeof pushConnected !== 'undefined' && pushConnected;
+            set(0, live ? 'ON' : 'OFF', live ? 'ok' : 'off');
+            var n = (typeof accountListLoaded !== 'undefined' && accountListLoaded) ? accountList.length : null;
+            set(1, n === null ? '-' : String(n), n === null ? 'off' : 'info');
+            var now = Date.now(), items = typeof allItems !== 'undefined' ? allItems : [];
+            var c = items.filter(function (x) { return isValidItem(x) && x.expiresAt > now; }).length;
+            set(2, String(c), c ? 'info' : 'off');
+            var b = items.filter(function (x) { return healthOf(x) !== 'ok'; }).length;
+            set(3, String(b), b ? 'bad' : 'ok');
+        } catch (e) {}
+    }
+    tick();
+    setInterval(tick, 1000);
+})();
