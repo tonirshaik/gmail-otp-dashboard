@@ -1,5 +1,8 @@
 # Changelog
 
+## v1.90.0 - 2026-11-28 (minor)
+- feat: extension code shown in digital digit boxes
+
 ## v1.89.1 - 2026-11-28 (patch)
 - fix: remove inline handlers for CSP
 
