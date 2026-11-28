@@ -1995,7 +1995,87 @@ def telegram_webhook():
             threading.Thread(target=_tg_handle_lock, daemon=True).start()
         else:
             threading.Thread(target=_tg_handle_code, args=((m.group(2) or "") if m.group(1) == "code" else "",), daemon=True).start()
+    elif text and not text.startswith("/") and _ai_ready() and _rate_ok("tg-ai", 10, 60):   # ai_tg_v1
+        threading.Thread(target=_tg_handle_ai, args=(text,), daemon=True).start()
     return jsonify({"ok": True})
+
+# ai_tg_v1: Telegram-e shadharon bhashay likhle (jemon "facebook-er code dao") Claude bujhe code pathay.
+# Claude-ke shudhu tomar lekha message-ta pathano hoy -- kono code, password ba email-er list na.
+AI_KEY = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+AI_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-5-5").strip() or "claude-haiku-5-5"
+
+def _ai_ready():
+    return bool(AI_KEY and telegram_ready())
+
+def _ai_parse(text):
+    import urllib.request
+    system = ("You turn a short chat message (Bengali, English or mixed) into a JSON command for an OTP dashboard. "
+              "Reply with ONLY one JSON object and no other text: "
+              '{"action":"code"|"2fa"|"none","service":"","email":""}. '
+              '"code" means the user wants the latest email OTP code. '
+              '"2fa" means the user wants an authenticator (2FA) code. '
+              '"service" is the site or app name such as Facebook or GitHub written in English letters, or "". '
+              '"email" is a Gmail address or part of one only if the user wrote it, else "". '
+              'If the message is not asking for a code, use "none".')
+    body = json.dumps({"model": AI_MODEL, "max_tokens": 100, "system": system,
+                       "messages": [{"role": "user", "content": text[:300]}]}).encode("utf-8")
+    req = urllib.request.Request("https://api.anthropic.com/v1/messages", data=body,
+                                 headers={"content-type": "application/json", "x-api-key": AI_KEY,
+                                          "anthropic-version": "2023-06-01"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    out = "".join(x.get("text", "") for x in data.get("content", []) if x.get("type") == "text")
+    m = re.search(r"\{.*\}", out, re.S)
+    d = json.loads(m.group(0)) if m else {}
+    action = d.get("action") if d.get("action") in ("code", "2fa") else "none"
+    def clean(v):
+        return re.sub(r"[^\w@.+\- ]", "", str(v or ""), flags=re.U).strip()[:60]
+    return action, clean(d.get("service")), clean(d.get("email"))
+
+def _tg_handle_service_code(service):
+    try:
+        slug = re.sub(r"[^a-z0-9]", "", service.lower())
+        now = time.time()
+        best = None
+        for it in _ext_items(True):
+            if it.get("kind") != "code" or not it.get("code") or it.get("auth_fail"):
+                continue
+            s = re.sub(r"[^a-z0-9]", "", str(it.get("service") or it.get("sender") or "").lower())
+            if len(s) < 3 or not slug or not (slug in s or s in slug):
+                continue
+            if best is None or it["timestamp"] > best["timestamp"]:
+                best = it
+        if best is None:
+            _tg_reply("No recent code found for " + html_lib.escape(service))
+            return
+        age = max(0, int(now - best["timestamp"]))
+        ttl = int(best.get("ttl_seconds") or OTP_TTL_SECONDS)
+        tag = "\u26a0 Spam" if best.get("folder") == "SPAM" else "Inbox"
+        note = " (expired)" if age >= ttl else ""
+        _tg_reply("\U0001f510 <b>%s</b> \u00b7 %s\n<code>%s</code>\n%s\n%s%s" % (
+            html_lib.escape(str(best.get("service") or best.get("sender") or service)), tag,
+            html_lib.escape(str(best["code"])), html_lib.escape(str(best.get("email", ""))), _tg_ago(age), note))
+    except Exception as e:
+        print("[TG-AI] service code error: " + type(e).__name__)
+
+def _tg_handle_ai(text):
+    try:
+        action, service, em = _ai_parse(text)
+    except Exception as e:
+        print("[TG-AI] failed: " + type(e).__name__)
+        _tg_reply("এখন বুঝতে পারছি না। /code বা /2fa ব্যবহার করুন।")
+        return
+    if action == "2fa":
+        _tg_handle_2fa(service or em)
+    elif action == "code":
+        if em:
+            _tg_handle_code(em)
+        elif service:
+            _tg_handle_service_code(service)
+        else:
+            _tg_handle_code("")
+    else:
+        _tg_reply("কোড চাইলে লিখুন, যেমন: \"facebook-er code dao\" বা \"github 2fa\"। অথবা /code, /2fa ব্যবহার করুন।")
 
 def _tg_register_webhook():
     if not telegram_ready() or not ORIGIN.startswith("https://"):
