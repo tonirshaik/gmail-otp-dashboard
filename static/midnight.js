@@ -877,3 +877,41 @@
     tick();
     setInterval(tick, 1000);
 })();
+
+/* hud-text */
+(function () {
+    if (document.getElementById('hudTxt')) return;
+    var el = document.createElement('div');
+    el.id = 'hudTxt';
+    el.setAttribute('aria-hidden', 'true');
+    var rows = [], txts = [];
+    for (var i = 0; i < 3; i++) {
+        var r = document.createElement('div'); r.className = 'ht-row';
+        var d = document.createElement('span'); d.className = 'ht-dot';
+        var t = document.createElement('span');
+        r.appendChild(d); r.appendChild(t);
+        el.appendChild(r); rows.push(r); txts.push(t);
+    }
+    document.body.appendChild(el);
+    function set(i, text, cls) {
+        if (txts[i].textContent !== text) txts[i].textContent = text;
+        var c = 'ht-row' + (cls ? ' ' + cls : '');
+        if (rows[i].className !== c) rows[i].className = c;
+    }
+    function tick() {
+        try {
+            var tls = location.protocol === 'https:';
+            set(0, tls ? 'TLS SECURE' : 'NOT SECURE', tls ? '' : 'bad');
+            if (typeof tfaStatusLoaded === 'undefined' || typeof svcLoaded === 'undefined' || !tfaStatusLoaded || !svcLoaded) {
+                set(1, '2FA ...', 'off');
+            } else {
+                var n = tfaSet.size + svcList.length;
+                set(1, n ? '2FA ACTIVE · ' + n : '2FA NOT SET', n ? '' : 'off');
+            }
+            var ac = typeof autoCopyOn !== 'undefined' && autoCopyOn;
+            set(2, ac ? 'AUTO-COPY ON' : 'AUTO-COPY OFF', ac ? '' : 'off');
+        } catch (e) {}
+    }
+    tick();
+    setInterval(tick, 1000);
+})();
