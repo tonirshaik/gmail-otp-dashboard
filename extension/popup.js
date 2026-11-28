@@ -23,6 +23,15 @@ function note(text, withOpen) {
 function fmt(c) {
   return /^\d{6}$/.test(c) ? c.slice(0, 3) + " " + c.slice(3) : c;
 }
+function setCode(node, code) {
+  node.textContent = "";
+  const s = String(code || "");
+  const split = /^\d{6}$/.test(s) ? 3 : 0;
+  for (let i = 0; i < s.length; i++) {
+    if (split && i === split) node.appendChild(el("span", "gap", ""));
+    node.appendChild(el("span", "dg", s.charAt(i)));
+  }
+}
 function ago(s) {
   if (s < 45) return "এইমাত্র";
   if (s < 3600) return Math.max(1, Math.floor(s / 60)) + " মিনিট আগে";
@@ -46,7 +55,8 @@ function card(title, sub, code, expired) {
   c.appendChild(el("div", "ctitle", title));
   const s = el("div", "csub", sub);
   c.appendChild(s);
-  const codeEl = el("div", "code" + (expired ? " dim" : ""), fmt(code));
+  const codeEl = el("div", "code" + (expired ? " dim" : ""));
+  setCode(codeEl, code);
   c.appendChild(codeEl);
   const o = { node: c, sub: s, codeEl: codeEl, code: code };
   const row = el("div", "row");
@@ -80,6 +90,7 @@ function render(d, t1) {
     const e = d.email;
     const c = card(e.service || "Email code", emailSub(e), e.code, e.expired);
     emailCard = c;
+    c.codeEl.classList.add("em");
     box.appendChild(c.node);
     n++;
   }
@@ -101,7 +112,7 @@ function patchTfa(list, t1) {
     it.next = t.next_code || "";
     it.per = (t.period || 30) * 1000;
     it.at = endAt(t, t1);
-    if (it.c.code !== t.code) { it.c.code = t.code; it.c.codeEl.textContent = fmt(t.code); }
+    if (it.c.code !== t.code) { it.c.code = t.code; setCode(it.c.codeEl, t.code); }
   });
 }
 function patch(d, t1) {
@@ -216,7 +227,7 @@ setInterval(() => {
     if (now >= it.at) {
       if (it.next) {
         it.c.code = it.next;
-        it.c.codeEl.textContent = fmt(it.next);
+        setCode(it.c.codeEl, it.next);
         it.next = "";
         it.at += it.per;
       }

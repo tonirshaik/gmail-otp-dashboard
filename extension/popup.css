@@ -28,3 +28,10 @@ body { width: 320px; background: #0B0D12; color: #F2F4F8; padding: 14px; }
 .frow { display: flex; gap: 8px; }
 .frow .btn { flex: 1; }
 .btn.ref { border: 1px solid #B6FF5C; }
+
+/* digit-boxes */
+.code { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 5px; letter-spacing: 0; font-size: 26px; padding: 12px 0; }
+.code .dg { width: 36px; height: 48px; display: flex; align-items: center; justify-content: center; background: #0B0D12; border: 1px solid #2C3546; border-radius: 10px; font-weight: 600; color: #F2F4F8; }
+.code .gap { width: 8px; }
+.code.em .dg { color: #B6FF5C; }
+.code.dim .dg, .code.em.dim .dg { color: #6b7380; }
