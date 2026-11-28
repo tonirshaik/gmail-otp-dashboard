@@ -853,3 +853,27 @@
     tick();
     setInterval(tick, 1000);
 })();
+
+/* sec-chip */
+(function () {
+    if (document.getElementById('secChip')) return;
+    var el = document.createElement('div');
+    el.id = 'secChip';
+    el.setAttribute('aria-hidden', 'true');
+    el.innerHTML = '<svg viewBox="0 0 48 48"><g fill="none" stroke="#5ab4ff" stroke-width="1.2" opacity=".85"><rect x="6" y="6" width="36" height="36" rx="4"/><rect x="12" y="12" width="24" height="24" rx="3" fill="#2f8cff" fill-opacity=".2"/><path d="M12 0V6M24 0V6M36 0V6M12 42V48M24 42V48M36 42V48M0 12H6M0 24H6M0 36H6M42 12H48M42 24H48M42 36H48"/></g><text x="24" y="22" text-anchor="middle" font-size="5" fill="#5ab4ff" font-family="monospace">2FA</text><text class="sc-n" x="24" y="31" text-anchor="middle" font-size="10" fill="#a8dcff" font-family="monospace">-</text></svg>';
+    document.body.appendChild(el);
+    var num = el.querySelector('.sc-n');
+    function tick() {
+        try {
+            if (typeof tfaStatusLoaded === 'undefined' || typeof svcLoaded === 'undefined') return;
+            if (!tfaStatusLoaded || !svcLoaded) return;
+            var c = String(tfaSet.size + svcList.length);
+            if (num.textContent !== c) {
+                num.textContent = c;
+                num.setAttribute('font-size', c.length > 2 ? '7' : '10');
+            }
+        } catch (e) {}
+    }
+    tick();
+    setInterval(tick, 1000);
+})();
