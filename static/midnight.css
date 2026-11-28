@@ -1823,3 +1823,19 @@ html body:has(#dashboardSection.hidden){background:linear-gradient(rgba(3,8,20,.
 #hudTxt .ht-row.off{color:#7b8798}
 #hudTxt .ht-row.off .ht-dot{background:#5b6577}
 @media (min-width:1024px){:root[data-theme=dark] body:has(#dashboardSection:not(.hidden)) #hudTxt{display:flex !important}}
+
+/* code-box-contrast */
+:root[data-theme=dark] .otp-card .cells .ch,
+:root[data-theme=dark] .otp-card .otp-code-box.has-cells:hover .cells .ch {
+  background: #0e5568 !important;
+  border: 1.5px solid #22d3ee !important;
+  color: #ffffff !important;
+  font-weight: 500 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08) !important;
+}
+:root[data-theme=dark] .otp-card .otp-code-box.has-cells:hover .cells .ch {
+  border-color: #67e8f9 !important;
+}
+:root[data-theme=dark] .otp-card .otp-code-box.masked .cells .ch {
+  color: #9fd8e4 !important;
+}
